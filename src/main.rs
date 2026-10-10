@@ -17,7 +17,7 @@ mod desktop;
 
 #[derive(Parser)]
 #[command(
-    version,
+    version = clickpulse::version::DISPLAY,
     about = "ClickPulse · Local keyboard and mouse activity statistics"
 )]
 struct Cli {

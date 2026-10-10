@@ -28,9 +28,13 @@ After startup, check the recording status and tray icon. Use the physical keyboa
 
 ## Updates and directories
 
+Check the running build before testing a fix: expand mini mode, open **Settings → App**, and note the complete version, for example **ClickPulse 0.1.0 (53)**. The number in parentheses is the internal build; the sidebar and `ClickPulse.exe --version` show the same identity. Different preview builds can share the public version and ZIP filename.
+
+Older builds only show `0.1.0` in the app. For those builds, inspect **ClickPulse.exe → Properties → Details → File version** (for example `0.1.0.49`), or read `internal_build` and `source_revision` in the adjacent `build-manifest.json`. Confirm the executable belongs to the folder you just extracted; downloading a package or merging a source fix does not update an already running copy.
+
 1. **Quit the old app from its tray menu** and retain the data folder.
 2. Replace the complete program files in the same program directory.
-3. Reopen and check recording, history, theme, language and close behavior. Updates do not overwrite the database or preferences.
+3. Reopen, verify the complete version in Settings, and check recording, history, theme, language and close behavior. Updates do not overwrite the database or preferences.
 
 After moving the program, disable and re-enable Launch at login from the new location to update its startup path.
 

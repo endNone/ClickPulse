@@ -1,6 +1,38 @@
 use std::process::Command;
 
 #[test]
+fn version_identifies_the_packaged_build_without_opening_user_data() {
+    let temp = tempfile::tempdir().unwrap();
+    let missing = temp.path().join("must-not-create.sqlite3");
+    let output = Command::new(env!("CARGO_BIN_EXE_clickpulse"))
+        .arg("--db")
+        .arg(&missing)
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    let version = env!("CARGO_PKG_VERSION");
+    let build = clickpulse::version::INTERNAL_BUILD;
+    assert_eq!(text.trim(), format!("clickpulse {version} ({build})"));
+    assert!(build.parse::<u16>().is_ok());
+    let windows = include_str!("../assets/windows/app.rc");
+    assert!(windows.contains(&format!(
+        "FILEVERSION {},{build}",
+        version.replace('.', ",")
+    )));
+    assert!(windows.contains(&format!("\"FileVersion\", \"{version}.{build}\"")));
+    let macos = include_str!("../assets/Info.plist");
+    let (_, macos_build) = macos.split_once("<key>CFBundleVersion</key>").unwrap();
+    assert!(
+        macos_build
+            .trim_start()
+            .starts_with(&format!("<string>{build}</string>"))
+    );
+    assert!(!missing.exists());
+}
+
+#[test]
 fn help_and_plain_statistics_use_english_and_preserve_the_source() {
     let binary = env!("CARGO_BIN_EXE_clickpulse");
     for args in [

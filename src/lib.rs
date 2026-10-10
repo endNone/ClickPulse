@@ -18,4 +18,5 @@ pub mod presentation;
 pub mod runtime;
 pub mod source;
 mod storage_schema;
+pub mod version;
 pub mod windows_input;

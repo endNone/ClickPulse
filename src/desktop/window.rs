@@ -311,9 +311,14 @@ mod tests {
 #[cfg(all(test, target_os = "windows"))]
 mod native_windows_tests {
     use super::*;
+    use std::time::{Duration, Instant};
     use tao::{
-        event_loop::EventLoopBuilder,
-        platform::windows::{EventLoopBuilderExtWindows, WindowExtWindows},
+        event::Event,
+        event_loop::{ControlFlow, EventLoopBuilder},
+        platform::{
+            run_return::EventLoopExtRunReturn,
+            windows::{EventLoopBuilderExtWindows, WindowExtWindows},
+        },
         window::WindowBuilder,
     };
     use windows_sys::Win32::{
@@ -321,12 +326,43 @@ mod native_windows_tests {
         Graphics::Gdi::{ClientToScreen, ERROR, GetWindowRgnBox},
         UI::WindowsAndMessaging::{GetClientRect, GetWindowRect},
     };
+    use wry::{PageLoadEvent, WebContext, WebView, WebViewBuilder, WebViewExtWindows};
+
+    fn assert_webview_fills_client(window: &tao::window::Window, webview: &WebView) {
+        let hwnd = window.hwnd() as HWND;
+        let mut client = RECT::default();
+        let mut origin = POINT::default();
+        let mut container = RECT::default();
+        let mut container_hwnd = Default::default();
+        unsafe {
+            assert_ne!(GetClientRect(hwnd, &mut client), 0);
+            assert_ne!(ClientToScreen(hwnd, &mut origin), 0);
+            webview
+                .controller()
+                .ParentWindow(&mut container_hwnd)
+                .unwrap();
+            assert_ne!(GetWindowRect(container_hwnd.0 as HWND, &mut container), 0);
+        }
+        let bounds = webview.bounds().unwrap();
+        let scale = window.scale_factor();
+        assert_eq!(
+            bounds.position.to_physical::<i32>(scale),
+            PhysicalPosition::new(0, 0)
+        );
+        assert_eq!(
+            bounds.size.to_physical::<i32>(scale),
+            PhysicalSize::new(client.right, client.bottom)
+        );
+        assert_eq!((container.left, container.top), (origin.x, origin.y));
+        assert_eq!(container.right - container.left, client.right);
+        assert_eq!(container.bottom - container.top, client.bottom);
+    }
 
     #[test]
-    fn mini_client_fills_rounded_window_and_full_view_restores_native_frame() {
-        let mut builder = EventLoopBuilder::<UiEvent>::with_user_event();
+    fn mini_webview_fills_rounded_window_and_full_view_restores_native_frame() {
+        let mut builder = EventLoopBuilder::<()>::with_user_event();
         builder.with_any_thread(true);
-        let event_loop = builder.build();
+        let mut event_loop = builder.build();
         event_loop.set_device_event_filter(tao::event_loop::DeviceEventFilter::Always);
         let window = Arc::new(
             WindowBuilder::new()
@@ -346,37 +382,88 @@ mod native_windows_tests {
         let hwnd = window.hwnd() as HWND;
         assert!(window.has_undecorated_shadow());
 
-        // Reentering mini mode also exercises invalidation of its old region.
-        for _ in 0..2 {
-            set_compact(&window, &mut layout, true, false);
-            assert!(!window.has_undecorated_shadow());
-            assert!(!window.is_resizable());
-            assert_eq!(
-                window.inner_size(),
-                COMPACT_SIZE.to_physical::<u32>(window.scale_factor())
-            );
-            let mut outer = RECT::default();
-            let mut client = RECT::default();
-            let mut origin = POINT::default();
-            let mut region = RECT::default();
-            unsafe {
-                assert_ne!(GetWindowRect(hwnd, &mut outer), 0);
-                assert_ne!(GetClientRect(hwnd, &mut client), 0);
-                assert_ne!(ClientToScreen(hwnd, &mut origin), 0);
-                assert_ne!(GetWindowRgnBox(hwnd, &mut region), ERROR);
-            }
-            assert_eq!((origin.x, origin.y), (outer.left, outer.top));
-            assert_eq!(client.right, outer.right - outer.left);
-            assert_eq!(client.bottom, outer.bottom - outer.top);
-            assert_eq!((region.left, region.top), (0, 0));
+        // Match --mini startup: apply the native frame before WebView2 exists.
+        // A bare HWND test cannot catch offsets introduced by its child window.
+        set_compact(&window, &mut layout, true, false);
+        let profile = tempfile::tempdir().unwrap();
+        let mut context = WebContext::new(Some(profile.path().join("webview")));
+        let on_load = event_loop.create_proxy();
+        let webview = WebViewBuilder::new_with_web_context(&mut context)
+            .with_html("<!doctype html><style>body{margin:0;background:#102542}</style>")
+            .with_on_page_load_handler(move |event, _| {
+                if matches!(event, PageLoadEvent::Finished) {
+                    let _ = on_load.send_event(());
+                }
+            })
+            .build(window.as_ref())
+            .expect("native WebView geometry test requires the WebView2 Runtime");
 
-            set_compact(&window, &mut layout, false, false);
-            assert!(window.has_undecorated_shadow());
-            assert!(window.is_resizable());
-            assert!(layout.region.is_none());
-            unsafe {
-                assert_eq!(GetWindowRgnBox(hwnd, &mut region), ERROR);
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut loaded = false;
+        let mut transition = 0;
+        event_loop.run_return(|event, _, flow| {
+            if matches!(*flow, ControlFlow::ExitWithCode(_)) {
+                return;
             }
+            if matches!(event, Event::UserEvent(())) {
+                loaded = true;
+            }
+            *flow = if loaded {
+                ControlFlow::Poll
+            } else {
+                ControlFlow::WaitUntil(deadline)
+            };
+            if !matches!(event, Event::MainEventsCleared) {
+                return;
+            }
+            assert!(Instant::now() < deadline, "WebView geometry test timed out");
+            if !loaded {
+                return;
+            }
+            // Run the native message loop between each transition so Wry's
+            // WM_SIZE handler has resized both the controller and its HWND.
+            assert_webview_fills_client(&window, &webview);
+            let mut region = RECT::default();
+            if layout.compact {
+                assert!(!window.has_undecorated_shadow());
+                assert!(!window.is_resizable());
+                assert_eq!(
+                    window.inner_size(),
+                    COMPACT_SIZE.to_physical::<u32>(window.scale_factor())
+                );
+                let mut outer = RECT::default();
+                let mut client = RECT::default();
+                let mut origin = POINT::default();
+                unsafe {
+                    assert_ne!(GetWindowRect(hwnd, &mut outer), 0);
+                    assert_ne!(GetClientRect(hwnd, &mut client), 0);
+                    assert_ne!(ClientToScreen(hwnd, &mut origin), 0);
+                    assert_ne!(GetWindowRgnBox(hwnd, &mut region), ERROR);
+                }
+                assert_eq!((origin.x, origin.y), (outer.left, outer.top));
+                assert_eq!(client.right, outer.right - outer.left);
+                assert_eq!(client.bottom, outer.bottom - outer.top);
+                assert_eq!((region.left, region.top), (0, 0));
+            } else {
+                assert!(window.has_undecorated_shadow());
+                assert!(window.is_resizable());
+                assert!(layout.region.is_none());
+                unsafe {
+                    assert_eq!(GetWindowRgnBox(hwnd, &mut region), ERROR);
+                }
+            }
+
+            if transition == 4 {
+                *flow = ControlFlow::Exit;
+            } else {
+                let compact = !layout.compact;
+                set_compact(&window, &mut layout, compact, false);
+                transition += 1;
+                *flow = ControlFlow::Poll;
+            }
+        });
+        unsafe {
+            webview.controller().Close().unwrap();
         }
     }
 }
