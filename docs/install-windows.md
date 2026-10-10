@@ -1,25 +1,22 @@
 # Windows installation and updates
 
-For **0.1.0 initial preview · Windows 10/11 x64**. Setup and portable packages are available in the [private preview Release](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0); repository access is required. Native Windows automated code, CLI and packaging checks have passed. Desktop installation, physical input, update and uninstall validation remain pending.
+For **0.1.0 preview · Windows 10/11 x64**. Download the portable ZIP from the [private preview Release](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0); repository access is required. No Setup installer is offered.
 
-Ready-to-run packages need no Rust, Python, development tools or developer account. The Windows C runtime is included in the program; no separate Visual C++ package is needed. This preview is unsigned. Use an intact package from a trusted source and compare it with its accompanying SHA256 file.
-
-## Setup installer
-
-1. Open `ClickPulse-0.1.0-windows-x64-Setup.exe`. The wizard supports English and Simplified Chinese.
-2. The default location is `%LOCALAPPDATA%\Programs\ClickPulse` for the current user, without administrator elevation. You can choose another empty, fixed folder such as `D:\Apps\ClickPulse`. Do not select the statistics folder or a folder containing unrelated software.
-3. If ClickPulse is running, choose **Quit ClickPulse** from its tray menu, then retry. Closing or hiding a window can leave recording active.
-4. Open ClickPulse from the Start menu after installation. Setup does not automatically enable launch at login, grant access or change system security settings.
-
-If Windows blocks this unsigned preview, use an individual-app allow option only when one is offered and you have verified the source and integrity. If policy does not offer that option, keep the original package and contact the maintainer or administrator rather than disabling system-wide protection.
+Ready-to-run packages need no Rust, Python, development tools or developer account. The Windows C runtime is included in the program; no separate Visual C++ package is needed. This preview is unsigned. Use a complete package from a trusted source and compare it with `SHA256SUMS.txt`.
 
 ## Portable ZIP
 
 1. Extract the **entire folder** from `ClickPulse-0.1.0-windows-x64.zip`.
-2. Place the complete contents in a fixed directory such as `%LOCALAPPDATA%\Programs\ClickPulse`. Keep `WebView2Loader.dll`, `Licenses`, the README and manifest beside the EXE.
-3. Open `ClickPulse.exe`. Do not run inside the ZIP or copy only the EXE.
+2. Place the complete contents in a fixed program directory such as `%LOCALAPPDATA%\Programs\ClickPulse` or `D:\Apps\ClickPulse`. Keep `WebView2Loader.dll`, `Licenses`, the README and manifest beside the EXE. Use a separate folder from your statistics.
+3. Open **ClickPulse.exe**. Do not run inside the ZIP or copy only the EXE.
 
-Setup and portable packages use the same program and data format. Portable means no setup wizard is required; statistics still live in the standard user-data directory and do not move with the EXE.
+Portable means no setup wizard is required. Statistics still live in the standard user-data directory and do not move with the EXE.
+
+## Windows security prompts
+
+ZIP packaging does not sign the executable. On Windows 11, **Smart App Control** can block an unsigned app and offers no individual-app exception. Keep the protection enabled and report the exact dialog if this happens. See [Microsoft's Smart App Control guidance](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions).
+
+A **Microsoft Defender SmartScreen** reputation warning is a different prompt. Use an individual-app allow option only if it is offered and you have verified the package's source and integrity.
 
 ## First launch
 
@@ -32,25 +29,27 @@ After startup, check the recording status and tray icon. Use the physical keyboa
 ## Updates and directories
 
 1. **Quit the old app from its tray menu** and retain the data folder.
-2. For Setup, choose the existing program directory. For portable updates, replace the complete program files in the same location.
+2. Replace the complete program files in the same program directory.
 3. Reopen and check recording, history, theme, language and close behavior. Updates do not overwrite the database or preferences.
 
-After moving the program, disable and re-enable Launch at login from the new location to update its startup path. Setup itself does not launch the recorder automatically.
+After moving the program, disable and re-enable Launch at login from the new location to update its startup path.
 
 | Content | Location |
 | --- | --- |
-| Default program | `%LOCALAPPDATA%\Programs\ClickPulse` |
+| Suggested program folder | `%LOCALAPPDATA%\Programs\ClickPulse` |
 | Statistics and preferences | `%LOCALAPPDATA%\ClickPulse` |
 | Log | `%LOCALAPPDATA%\ClickPulse\logs\clickpulse.log` |
 
-## Closing and uninstalling
+## Closing and removal
 
 Window Close and the page's Quit button offer **Minimize to tray** or **Save and quit**, with an optional remembered choice. Change it in Settings → Close behavior. **Quit ClickPulse** in the tray menu always saves and exits.
 
-Uninstall Setup installations in Windows Settings → Apps → Installed apps. For portable copies, quit normally and remove the program folder. Setup uninstall removes this installation's program files, Start menu shortcut and matching startup entry. **History and preferences are kept.** Do not delete history to reinstall or fix a missing dependency.
+To remove the portable app, disable Launch at login, quit normally and remove its program folder and any shortcuts you created. **Keep the separate history and preferences folder.** Do not delete history to reinstall or fix a missing dependency.
+
+If you previously installed a Setup preview, remove that installation in Windows Settings → Apps → Installed apps. Its uninstaller keeps the separate user-data folder; the portable app uses the same data location.
 
 ## Old records and source builds
 
 Other databases are accessed only through explicit `--source-db` read-only viewing or `migrate --source ... --output ...` to a new destination. Migration does not overwrite an existing database or stop another service. Stop the old recorder and keep a complete backup first; see the [development guide](development.md).
 
-Build source separately; GitHub's Source code ZIP is not an installer. See the [development guide](development.md) for prerequisites and the common build entry point. The [native Windows checklist](windows-testing.md) tracks runtime validation.
+Build source separately; GitHub's Source code ZIP is not a ready-built program. See the [development guide](development.md) for prerequisites and the common build entry point. The [native Windows checklist](windows-testing.md) tracks runtime validation.

@@ -13,9 +13,42 @@ pub(super) struct WindowLayout {
     #[cfg(target_os = "windows")]
     pub(super) full_maximized: bool,
     #[cfg(target_os = "windows")]
-    pub(super) region_size: Option<PhysicalSize<u32>>,
+    pub(super) region: Option<CompactRegion>,
 }
 pub(super) const COMPACT_SIZE: LogicalSize<f64> = LogicalSize::new(320.0, 208.0);
+
+#[cfg(any(target_os = "windows", test))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct CompactRegion {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+    diameter: i32,
+}
+
+#[cfg(any(target_os = "windows", test))]
+impl CompactRegion {
+    fn from_client(
+        size: PhysicalSize<u32>,
+        client_origin: PhysicalPosition<i32>,
+        window_origin: PhysicalPosition<i32>,
+        scale: f64,
+    ) -> Option<Self> {
+        if size.width == 0 || size.height == 0 || !scale.is_finite() || scale <= 0.0 {
+            return None;
+        }
+        let left = client_origin.x.checked_sub(window_origin.x)?;
+        let top = client_origin.y.checked_sub(window_origin.y)?;
+        Some(Self {
+            left,
+            top,
+            right: left.checked_add(i32::try_from(size.width).ok()?)?,
+            bottom: top.checked_add(i32::try_from(size.height).ok()?)?,
+            diameter: (28.0 * scale).round() as i32,
+        })
+    }
+}
 
 pub(super) fn saved_full_position(position: PhysicalPosition<i32>, scale: f64) -> Position {
     #[cfg(target_os = "macos")]
@@ -87,10 +120,8 @@ pub(super) fn set_compact(
         #[cfg(target_os = "windows")]
         {
             use tao::platform::windows::WindowExtWindows;
-            // Tao's undecorated shadow keeps native frame insets, including
-            // a top line. The region is relative to the outer HWND, whereas
-            // WebView2 fills its client area. Remove those insets so their
-            // origins match before sizing and clipping the mini window.
+            // Tao's undecorated shadow reserves native client insets. A fixed
+            // rounded widget must fill its host without those frame margins.
             window.set_undecorated_shadow(false);
         }
         fix_compact_size(window);
@@ -125,31 +156,52 @@ pub(super) fn set_compact(
 #[cfg(target_os = "windows")]
 pub(super) fn update_windows_region(window: &tao::window::Window, layout: &mut WindowLayout) {
     use tao::platform::windows::WindowExtWindows;
-    use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, DeleteObject, SetWindowRgn};
+    use windows_sys::Win32::{
+        Foundation::{POINT, RECT},
+        Graphics::Gdi::{ClientToScreen, CreateRoundRectRgn, DeleteObject, SetWindowRgn},
+        UI::WindowsAndMessaging::{GetClientRect, GetWindowRect},
+    };
     let hwnd = window.hwnd() as windows_sys::Win32::Foundation::HWND;
     if !layout.compact {
-        if layout.region_size.take().is_some() {
-            unsafe {
-                SetWindowRgn(hwnd, std::ptr::null_mut(), 1);
-            }
+        if layout.region.is_some() && unsafe { SetWindowRgn(hwnd, std::ptr::null_mut(), 1) } != 0 {
+            layout.region = None;
         }
         return;
     }
-    let size = window.inner_size();
-    if size.width == 0 || size.height == 0 || layout.region_size == Some(size) {
+    let mut client = RECT::default();
+    let mut outer = RECT::default();
+    let mut origin = POINT::default();
+    if unsafe { GetClientRect(hwnd, &mut client) } == 0
+        || unsafe { GetWindowRect(hwnd, &mut outer) } == 0
+        || unsafe { ClientToScreen(hwnd, &mut origin) } == 0
+    {
         return;
     }
-    let diameter = (28.0 * window.scale_factor()).round() as i32;
-    // Windows WebView2 is opaque: clip the entire HWND instead of exposing
-    // a white host surface through CSS-only transparent rounded corners.
+    let Some(bounds) = CompactRegion::from_client(
+        PhysicalSize::new(
+            (client.right - client.left).max(0) as u32,
+            (client.bottom - client.top).max(0) as u32,
+        ),
+        PhysicalPosition::new(origin.x, origin.y),
+        PhysicalPosition::new(outer.left, outer.top),
+        window.scale_factor(),
+    ) else {
+        return;
+    };
+    if layout.region == Some(bounds) {
+        return;
+    }
+    // SetWindowRgn uses outer-window coordinates, while WebView2 fills the
+    // client area. Clip only that client rectangle, including any native inset
+    // during a frame/DPI transition, and cache its offset and corner diameter.
     let region = unsafe {
         CreateRoundRectRgn(
-            0,
-            0,
-            size.width as i32 + 1,
-            size.height as i32 + 1,
-            diameter,
-            diameter,
+            bounds.left,
+            bounds.top,
+            bounds.right,
+            bounds.bottom,
+            bounds.diameter,
+            bounds.diameter,
         )
     };
     if region.is_null() {
@@ -161,7 +213,7 @@ pub(super) fn update_windows_region(window: &tao::window::Window, layout: &mut W
             DeleteObject(region);
         }
     } else {
-        layout.region_size = Some(size);
+        layout.region = Some(bounds);
     }
 }
 
@@ -198,8 +250,66 @@ pub(super) fn restore_full_window(
     apply(window);
 }
 
-#[cfg(all(test, target_os = "windows"))]
+#[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn rounded_widget_excludes_native_frame_without_cropping_client_pixels() {
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            let size = COMPACT_SIZE.to_physical(scale);
+            // A monitor left of the primary desktop and the native shadow
+            // insets shown in the reported Windows mini-window screenshot.
+            let outer = PhysicalPosition::new(-1200, -200);
+            for inset in [(0, 0), (8, 1), (12, 2)] {
+                let client = PhysicalPosition::new(outer.x + inset.0, outer.y + inset.1);
+                let bounds = CompactRegion::from_client(size, client, outer, scale).unwrap();
+                assert_eq!((bounds.left, bounds.top), inset);
+                assert_eq!(bounds.right - bounds.left, size.width as i32);
+                assert_eq!(bounds.bottom - bounds.top, size.height as i32);
+                assert_eq!(bounds.diameter, (28.0 * scale).round() as i32);
+            }
+        }
+    }
+
+    #[test]
+    fn region_cache_changes_when_frame_insets_or_dpi_change_at_the_same_size() {
+        let size = PhysicalSize::new(480, 312);
+        let outer = PhysicalPosition::new(100, 100);
+        let plain = CompactRegion::from_client(size, outer, outer, 1.5).unwrap();
+        let inset =
+            CompactRegion::from_client(size, PhysicalPosition::new(108, 101), outer, 1.5).unwrap();
+        let rescaled = CompactRegion::from_client(size, outer, outer, 2.0).unwrap();
+        assert_ne!(plain, inset);
+        assert_ne!(plain, rescaled);
+        let moved = PhysicalPosition::new(-500, 300);
+        assert_eq!(
+            plain,
+            CompactRegion::from_client(size, moved, moved, 1.5).unwrap()
+        );
+    }
+
+    #[test]
+    fn invalid_client_geometry_does_not_create_a_native_region() {
+        let origin = PhysicalPosition::new(0, 0);
+        for size in [
+            PhysicalSize::new(0, 208),
+            PhysicalSize::new(320, 0),
+            PhysicalSize::new(u32::MAX, 208),
+        ] {
+            assert!(CompactRegion::from_client(size, origin, origin, 1.0).is_none());
+        }
+        for scale in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(
+                CompactRegion::from_client(COMPACT_SIZE.to_physical(1.0), origin, origin, scale)
+                    .is_none()
+            );
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod native_windows_tests {
     use super::*;
     use tao::{
         event_loop::EventLoopBuilder,
@@ -231,7 +341,7 @@ mod tests {
             full_position: None,
             compact: false,
             full_maximized: false,
-            region_size: None,
+            region: None,
         };
         let hwnd = window.hwnd() as HWND;
         assert!(window.has_undecorated_shadow());
@@ -263,7 +373,7 @@ mod tests {
             set_compact(&window, &mut layout, false, false);
             assert!(window.has_undecorated_shadow());
             assert!(window.is_resizable());
-            assert!(layout.region_size.is_none());
+            assert!(layout.region.is_none());
             unsafe {
                 assert_eq!(GetWindowRgnBox(hwnd, &mut region), ERROR);
             }

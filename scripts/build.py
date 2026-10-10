@@ -10,7 +10,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--platform', choices=['auto', 'macos', 'windows'], default='auto')
     parser.add_argument('--target', help='Rust target for the selected platform; macOS supports aarch64-apple-darwin and x86_64-apple-darwin')
-    parser.add_argument('--portable-only', action='store_true', help='Windows: build ZIP without the NSIS installer')
+    parser.add_argument('--portable-only', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--skip-build', action='store_true', help='Package an already built matching release binary')
     args = parser.parse_args()
     platform = args.platform
@@ -32,8 +32,6 @@ def main():
         if target not in {'x86_64-pc-windows-msvc', 'x86_64-pc-windows-gnu'}:
             parser.error('Select a Windows Rust target for --platform windows.')
         command = [sys.executable, str(root/'scripts/package_windows.py'), '--target', target]
-        if not args.portable_only:
-            command.append('--installer')
     if args.skip_build:
         command.append('--skip-build')
     try:

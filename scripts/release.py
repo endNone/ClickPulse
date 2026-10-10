@@ -123,14 +123,9 @@ def release_notes(version, repository, revision, private=False):
     def button(image, label, asset):
         return f'[![{label}]({artwork}{image}.svg?raw=true)]({downloads}{asset})'
 
-    windows = '<br>'.join([
-        button('windows-setup-x64', 'Windows Setup x64', name+'-windows-x64-Setup.exe'),
-        button('windows-portable-x64', 'Windows Portable x64', name+'-windows-x64.zip'),
-    ])
-    mac = '<br>'.join([
-        button('macos-apple-silicon', 'DMG Apple Silicon', name+'-macos-arm64.dmg'),
-        button('macos-intel-x64', 'DMG Intel x64', name+'-macos-x64.dmg'),
-    ])
+    windows = button('windows-portable-x64', 'Windows Portable x64', name+'-windows-x64.zip')
+    mac_arm = button('macos-apple-silicon', 'DMG Apple Silicon', name+'-macos-arm64.dmg')
+    mac_intel = button('macos-intel-x64', 'DMG Intel x64', name+'-macos-x64.dmg')
     access = '\nThis private preview requires a GitHub account with repository access.\n' if private else ''
     return f'''Local keyboard and mouse activity statistics for macOS and Windows.
 {access}
@@ -140,20 +135,33 @@ def release_notes(version, repository, revision, private=False):
 | Platform | Download |
 | --- | --- |
 | Windows 10/11 | {windows} |
-| macOS 12+ | {mac} |
+| macOS 12+ | {mac_arm} |
+| | {mac_intel} |
 
-**App ZIP:** [Apple Silicon]({downloads}{name}-macos-arm64.zip) · [Intel x64]({downloads}{name}-macos-x64.zip)
+Mac App ZIPs are also available in the release attachments.
 
-[Source code]({downloads}{name}-source.zip) · [SHA256 checksums]({downloads}SHA256SUMS.txt)
+### Release files
 
-Verify downloads using `SHA256SUMS.txt`. Platform manifests below list individual package files.
+| File | Contents |
+| --- | --- |
+| [Source code]({downloads}{name}-source.zip) | Corresponding source and build scripts |
+| [SHA256 checksums]({downloads}SHA256SUMS.txt) | Verify downloaded files |
 
-[macOS installation]({base}install-macos.md) · [Windows installation]({base}install-windows.md) · [Changelog](https://github.com/{repository}/blob/v{version}/CHANGELOG.md)
+Platform manifests in the attachments list individual package files and their hashes.
+
+### Documentation
+
+| Guide | Covers |
+| --- | --- |
+| [macOS installation]({base}install-macos.md) | First launch, Input Monitoring and updates |
+| [Windows installation]({base}install-windows.md) | Portable ZIP, WebView2 and updates |
+| [Changelog](https://github.com/{repository}/blob/v{version}/CHANGELOG.md) | Changes included in this release |
 
 ## Preview notes
 
 - The Mac App is ad-hoc signed without Apple notarization. Grant Input Monitoring after installation.
-- Windows packages are unsigned and require Microsoft Edge WebView2 Runtime.
+- Windows is distributed as a portable ZIP and requires Microsoft Edge WebView2 Runtime. No Setup installer is offered.
+- The Windows executable is unsigned. Windows 11 Smart App Control may block it; portable packaging does not change publisher trust. See [Microsoft's guidance](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions).
 - Apple Silicon, Intel Mac and Windows x64 packages passed automated tests and packaging on their native GitHub runners.
 - Hands-on Windows/Intel desktop installation, physical input and update validation remain pending before public release. See the [validation checklist]({base}windows-testing.md).
 - Program updates and uninstalling retain the separate user-data directory.
@@ -176,7 +184,7 @@ def prepare_release(root, packages, output, tag, revision, repository, private=F
     win = f'ClickPulse-{version}-windows-x64'
     source = f'ClickPulse-{version}-source'
     asset_names = [name+suffix for name,_ in mac_targets for suffix in ['.dmg','.zip']]
-    asset_names += [win+'-Setup.exe', win+'.zip', source+'.zip']
+    asset_names += [win+'.zip', source+'.zip']
     for name in asset_names:
         file = packages/name
         if file.is_symlink() or not file.is_file() or not file.stat().st_size:

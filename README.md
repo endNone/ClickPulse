@@ -24,11 +24,11 @@ Simulated desktop work with live demo counts.
 | --- | --- | --- |
 | macOS 12+ · Apple Silicon | **arm64** DMG or App ZIP | [macOS installation](docs/install-macos.md) |
 | macOS 12+ · Intel | **x64** DMG or App ZIP | [macOS installation](docs/install-macos.md) |
-| Windows 10/11 · x64 | Setup EXE or portable ZIP | [Windows installation](docs/install-windows.md) |
+| Windows 10/11 · x64 | Portable ZIP | [Windows installation](docs/install-windows.md) |
 
-On macOS, move the complete **ClickPulse.app** to Applications, allow the [first launch](docs/install-macos.md#2-allow-the-first-launch), and enable **Input Monitoring**. On Windows, run Setup or extract the complete portable ZIP. Ready-built packages need no developer tools.
+On macOS, move the complete **ClickPulse.app** to Applications, allow the [first launch](docs/install-macos.md#2-allow-the-first-launch), and enable **Input Monitoring**. On Windows, extract the complete portable ZIP and open **ClickPulse.exe**. Ready-built packages need no developer tools.
 
-Confirm **Recording**, then press a few keys and click in another app to check that counts increase. Mac previews are ad-hoc signed without notarization; Windows previews are unsigned. Intel Mac and latest Windows native validation remain pending.
+Confirm **Recording**, then press a few keys and click in another app to check that counts increase. Mac previews are ad-hoc signed without notarization; Windows previews are unsigned.
 
 ## Features
 

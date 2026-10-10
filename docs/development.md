@@ -6,7 +6,7 @@ Use Rust stable and Python 3.11+ with the checked-in `Cargo.lock`. Node.js 24 is
 
 macOS packaging needs Xcode Command Line Tools and the system `ditto`, `sips`, `iconutil`, `codesign` and `hdiutil`. Mac packages target Apple Silicon (arm64) or Intel (x64), both on macOS 12+.
 
-Native Windows builds need the Rust MSVC toolchain, Visual Studio C++ Build Tools and Windows SDK. NSIS compiles Setup.exe; install it from the [official project](https://nsis.sourceforge.io/). It is not a runtime dependency. On macOS, Homebrew's `makensis` package provides the compiler. The portable-only build does not need NSIS.
+Native Windows builds need the Rust MSVC toolchain, Visual Studio C++ Build Tools and Windows SDK. Windows packaging produces the portable ZIP.
 
 ## Common build entry point
 
@@ -28,7 +28,7 @@ These commands only generate artifacts in `dist/`. They do not install or start 
 | --- | --- |
 | macOS arm64 | `ClickPulse.app`, `ClickPulse-0.1.0-macos-arm64.dmg`, matching ZIP, SHA256 files and manifest |
 | macOS Intel x64 | `ClickPulse-macos-x64.app`, `ClickPulse-0.1.0-macos-x64.dmg`, matching ZIP, SHA256 files and manifest |
-| Windows | `ClickPulse-0.1.0-windows-x64-Setup.exe`, matching portable ZIP, SHA256 files and manifest |
+| Windows | `ClickPulse-0.1.0-windows-x64.zip`, SHA256 file and manifest |
 
 Mac builds default to the host architecture. To cross-build Intel packages on an Apple Silicon Mac:
 
@@ -39,13 +39,7 @@ python3 scripts/build.py --target x86_64-apple-darwin
 
 Use `--target aarch64-apple-darwin` explicitly for Apple Silicon. The separate Intel output preserves the existing arm64 App; both archives contain `ClickPulse.app`.
 
-The Mac App is ad-hoc signed, not notarized. Windows Setup is unsigned, installs for the current user and keeps statistics on uninstall. Windows MSVC packages statically link the C runtime and reject external Visual C++ imports. NSIS compilation and package checks do not replace native installation tests.
-
-For a Windows ZIP without NSIS:
-
-```powershell
-python scripts/build.py --portable-only
-```
+The Mac App is ad-hoc signed, not notarized. The Windows executable is unsigned, including in the portable ZIP. Windows MSVC packages statically link the C runtime and reject external Visual C++ imports. Package checks do not replace desktop testing or establish publisher trust.
 
 Cross-build Windows on macOS after installing MinGW-w64 and the Rust target:
 
@@ -75,7 +69,7 @@ Desktop refresh queues one snapshot at a time without waiting on the interface t
 
 ## Paths and explicit migration
 
-CLI help, statistics and success messages use English. The desktop app and Windows installer retain separate English and Simplified Chinese interfaces.
+CLI help, statistics and success messages use English. The desktop app retains English and Simplified Chinese interfaces.
 
 Default desktop startup uses the platform's ClickPulse user-data directory and creates its database there. Replacing, moving or uninstalling program files does not move that data. A missing WebView2 runtime is detected before starting the collector. Startup and installation never automatically pick a legacy recorder, database or service.
 
@@ -110,6 +104,6 @@ The timestamp is an example; use the recorder's actual change time and original 
 
 ## Version and publication
 
-Project metadata identifies the **0.1.0** private preview (internal build 49). Use a new public version for each tagged release; never move a published tag or replace its packages with a different source revision. Internal build numbers identify unpublished revisions. Keep Cargo, macOS public version and Windows ProductVersion aligned. Verify signatures, versions, manifests, checksums, third-party licenses and absence of user data before distribution.
+Project metadata identifies the **0.1.0** private preview (internal build 52). Use a new public version for each tagged release; never move a published tag or replace its packages with a different source revision. Internal build numbers identify unpublished revisions. Keep Cargo, macOS public version and Windows ProductVersion aligned. Verify signatures, versions, manifests, checksums, third-party licenses and absence of user data before distribution.
 
 Project code is licensed under [GPL-3.0-or-later](../LICENSE). Source archives and both platforms' packages include the full license; fonts and other third-party components retain their own licenses. Signing, native Windows validation and public release remain pending. See the [roadmap](roadmap.md). Local scripts do not create repositories or publish Releases; the tag workflow creates an unpublished draft for manual review.

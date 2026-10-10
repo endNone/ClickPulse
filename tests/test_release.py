@@ -119,13 +119,14 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             release.release_plan(self.root, 'v0.1.0', require_tag=True)
 
-    def test_complete_candidate_has_eleven_assets_and_checksums_excludes_unrelated_files(self):
+    def test_complete_candidate_has_ten_assets_and_excludes_old_setup_and_unrelated_files(self):
         self.candidate()
         (self.packages/'events.sqlite3').write_bytes(b'private')
         (self.packages/'unrelated.exe').write_bytes(b'unrelated')
         notes = self.prepare()
         files = {file.name for file in self.output.iterdir()}
-        self.assertEqual(len(files), 11)
+        self.assertEqual(len(files), 10)
+        self.assertNotIn('ClickPulse-0.1.0-windows-x64-Setup.exe', files)
         self.assertNotIn('events.sqlite3', files)
         self.assertNotIn('unrelated.exe', files)
         for line in (self.output/'SHA256SUMS.txt').read_text(encoding='utf-8').splitlines():
@@ -138,15 +139,20 @@ class ReleaseTests(unittest.TestCase):
 
         # Every displayed download must exist in the assembled candidate.
         linked_assets = re.findall(r'\]\(https://github.com/example/ClickPulse/releases/download/v0\.1\.0/([^()]+)\)', notes)
-        self.assertEqual(len(linked_assets), 8)
+        self.assertEqual(len(linked_assets), 5)
         self.assertTrue(set(linked_assets).issubset(files))
-        self.assertEqual(set(linked_assets), {name for name in files if name.endswith(('.dmg', '.zip', '.exe')) or name=='SHA256SUMS.txt'})
+        self.assertEqual(set(linked_assets), {
+            'ClickPulse-0.1.0-windows-x64.zip',
+            'ClickPulse-0.1.0-macos-arm64.dmg',
+            'ClickPulse-0.1.0-macos-x64.dmg',
+            'ClickPulse-0.1.0-source.zip',
+            'SHA256SUMS.txt',
+        })
 
     def test_download_buttons_pin_images_and_assets_to_the_requested_release(self):
         notes = release.release_notes('1.2.3', 'fixture/RenamedApp', REVISION)
         buttons = re.findall(r'\[!\[([^\]]+)\]\(([^)]+)\)\]\(([^)]+)\)', notes)
         expected = {
-            'Windows Setup x64': ('windows-setup-x64', 'windows-x64-Setup.exe'),
             'Windows Portable x64': ('windows-portable-x64', 'windows-x64.zip'),
             'DMG Apple Silicon': ('macos-apple-silicon', 'macos-arm64.dmg'),
             'DMG Intel x64': ('macos-intel-x64', 'macos-x64.dmg'),
@@ -187,7 +193,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_missing_platform_or_wrong_outer_checksum_cannot_create_partial_output(self):
         self.candidate()
-        file = self.packages/'ClickPulse-0.1.0-windows-x64-Setup.exe'
+        file = self.packages/'ClickPulse-0.1.0-windows-x64.zip'
         data = file.read_bytes()
         file.unlink()
         with self.assertRaises(ValueError):

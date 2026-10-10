@@ -6,7 +6,7 @@ Install the complete app using the [macOS guide](install-macos.md) or [Windows g
 
 On macOS, allow the app to open and enable Input Monitoring for the installed copy. These are separate steps. Reopen ClickPulse when prompted, then check **Recording** and increasing counts. Ad-hoc updates may require refreshing the permission entry; follow the macOS guide.
 
-On Windows, keep the complete program folder and install WebView2 Runtime if startup reports it missing. The installer and portable build use the same data format. Confirm counts with the physical keyboard and mouse; the latest native validation checklist is still pending.
+On Windows, extract and keep the complete portable program folder. Install WebView2 Runtime if startup reports it missing, then confirm counts with the physical keyboard and mouse.
 
 ## Everyday use
 

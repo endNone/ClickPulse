@@ -1,6 +1,6 @@
 # Windows validation
 
-The published 0.1.0 private preview's Windows x64 Setup and portable packages passed automated Rust/interface tests, native MSVC builds and package-integrity checks on a hosted Windows runner. Interactive installation, upgrades, uninstalling and complete desktop/input validation remain pending. This checklist describes the required tests; it is not evidence that they have passed.
+The 0.1.0 private preview's Windows x64 portable package passed automated Rust/interface tests, native MSVC builds and package-integrity checks on a hosted Windows runner. The former Setup download has been withdrawn. The user reports that the ZIP opens on their Windows machine; their screenshot also shows a remaining mini-window edge defect. This does not complete the upgrade, removal or physical-input checklist below.
 
 ## Installation and data locations
 
@@ -15,7 +15,7 @@ Install and run in the target user's interactive desktop session. Confirm the us
 
 Follow the [Windows installation guide](install-windows.md). Ready-built packages need no Rust, Python or developer tools. Microsoft Edge WebView2 Runtime is required; keep `WebView2Loader.dll` beside the EXE. The Loader DLL does not replace the Runtime.
 
-Test Setup and portable packages separately: default/custom folders, English and Chinese installer options, retry while an older version is running, cancellation and missing-runtime messages. Installation must reject the statistics directory and prevent capture before Setup finishes. Quit and back up before upgrading; confirm history, language, theme and close preferences survive. Uninstalling must remove program files and the matching startup entry while retaining data. Reinstall and confirm history returns. Record each result independently.
+Test complete ZIP extraction in default/custom folders and missing-runtime messages. Quit and back up before upgrading; confirm history, language, theme and close preferences survive. Disable Launch at login before removing the program folder, and retain the separate data directory. Extract again and confirm history returns. Record each result independently. With Smart App Control enabled, record the exact publisher-trust result separately: one user's successful launch does not establish that every Windows policy permits the unsigned executable.
 
 ## Desktop session and evidence
 

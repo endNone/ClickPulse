@@ -1,10 +1,6 @@
 # Keep source and license bytes identical on every packaging runner.
 * text=auto eol=lf
 
-# Preserve the original upstream license files, including their line endings.
-assets/windows/NSIS-LICENSE.txt -text
-assets/windows/NSIS-MUI2-LICENSE.txt -text
-
 # Media, fonts and executable packages must never undergo text conversion.
 *.png binary
 *.jpg binary

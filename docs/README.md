@@ -5,7 +5,7 @@
 | Guide | Covers |
 | --- | --- |
 | [macOS installation](install-macos.md) | Applications, first launch, Input Monitoring, updates and uninstalling |
-| [Windows installation](install-windows.md) | Setup and portable packages, WebView2, directories, updates and uninstalling |
+| [Windows installation](install-windows.md) | Portable ZIP, WebView2, directories, updates and removal |
 | [Usage](usage.md) | Overview, history, keyboard views, themes, language, mini mode and close behavior |
 | [Data and privacy](data-and-privacy.md) | What is recorded, retention, storage, backups and migration |
 

@@ -143,7 +143,7 @@ pub fn run(
         #[cfg(target_os = "windows")]
         full_maximized: false,
         #[cfg(target_os = "windows")]
-        region_size: None,
+        region: None,
     };
     set_compact(
         &window,
@@ -1028,7 +1028,7 @@ mod window_tests {
             #[cfg(target_os = "windows")]
             full_maximized: false,
             #[cfg(target_os = "windows")]
-            region_size: None,
+            region: None,
         };
         for scale in [2.0, 1.0, 1.25, 1.5, 2.0, 1.0, 2.0] {
             // Simulate the oversized suggestions seen after moving displays.
@@ -1048,7 +1048,7 @@ mod window_tests {
             #[cfg(target_os = "windows")]
             full_maximized: false,
             #[cfg(target_os = "windows")]
-            region_size: None,
+            region: None,
         };
         let mut suggested = PhysicalSize::new(1000, 720);
         layout.apply_scale_change(1.0, &mut suggested);

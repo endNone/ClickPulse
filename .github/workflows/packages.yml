@@ -53,9 +53,6 @@ jobs:
         run: python scripts/release.py plan --github-output "$GITHUB_OUTPUT"
       - name: Rust toolchain
         run: rustup toolchain install stable --profile minimal --target ${{ matrix.rust-target }}
-      - name: Windows installer compiler
-        if: runner.os == 'Windows'
-        run: python scripts/setup_windows_installer.py
       - name: Build packages
         run: python scripts/build.py --target ${{ matrix.rust-target }}
       - name: Upload packages and checksums
@@ -67,6 +64,5 @@ jobs:
           path: |
             dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}.dmg
             dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}.zip
-            dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}-Setup.exe
             dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}*.sha256
             dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}.manifest.json
