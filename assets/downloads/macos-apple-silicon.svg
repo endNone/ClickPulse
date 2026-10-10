@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="194" height="28" viewBox="0 0 194 28" role="img" aria-label="DMG: Apple Silicon">
+  <title>DMG: Apple Silicon</title>
+  <desc>ClickPulse original download artwork, GPL-3.0-or-later.</desc>
+  <linearGradient id="shine" x2="0" y2="100%"><stop offset="0" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#000" stop-opacity=".08"/></linearGradient>
+  <clipPath id="round"><rect width="194" height="28" rx="4"/></clipPath>
+  <g clip-path="url(#round)"><rect width="74" height="28" fill="#555"/><rect x="74" width="120" height="28" fill="#222222"/><rect width="194" height="28" fill="url(#shine)"/></g>
+  <g fill="none" stroke="#fff" stroke-width="1.4"><rect x="8" y="7.5" width="13" height="9" rx="1.5"/><path d="M14.5 16.5v4M10.5 20.5h8"/></g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,DejaVu Sans,sans-serif" font-size="13" font-weight="600"><text x="48.5" y="19">DMG</text><text x="134.0" y="19">Apple Silicon</text></g>
+</svg>

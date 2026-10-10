@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array><string>en</string><string>zh-Hans</string></array>
+	<key>CFBundleDisplayName</key>
+	<string>ClickPulse</string>
+	<key>CFBundleExecutable</key>
+	<string>clickpulse</string>
+	<key>CFBundleIconFile</key>
+	<string>ClickPulseLogo.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.clickpulse.desktop</string>
+	<key>CFBundleName</key>
+	<string>ClickPulse</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>55</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>12.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSInputMonitoringUsageDescription</key>
+	<string>ClickPulse 只统计键盘按下与鼠标点击次数，不记录输入文字或鼠标位置。</string>
+</dict>
+</plist>
