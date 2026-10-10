@@ -1,6 +1,6 @@
 # Builds and releases
 
-GitHub Actions checks and packages ClickPulse on hosted Mac and Windows machines. The release workflow creates an **unpublished preview draft** for maintainer review. Publishing is a separate manual step. The [0.1.0 private preview](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0) uses internal build 52; each candidate runs the complete workflow on hosted Apple Silicon, Intel Mac and Windows x64 runners before publication. Downloads require repository access; Windows/Intel desktop and physical-input testing remain pending before public release.
+GitHub Actions checks and packages ClickPulse on hosted Mac and Windows machines. The release workflow creates an **unpublished preview draft** for maintainer review. Publishing is a separate manual step. Current source metadata uses **0.1.0**, internal build **53**; the [0.1.0 private preview download](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0) can contain an earlier build until a new release is published. Check the running app's complete version and the package manifest when testing a fix. Each candidate runs the complete workflow on hosted Apple Silicon, Intel Mac and Windows x64 runners before publication. Downloads require repository access; Windows/Intel desktop and physical-input testing remain pending before public release.
 
 ## Release download layout
 

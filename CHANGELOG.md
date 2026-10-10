@@ -2,6 +2,7 @@
 
 ## 0.1.0 — Private preview · 2026-10-10
 
+- Show the internal build alongside the public version in Settings, the sidebar and `--version`, so preview binaries can be distinguished when verifying fixes.
 - Remove native shadow insets from the Windows mini window and align its rounded region with the actual client area, including frame changes and display scaling.
 - Ignore synthetic keyboard prefixes around PrintScreen and Shift/NumLock keypad input, preserving physically held keys; count repeated Pause presses without requiring a release packet.
 
@@ -26,4 +27,4 @@
 - Mac App/DMG/ZIP and Windows x64 portable ZIP with checksums, manifests and licenses. The former Setup download has been withdrawn; Windows release builds now produce ZIP only. Updates and program removal retain data.
 - English installation, usage, privacy, development and release guides; four blue-theme screenshots and a mini desktop animation, automated checks, platform packaging and Release draft workflows.
 
-Apple Silicon, Intel Mac and Windows x64 automated checks and packaging have passed on GitHub. Internal build 52 also includes schema, preference recovery, asynchronous refresh and early WebKit compatibility fixes. Full-history payloads, backup/restore controls and optional storage maintenance remain future work. Desktop installation, physical input and upgrade validation on Windows/Intel hardware remain pending before public release. Mac packages are ad-hoc signed; Windows packages are unsigned.
+Apple Silicon, Intel Mac and Windows x64 automated checks and packaging have passed on GitHub for prior preview builds. Internal build 53 adds executable build identification to the schema, preference recovery, asynchronous refresh and early WebKit compatibility fixes. Full-history payloads, backup/restore controls and optional storage maintenance remain future work. Desktop installation, physical input and upgrade validation on Windows/Intel hardware remain pending before public release. Mac packages are ad-hoc signed; Windows packages are unsigned.

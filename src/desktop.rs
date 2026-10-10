@@ -161,7 +161,7 @@ pub fn run(
     }
     let proxy = event_loop.create_proxy();
     let html = include_str!("../ui/index.html")
-        .replace("__VERSION__", env!("CARGO_PKG_VERSION"))
+        .replace("__VERSION__", clickpulse::version::DISPLAY)
         .replace("__BRAND_MARK__", &clickpulse::branding::mark_data_url())
         .replace("__LOCALE__", locale.code())
         .replace("__THEME__", preferences.theme.code())
