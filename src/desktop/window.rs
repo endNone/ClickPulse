@@ -216,7 +216,7 @@ mod tests {
     fn mini_client_fills_rounded_window_and_full_view_restores_native_frame() {
         let mut builder = EventLoopBuilder::<UiEvent>::with_user_event();
         builder.with_any_thread(true);
-        let mut event_loop = builder.build();
+        let event_loop = builder.build();
         event_loop.set_device_event_filter(tao::event_loop::DeviceEventFilter::Always);
         let window = Arc::new(
             WindowBuilder::new()
