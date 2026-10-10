@@ -9,7 +9,7 @@ use chrono::{Days, Local};
 use clickpulse::{
     db::{Counts, DayCount, KeyCount, KeyboardStats, Snapshot, WindowCount},
     localization::Locale,
-    runtime::{AppSnapshot, CaptureStatus, Runtime},
+    runtime::{AppSnapshot, CaptureStatus, DatabaseMode, Runtime},
 };
 mod ipc;
 mod refresh;
@@ -589,7 +589,7 @@ pub fn run(
                             }
                         }
                         Request::Autostart {} => {
-                            if !demo && !source_mode {
+                            if runtime.as_ref().is_some_and(Runtime::can_manage_auto_start) {
                                 match clickpulse::platform::set_auto_start(
                                     !clickpulse::platform::auto_start_enabled(),
                                 ) {
@@ -905,6 +905,7 @@ fn demo_snapshot(paused: bool) -> AppSnapshot {
     }
     AppSnapshot {
         setup_pending: false,
+        auto_start_available: false,
         auto_start: false,
         demo: true,
         stats: Snapshot {
@@ -941,6 +942,7 @@ fn demo_snapshot(paused: bool) -> AppSnapshot {
         },
         paused,
         database_path: "Demo data · no database".into(),
+        database_mode: DatabaseMode::Demo,
         source_mode: false,
     }
 }

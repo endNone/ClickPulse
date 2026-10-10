@@ -33,8 +33,13 @@ impl WindowsKeyboard {
         if vk == VK_PAUSE {
             // Pause is not an auto-repeating key and may have no separate break
             // packet. Do not leave it held forever or confuse it with NumLock,
-            // which can have the same 0x45 make code.
-            return (flags & RI_KEY_BREAK == 0).then_some(canonical_code(0x245));
+            // which can have the same 0x45 make code. A release can also end a
+            // Ctrl+Pause press after the modifier changes.
+            if flags & RI_KEY_BREAK != 0 {
+                self.held.remove(&(device, 0x245));
+                return None;
+            }
+            return (!self.held.contains(&(device, 0x245))).then_some(canonical_code(0x245));
         }
         let identity = if vk == VK_NUMLOCK {
             // Drivers differ on the E0 flag for NumLock; use one identity for
@@ -43,7 +48,14 @@ impl WindowsKeyboard {
         } else if make == 0 {
             0x8000 | vk
         } else {
-            identity
+            // Alt+PrintScreen and Ctrl+Pause have different scan codes from
+            // their unmodified keys. Normalize before tracking releases so
+            // changing a modifier cannot leave the physical key held forever.
+            match identity {
+                0x54 => 0x137,
+                0x146 => 0x245,
+                _ => identity,
+            }
         };
         if flags & RI_KEY_BREAK != 0 {
             self.held.remove(&(device, identity));
@@ -149,7 +161,7 @@ pub fn canonical_code(scan: u16) -> u32 {
         0x11c => 76,
         0x11d => 62,
         0x135 => 75,
-        0x137 => 0x10137,
+        0x54 | 0x137 => 0x10137,
         0x138 => 61,
         0x147 => 115,
         0x148 => 126,
@@ -164,7 +176,7 @@ pub fn canonical_code(scan: u16) -> u32 {
         0x15b => 55,
         0x15c => 54,
         0x15d => 63,
-        0x245 => 0x10245,
+        0x146 | 0x245 => 0x10245,
         other => 0x10000 + u32::from(other),
     }
 }
@@ -251,6 +263,49 @@ mod tests {
         }
         // A real Shift key remains independent of the ignored prefix.
         assert_eq!(keyboard.event(1, 0x2a, 0, VK_SHIFT), Some(56));
+    }
+    #[test]
+    fn alt_print_screen_keeps_one_identity_across_modifier_changes() {
+        let mut keyboard = WindowsKeyboard::default();
+        let mut counts = Vec::new();
+        let packets = [
+            (0x38, 0, 0x12), // Alt
+            (0x54, 0, 0x2c), // Alt+PrintScreen
+            (0x54, 0, 0x2c), // repeated make
+            (0x38, 1, 0x12), // release Alt before PrintScreen
+            (0x37, 2, 0x2c), // same key still held under its ordinary scan code
+            (0x37, 3, 0x2c),
+            (0x37, 2, 0x2c), // next physical press, without Alt
+            (0x54, 1, 0x2c), // either release form clears the same held key
+            (0x54, 0, 0x2c),
+            (0x54, 1, 0x2c),
+        ];
+        for (make, flags, vk) in packets {
+            counts.extend(keyboard.event(1, make, flags, vk));
+        }
+        assert_eq!(counts, vec![58, 0x10137, 0x10137, 0x10137]);
+        assert!(keyboard.held.is_empty());
+    }
+    #[test]
+    fn control_pause_counts_repeated_presses_and_releases_under_either_identity() {
+        let mut keyboard = WindowsKeyboard::default();
+        assert_eq!(keyboard.event(1, 0x1d, 0, 0x11), Some(59));
+        for _ in 0..2 {
+            // Ctrl+Pause is reported as E0 46 / VK_CANCEL, with a break.
+            assert_eq!(keyboard.event(1, 0x46, 2, 0x03), Some(0x10245));
+            assert_eq!(keyboard.event(1, 0x46, 2, 0x03), None);
+            assert_eq!(keyboard.event(1, 0x46, 3, 0x03), None);
+        }
+        assert_eq!(keyboard.event(1, 0x46, 2, 0x03), Some(0x10245));
+        assert_eq!(keyboard.event(1, 0x1d, 1, 0x11), None);
+        assert_eq!(keyboard.event(1, 0x45, 0, VK_PAUSE), None);
+        assert_eq!(keyboard.event(1, 0x45, 1, VK_PAUSE), None);
+        // The next ordinary Pause presses must still work without key-up.
+        assert_eq!(keyboard.event(1, 0x45, 0, VK_PAUSE), Some(0x10245));
+        assert_eq!(keyboard.event(1, 0x45, 0, VK_PAUSE), Some(0x10245));
+        assert_eq!(keyboard.event(1, 0x46, 2, 0x03), Some(0x10245));
+        assert_eq!(keyboard.event(1, 0x46, 3, 0x03), None);
+        assert!(keyboard.held.is_empty());
     }
     #[test]
     fn pause_counts_each_press_without_a_break_and_stays_separate_from_numlock() {

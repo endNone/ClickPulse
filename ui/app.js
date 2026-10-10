@@ -136,11 +136,14 @@ function renderSettings(){
   $('handoff-settings').hidden=!data.setup_pending;
   $('takeover').disabled=!data.capture.listening || data.capture.permission_needed;
   $('handoff-description').textContent=t(data.capture.listening?'settings.takeover_ready':'settings.takeover_wait');
-  $('autostart-row').hidden=!!data.source_mode;
+  $('autostart-row').hidden=data.auto_start_available!==true;
   $('autostart').textContent=t(data.auto_start?'action.disable':'action.enable');
   $('import-description').textContent=t(data.source_mode?'settings.history_source':data.legacy_imported?'settings.history_imported':'settings.history_native');
   $('app-description').textContent=t(data.source_mode?'settings.source_app_description':'settings.app_description');
   $('db-path').textContent=data.demo?t('demo.storage'):data.database_path;
+  const storageMode=data.demo?'demo':data.database_mode||'custom';
+  const storageDescriptions={default:'settings.storage_default',custom:'settings.storage_custom',source:'settings.storage_source',demo:'settings.storage_demo'};
+  $('db-description').textContent=t(storageDescriptions[storageMode]||storageDescriptions.custom);
 }
 const svgNode=(tag,attrs={})=>{const node=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const[key,value]of Object.entries(attrs))node.setAttribute(key,String(value));return node};
 const svgText=(text,x,y,attrs={})=>{const el=svgNode('text',{x,y,...attrs});el.textContent=text;return el};

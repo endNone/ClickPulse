@@ -12,6 +12,8 @@ Ready-to-run packages need no Rust, Python, development tools or developer accou
 
 Portable means no setup wizard is required. Statistics still live in the standard user-data directory and do not move with the EXE.
 
+Settings → Data location shows the database actually in use and whether it is the default or a custom location. Starting from a source checkout or a different working folder does not move the default database. Advanced `--db` launches use the explicitly selected file and do not manage login startup.
+
 ## Windows security prompts
 
 ZIP packaging does not sign the executable. On Windows 11, **Smart App Control** can block an unsigned app and offers no individual-app exception. Keep the protection enabled and report the exact dialog if this happens. See [Microsoft's Smart App Control guidance](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions).
@@ -28,7 +30,7 @@ After startup, check the recording status and tray icon. Use the physical keyboa
 
 ## Updates and directories
 
-Check the running build before testing a fix: expand mini mode, open **Settings → App**, and note the complete version, for example **ClickPulse 0.1.0 (53)**. The number in parentheses is the internal build; the sidebar and `ClickPulse.exe --version` show the same identity. Different preview builds can share the public version and ZIP filename.
+Check the running build before testing a fix: expand mini mode, open **Settings → App**, and note the complete version, for example **ClickPulse 0.1.0 (54)**. The number in parentheses is the internal build; the sidebar and `ClickPulse.exe --version` show the same identity. Different preview builds can share the public version and ZIP filename.
 
 Older builds only show `0.1.0` in the app. For those builds, inspect **ClickPulse.exe → Properties → Details → File version** (for example `0.1.0.49`), or read `internal_build` and `source_revision` in the adjacent `build-manifest.json`. Confirm the executable belongs to the folder you just extracted; downloading a package or merging a source fix does not update an already running copy.
 

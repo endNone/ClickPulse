@@ -63,7 +63,7 @@ function createClickPulseDropdowns(document,window){
       if(['ArrowDown','ArrowUp','Home','End','PageDown','PageUp'].includes(key)){
         event.preventDefault();if(!wasOpen)open();
         if(wasOpen)active=Math.min(options.length-1,Math.max(0,active+(key==='ArrowDown'?1:key==='ArrowUp'?-1:key==='PageDown'?10:key==='PageUp'?-10:0)));
-        if(key==='Home'||(!wasOpen&&key==='ArrowUp'))active=0;if(key==='End')active=options.length-1;
+        if(key==='Home')active=0;if(key==='End')active=options.length-1;
         if(wasOpen&&event.altKey&&key==='ArrowUp')commit();else mark();return;
       }
       if(key.length===1&&!event.ctrlKey&&!event.metaKey&&!event.altKey){

@@ -58,7 +58,7 @@ function snapshot(){
   const day={day:'2026-10-07',counts};
   return {now:'2026-10-07T12:00:00-07:00',today:counts,week:counts,lifetime:counts,days:[day],history_days:[day],
     windows:[{seconds:60,counts:{keyboard:2,mouse:1},approximate:false}],keyboard_stats:{physical:[{code:0,count:100}]},
-    capture:{listening:true,permission_needed:false,error:null},paused:false,source_mode:false,setup_pending:false,auto_start:true,database_path:'/current/events.sqlite3'};
+    capture:{listening:true,permission_needed:false,error:null},paused:false,source_mode:false,setup_pending:false,auto_start:true,auto_start_available:true,database_mode:'default',database_path:'/current/events.sqlite3'};
 }
 function keyCells(a){
   const visit=node=>node.dataset.key?[node]:node.children.flatMap(visit);
@@ -165,7 +165,7 @@ test('view toggle replaces the total, uses current proportional counts and resto
     assert.equal(a.get('keyboard-view-toggle').attributes['aria-pressed'],'true');
     assert.equal(a.get('keyboard-view-label').textContent,'Keyboard layout');
     assert.equal(blocks.children.some(cell=>cell.dataset.key==='other'),false);
-    assert.equal(blocks.children.some(cell=>cell.dataset.key==='home'),platform==='windows');
+    assert.equal(blocks.children.some(cell=>cell.dataset.key==='home'),false);
     const area=id=>{const cell=blocks.children.find(cell=>cell.dataset.key===id);return parseFloat(cell.style.width)*parseFloat(cell.style.height);};
     assert.ok(Math.abs(area('A')/area('S')-4)<1e-9);
     const first=blocks.children.find(cell=>cell.dataset.key==='A'),before=first.style.values['--key-bg'];
@@ -193,7 +193,7 @@ test('an empty treemap recovers when new counts arrive and follows locale change
 });
 test('both keyboard footers share visible used keys across hidden counts, live additions, locale and navigation',()=>{
   for(const platform of ['macos','windows']){
-    const a=app(platform),s=snapshot(),count=platform==='macos'?0:2;
+    const a=app(platform),s=snapshot(),count=0;
     const next=physical=>({...s,keyboard_stats:{physical}});
     const hidden=[{code:115,count:1000},{code:86,count:7},{code:999,count:3}];
     a.window.receive(next(hidden));a.navigate('keys');
@@ -227,6 +227,33 @@ test('Windows settings report native capture without offering macOS permission c
   assert.equal(a.get('autostart-row').hidden,false);
   a.window.receive({...snapshot(),capture:{listening:false,error:'failure'}});
   assert.equal(a.get('permission-description').textContent,messages.en['status.unavailable']);
+});
+
+test('settings distinguish storage modes and only offer login startup for the default database',()=>{
+  const a=app('windows');a.navigate('settings');
+  for(const mode of ['default','custom','source','demo']){
+    const s={...snapshot(),database_mode:mode,auto_start_available:mode==='default',source_mode:mode==='source',demo:mode==='demo'};
+    a.window.receive(s);
+    assert.equal(a.get('autostart-row').hidden,mode!=='default');
+    assert.equal(a.get('db-path').textContent,mode==='demo'?messages.en['demo.storage']:s.database_path);
+    assert.equal(a.get('db-description').textContent,messages.en['settings.storage_'+mode]);
+    a.window.receiveView({locale:'zh-CN',language_preference:'system'});
+    assert.equal(a.get('db-description').textContent,messages['zh-CN']['settings.storage_'+mode]);
+    a.window.receiveView({locale:'en',language_preference:'system'});
+  }
+});
+
+test('the Windows heatmap ends at the space row even after extended-key input arrives',()=>{
+  const a=app('windows'),s=snapshot();a.navigate('keys');
+  for(const physical of [[],[{code:115,count:100},{code:86,count:40},{code:49,count:2}]]){
+    a.window.receive({...s,keyboard_stats:{physical}});
+    const rows=a.get('keyboard-layout').children.filter(row=>!row.className.includes('supplemental-row'));
+    assert.equal(rows.length,6);
+    assert.ok(rows[5].children.some(cell=>cell.dataset.key==='space'));
+    assert.ok(!rows.flatMap(row=>row.children).some(cell=>['home','num4'].includes(cell.dataset.key)));
+    assert.equal(a.get('keyboard-coverage').textContent,physical.length?'1 keys used':'0 keys used');
+  }
+  assert.match(readFileSync('ui/style.css','utf8'),/\.keyboard-row\.supplemental-row\s*\{display:none\}/);
 });
 test('refresh only draws the selected page and skips unchanged charts',()=>{
   const a=app(),s=snapshot();a.window.receive(s);

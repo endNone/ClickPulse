@@ -14,10 +14,7 @@ pub fn name() -> &'static str {
 
 pub fn data_dir() -> Result<PathBuf> {
     #[cfg(target_os = "windows")]
-    return Ok(PathBuf::from(
-        std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is unavailable")?,
-    )
-    .join("ClickPulse"));
+    return windows_data_dir(std::env::var_os("LOCALAPPDATA"));
     #[cfg(target_os = "macos")]
     return Ok(
         PathBuf::from(std::env::var_os("HOME").context("无法确定用户目录")?)
@@ -33,6 +30,13 @@ pub fn data_dir() -> Result<PathBuf> {
             .context("User data directory is unavailable")?;
         Ok(base.join("ClickPulse"))
     }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn windows_data_dir(local_app_data: Option<std::ffi::OsString>) -> Result<PathBuf> {
+    let base = PathBuf::from(local_app_data.context("LOCALAPPDATA is unavailable")?);
+    anyhow::ensure!(base.is_absolute(), "LOCALAPPDATA must be an absolute path");
+    Ok(base.join("ClickPulse"))
 }
 
 pub fn log_path() -> Result<PathBuf> {
@@ -88,3 +92,30 @@ pub fn reveal(path: &Path) -> Result<()> {
 #[cfg(target_os = "windows")]
 #[path = "platform_windows.rs"]
 pub mod windows;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_data_directory_never_resolves_relative_to_the_working_directory() {
+        assert!(windows_data_dir(None).is_err());
+        for value in ["", ".", "profile/AppData/Local"] {
+            assert!(windows_data_dir(Some(value.into())).is_err());
+        }
+        #[cfg(target_os = "windows")]
+        for value in [
+            r"C:Users\tester\AppData\Local",
+            r"\Users\tester\AppData\Local",
+        ] {
+            assert!(windows_data_dir(Some(value.into())).is_err());
+        }
+        let profile = tempfile::tempdir().unwrap();
+        let base = profile.path().join("AppData").join("Local");
+        assert_eq!(
+            windows_data_dir(Some(base.clone().into_os_string())).unwrap(),
+            base.join("ClickPulse")
+        );
+        assert!(!base.exists(), "resolving a path must not create user data");
+    }
+}

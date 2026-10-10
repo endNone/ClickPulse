@@ -40,10 +40,11 @@ Verify package SHA256 values and manifest file hashes. Extract the complete pack
 | Background recording | Minimizing to tray or hiding mini mode still records physical input |
 | Actual exit | Save-and-quit or tray Quit saves records, stops capture and removes the process/tray icon; dedicated WebView2 children exit without affecting other apps |
 | Reopen/single instance | Tray double-click or running the EXE again opens full statistics with one collector process |
-| Keyboard views | Correct PC layout, matching used-key totals in both views and no Other keys card |
+| Keyboard views | Compact PC layout ends at the Space/modifier row, with no stretched navigation/numpad rows below it; both views report used visible keys consistently while preserving all stored counts |
 | Persistence | Totals survive normal exit/reopen and continue increasing |
 | CSV | Export agrees with displayed history and refuses to overwrite an existing path |
-| Launch at login | Startup points to the fixed program folder; record an actual sign-out/sign-in test separately |
+| Data location | Default launch uses `%LOCALAPPDATA%\ClickPulse\events.sqlite3` independently of the working directory; Settings distinguishes custom/read-only/demo sessions |
+| Launch at login | Only default-database sessions expose and handle startup changes; custom `--db`, read-only and demo sessions cannot change the default startup entry. Record an actual sign-out/sign-in test separately |
 
 Remote tools may inject input differently from physical devices and Raw Input. Report remote and local physical-input results separately. Complete capture validation requires a person at the Windows machine to press keys, click and hold a key. Missing remote-input counts alone do not prove capture failed.
 
@@ -51,7 +52,7 @@ Remote tools may inject input differently from physical devices and Raw Input. R
 
 Use a temporary database (`--db <temporary-path>`) and compare before/after counts. Press and release a normal key ten times, then hold it: expect ten plus one keyboard events. Click each available mouse button ten times; releases, pointer movement and scrolling must add no clicks. Repeat with the main window focused, another app focused, and ClickPulse hidden in the tray.
 
-Check PrintScreen, repeated Pause presses, and Shift with NumLock/keypad navigation separately. Synthetic Shift/Ctrl prefix packets must not add operations or release an actually held modifier; Pause must remain countable without a release packet. Record the physical sequence and expected delta, including any modifiers pressed by the tester.
+Check PrintScreen and Alt+PrintScreen, repeated Pause and Ctrl+Pause presses, and Shift with NumLock/keypad navigation separately. Release modifiers before their special key as well as after it; the next press must still count, and both variants must reach the same heatmap key. Synthetic Shift/Ctrl prefix packets must not add operations or release an actually held modifier; Pause must remain countable without a release packet. Record the physical sequence and expected delta, including any modifiers pressed by the tester.
 
 Start directly with `--mini`, then expand and re-enter mini mode. Check the left and top edges at 100%, 150% and 200% scaling where available: the content must fill the rounded outline with no white/gray strip or clipped right/bottom edge. Confirm full-window resizing, maximizing/restoring and mini drag/pin controls still work. These manual checks remain **Not tested** until observed on the target hardware.
 

@@ -80,3 +80,22 @@ test('menus flip above controls near the bottom and stay inside the viewport',()
   assert.ok(parseFloat(h.menu.style.top)<465);assert.ok(parseFloat(h.menu.style.left)+parseFloat(h.menu.style.width)<=window.innerWidth-8);
   assert.equal(h.menu.children[0].scrolled,true);
 });
+
+test('either arrow opens at the saved selection before previewing adjacent options',()=>{
+  for(const key of ['ArrowUp','ArrowDown']){
+    const {themes,t,dropdowns}=fixture();themes.value='violet';dropdowns.sync(themes);
+    let changes=0;themes.addEventListener('change',()=>changes++);
+    t.trigger.fire('keydown',{key});
+    assert.equal(t.trigger.getAttribute('aria-activedescendant'),t.menu.children[2].id);
+    assert.equal(themes.value,'violet');assert.equal(changes,0);
+    t.trigger.fire('keydown',{key:'Enter'});
+    assert.equal(themes.value,'violet');assert.equal(changes,0);
+    t.trigger.fire('keydown',{key});t.trigger.fire('keydown',{key});
+    const index=key==='ArrowUp'?1:3;
+    assert.equal(t.trigger.getAttribute('aria-activedescendant'),t.menu.children[index].id);
+    t.trigger.fire('keydown',{key:'Escape'});
+    assert.equal(themes.value,'violet');assert.equal(changes,0);
+    t.trigger.fire('keydown',{key});t.trigger.fire('keydown',{key});t.trigger.fire('keydown',{key:'Enter'});
+    assert.equal(themes.value,key==='ArrowUp'?'teal':'graphite');assert.equal(changes,1);
+  }
+});

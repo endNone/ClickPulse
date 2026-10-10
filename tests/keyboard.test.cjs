@@ -65,17 +65,32 @@ test('Mac extended keys retain identities while unresolved counts stay outside t
   assert.equal(view.ranked.some(key=>key.id==='other'),false);
 });
 
-test('visible key scope excludes hidden Mac extensions while keeping Windows navigation and all stored counts',()=>{
+test('compact layouts on both platforms exclude extended keys while preserving every stored count',()=>{
   const stats={physical:[{code:0,count:5},{code:115,count:1000},{code:86,count:7},{code:999,count:3}]};
   for(const platform of ['macos','windows']){
     const model=K.create(platform),view=model.distribution(stats);
-    assert.deepEqual(view.visibleRanked.map(key=>key.id),platform==='macos'?['A']:['home','num4','A']);
+    assert.deepEqual(view.visibleRanked.map(key=>key.id),['A']);
+    const visibleRows=view.rows.filter(row=>!row.some(key=>key.supplemental));
+    assert.equal(visibleRows.length,6);
+    assert.ok(visibleRows[5].some(key=>key.id==='space'));
+    assert.ok(!visibleRows.flat().some(key=>['home','num4'].includes(key.id)));
     assert.equal(view.ranked.length,3);assert.equal(view.total,1015);
     assert.equal(view.mapped,1012);assert.equal(view.unmapped,3);
     assert.equal(view.ranked.reduce((sum,key)=>sum+key.count,0)+view.unmapped,view.total);
     const historical=model.distribution({history_available:true,history_since_fix:stats.physical.map(row=>({...row,code:2**40+row.code}))});
     assert.deepEqual(historical.visibleRanked,view.visibleRanked);
     assert.equal(historical.total,view.total);
+  }
+});
+
+test('Windows modified PrintScreen and Pause aliases retain old history and combine with new captures once',()=>{
+  const windows=K.create('windows');
+  const physical=[{code:0x10054,count:2},{code:0x10137,count:3},{code:0x10146,count:5},{code:0x10245,count:7}];
+  for(const stats of [{physical},{physical,history_available:true,history_since_fix:physical.map(row=>({...row,code:2**40+row.code}))}]){
+    const view=windows.distribution(stats),byKey=counts(view);
+    assert.equal(byKey.get('print-screen'),5);assert.equal(byKey.get('pause-break'),12);
+    assert.equal(view.total,17);assert.equal(view.mapped,17);assert.equal(view.unmapped,0);
+    assert.deepEqual(view.visibleRanked.map(key=>key.id),['pause-break','print-screen']);
   }
 });
 

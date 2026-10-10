@@ -36,6 +36,21 @@ pub struct CaptureStatus {
     pub error_code: Option<&'static str>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DatabaseMode {
+    Default,
+    Custom,
+    Source,
+    Demo,
+}
+
+impl DatabaseMode {
+    fn can_manage_auto_start(self) -> bool {
+        self == Self::Default
+    }
+}
+
 #[derive(Serialize)]
 pub struct AppSnapshot {
     #[serde(flatten)]
@@ -43,8 +58,10 @@ pub struct AppSnapshot {
     pub capture: CaptureStatus,
     pub paused: bool,
     pub database_path: String,
+    pub database_mode: DatabaseMode,
     pub source_mode: bool,
     pub setup_pending: bool,
+    pub auto_start_available: bool,
     pub auto_start: bool,
     pub demo: bool,
 }
@@ -57,6 +74,7 @@ pub(crate) struct SnapshotDelivery {
     path: PathBuf,
     source_mode: bool,
     setup_pending: bool,
+    database_mode: DatabaseMode,
     reply: Option<SnapshotCallback>,
 }
 
@@ -72,9 +90,11 @@ impl SnapshotDelivery {
                     .clone(),
                 paused: self.paused.load(Ordering::Relaxed),
                 database_path: self.path.display().to_string(),
+                database_mode: self.database_mode,
                 source_mode: self.source_mode,
                 setup_pending: self.setup_pending,
-                auto_start: auto_start_enabled(),
+                auto_start_available: self.database_mode.can_manage_auto_start(),
+                auto_start: self.database_mode.can_manage_auto_start() && auto_start_enabled(),
                 demo: false,
             };
             Ok(serde_json::to_string(&snapshot)?)
@@ -108,6 +128,7 @@ pub struct Runtime {
     path: PathBuf,
     source_mode: bool,
     setup_pending: bool,
+    database_mode: DatabaseMode,
 }
 
 impl Runtime {
@@ -194,6 +215,11 @@ impl Runtime {
             path: path.to_path_buf(),
             source_mode: false,
             setup_pending: false,
+            database_mode: if owned {
+                DatabaseMode::Default
+            } else {
+                DatabaseMode::Custom
+            },
         })
     }
 
@@ -252,6 +278,7 @@ impl Runtime {
             path: path.to_path_buf(),
             source_mode: true,
             setup_pending: probe,
+            database_mode: DatabaseMode::Source,
         })
     }
 
@@ -268,9 +295,11 @@ impl Runtime {
             capture: self.capture_status()?,
             paused: self.paused.load(Ordering::Relaxed),
             database_path: self.path.display().to_string(),
+            database_mode: self.database_mode,
             source_mode: self.source_mode,
             setup_pending: self.setup_pending,
-            auto_start: crate::runtime::auto_start_enabled(),
+            auto_start_available: self.can_manage_auto_start(),
+            auto_start: self.can_manage_auto_start() && auto_start_enabled(),
             demo: false,
         })
     }
@@ -288,10 +317,17 @@ impl Runtime {
                 path: self.path.clone(),
                 source_mode: self.source_mode,
                 setup_pending: self.setup_pending,
+                database_mode: self.database_mode,
                 reply: Some(Box::new(reply)),
             }))
             .map_err(|_| anyhow!("Snapshot request queue is unavailable"))?;
         Ok(())
+    }
+
+    /// Login startup always opens the default App database. Independent and
+    /// read-only sessions must not change that default recorder's startup entry.
+    pub fn can_manage_auto_start(&self) -> bool {
+        self.database_mode.can_manage_auto_start()
     }
 
     pub fn set_paused(&self, paused: bool) {
@@ -676,6 +712,36 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
         assert_eq!(value["lifetime"]["keyboard"], 10);
         assert_eq!(value["keyboard_stats"]["physical"][0]["count"], 10);
+        assert_eq!(value["database_mode"], "default");
+        assert_eq!(value["auto_start_available"], true);
+        assert!(runtime.can_manage_auto_start());
+        runtime.shutdown().unwrap();
+    }
+
+    #[test]
+    fn custom_database_cannot_manage_or_report_default_recorder_login_startup() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("independent.sqlite3");
+        let mut runtime = Runtime::start(&path, None, true).unwrap();
+        assert!(!runtime.can_manage_auto_start());
+        let snapshot = runtime.snapshot().unwrap();
+        assert_eq!(snapshot.database_mode, DatabaseMode::Custom);
+        assert_eq!(snapshot.database_path, path.display().to_string());
+        assert!(!snapshot.auto_start_available);
+        assert!(!snapshot.auto_start);
+
+        let (reply, response) = bounded(1);
+        runtime
+            .request_snapshot(move |result| reply.send(result).unwrap())
+            .unwrap();
+        let json = response
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["database_mode"], "custom");
+        assert_eq!(value["auto_start_available"], false);
+        assert_eq!(value["auto_start"], false);
         runtime.shutdown().unwrap();
     }
 
@@ -699,6 +765,7 @@ mod tests {
             path: PathBuf::from("fixture.sqlite3"),
             source_mode: false,
             setup_pending: false,
+            database_mode: DatabaseMode::Custom,
         };
         let (reply, response) = bounded(1);
         let worker = thread::spawn(move || {

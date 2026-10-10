@@ -2,6 +2,10 @@
 
 ## 0.1.0 — Private preview · 2026-10-10
 
+- Match the Windows heatmap to the compact six-row layout, keeping navigation/numpad history without stretching extra rows below Space.
+- Recognize modified PrintScreen/Pause scan codes and their previously stored aliases without rewriting or double-counting history.
+- Keep the selected dropdown option when opening with ArrowUp; subsequent arrows preview adjacent options.
+- Label default/custom/read-only/demo storage in Settings, reject relative Windows data roots, and restrict login-startup controls to the default App database.
 - Show the internal build alongside the public version in Settings, the sidebar and `--version`, so preview binaries can be distinguished when verifying fixes.
 - Remove native shadow insets from the Windows mini window and align its rounded region with the actual client area, including frame changes and display scaling.
 - Ignore synthetic keyboard prefixes around PrintScreen and Shift/NumLock keypad input, preserving physically held keys; count repeated Pause presses without requiring a release packet.

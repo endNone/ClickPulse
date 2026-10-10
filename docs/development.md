@@ -82,7 +82,9 @@ cargo run --locked -- migrate --source /path/to/existing.sqlite3 --output /path/
 
 Open the desktop app once to initialize a fresh default database; CLI read operations do not create a missing one. `--source-db` is read-only. Migration requires a new destination and preserves the source; stop the old recorder yourself before migrating. It does not merge overlapping histories, overwrite the app's existing database or stop any service. Keep complete backups with SQLite backup or after normal shutdown so WAL records are included.
 
-Advanced `--db` selects independent storage; explicit `--legacy-db`/`import` remain available for compatible legacy formats. Installed users keep using their existing App database and preferences.
+Advanced `--db` selects independent storage; explicit `--legacy-db`/`import` remain available for compatible legacy formats. Installed users keep using their existing App database and preferences. Settings identifies default, custom, read-only and demo storage. Only the default App database can manage login startup; independent sessions cannot change the default recorder's startup entry.
+
+On Windows, the data root comes from an absolute `LOCALAPPDATA` path, never the current working directory. Missing, empty or relative values fail rather than creating data beside a source checkout. For isolated checks prefer `--demo` or an explicit temporary `--db` path. A process-local `LOCALAPPDATA` override also redirects preferences/logs/WebView data; label that as a test profile and never show its path as the installed app's default or persist the override to the user's environment.
 
 Recovery journals from previously authorized handoffs retain their safety-recovery behavior.
 
@@ -104,6 +106,6 @@ The timestamp is an example; use the recorder's actual change time and original 
 
 ## Version and publication
 
-Project metadata identifies the **0.1.0** private preview (internal build 53). The app and `--version` include the internal build so test reports distinguish binaries sharing a public preview version. `build.rs` validates the Windows and macOS package versions and embeds that build in the executable. Use a new public version for each tagged release; never move a published tag or replace its packages with a different source revision. Internal build numbers identify unpublished revisions. Keep Cargo, macOS public version and Windows ProductVersion aligned. Verify signatures, versions, manifests, checksums, third-party licenses and absence of user data before distribution.
+Project metadata identifies the **0.1.0** private preview (internal build 54). The app and `--version` include the internal build so test reports distinguish binaries sharing a public preview version. `build.rs` validates the Windows and macOS package versions and embeds that build in the executable. Use a new public version for each tagged release; never move a published tag or replace its packages with a different source revision. Internal build numbers identify unpublished revisions. Keep Cargo, macOS public version and Windows ProductVersion aligned. Verify signatures, versions, manifests, checksums, third-party licenses and absence of user data before distribution.
 
 Project code is licensed under [GPL-3.0-or-later](../LICENSE). Source archives and both platforms' packages include the full license; fonts and other third-party components retain their own licenses. Signing, native Windows validation and public release remain pending. See the [roadmap](roadmap.md). Local scripts do not create repositories or publish Releases; the tag workflow creates an unpublished draft for manual review.
