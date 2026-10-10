@@ -1,0 +1,68 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact source revision to check
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  release-tooling:
+    name: Release tooling (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Packaging and release verification
+        run: python -m unittest discover -s tests -p 'test_*.py'
+
+  check:
+    name: Check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+      - name: Format
+        run: cargo +stable fmt --check
+      - name: Rust tests
+        run: cargo +stable test --all-targets --locked
+      - name: Clippy
+        run: cargo +stable clippy --all-targets --locked -- -D warnings
+      - name: Portable interface tests
+        run: node --test tests/history.test.cjs tests/i18n.test.cjs tests/keyboard.test.cjs tests/rendering.test.cjs tests/dropdown.test.cjs tests/themes.test.cjs
+      - name: Packaging boundaries
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Build
+        run: cargo +stable build --release --locked

@@ -1,0 +1,72 @@
+name: Packages
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact source revision to package
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}
+
+  package:
+    name: Package (${{ matrix.platform }})
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: macos-arm64
+            rust-target: aarch64-apple-darwin
+          - os: windows-2025
+            platform: windows-x64
+            rust-target: x86_64-pc-windows-msvc
+          - os: macos-15-intel
+            platform: macos-x64
+            rust-target: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: python scripts/release.py plan --github-output "$GITHUB_OUTPUT"
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal --target ${{ matrix.rust-target }}
+      - name: Windows installer compiler
+        if: runner.os == 'Windows'
+        run: python scripts/setup_windows_installer.py
+      - name: Build packages
+        run: python scripts/build.py --target ${{ matrix.rust-target }}
+      - name: Upload packages and checksums
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}.dmg
+            dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}.zip
+            dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}-Setup.exe
+            dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}*.sha256
+            dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}.manifest.json

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClickPulse · Mini mode desktop demo</title>
+<style>
+@font-face{font-family:Inter;src:url('fonts/Inter.ttf');font-weight:100 900;font-display:swap}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,sans-serif;background:#e5ebf4;color:#1d2e48;outline:none;height:680px;overflow:hidden}
+.desktop{position:relative;width:1080px;height:680px;overflow:hidden;background:#dfe7f2;isolation:isolate}
+.wallpaper{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:-1}
+.menubar{height:30px;display:flex;align-items:center;padding:0 24px;gap:23px;background:#f7f9fc;color:#4c5d77;font-size:11px}
+.menubar strong{color:#1f3454;font-weight:650}.menubar .right{margin-left:auto;letter-spacing:.2px}
+.notes{position:absolute;left:48px;top:80px;width:800px;height:510px;border:1px solid #becde1;border-radius:13px;background:#fff;box-shadow:0 18px 45px #18365e1c;overflow:hidden}
+.titlebar{display:flex;align-items:center;height:44px;padding:0 16px;gap:7px;border-bottom:1px solid #e5ebf3;background:#f8fafd}
+.traffic{width:10px;height:10px;background:#ff665b;border-radius:50%}.traffic:nth-child(2){background:#ffbf42}.traffic:nth-child(3){background:#43c67b}
+.titlebar strong{margin-left:18px;font-size:11px;color:#617087;font-weight:550}
+.file-status{margin-left:auto;font-size:10px;color:#71849d}
+.notes-main{display:flex;height:calc(100% - 44px)}
+.note-sidebar{width:144px;flex:none;padding:20px 12px;background:#f5f7fb;border-right:1px solid #e5ebf3;font-size:11px;color:#6d7e96}
+.folder{padding:10px 9px;border-radius:6px;margin-bottom:6px}.folder.active{background:#e4ecf8;color:#295690;font-weight:600}
+.folder svg{width:12px;height:12px;vertical-align:-2px;margin-right:7px;fill:none;stroke:currentColor;stroke-width:1.5}
+.paper{padding:34px 36px;flex:1;min-width:0}.kicker{font-size:9px;letter-spacing:1.8px;font-weight:650;color:#7a8ba2;margin-bottom:13px}
+h1{margin:0 0 13px;font-size:25px;letter-spacing:-.5px;line-height:1.2}p{margin:0;font-size:13px;color:#8291a6;line-height:1.8}
+.divider{width:396px;height:1px;background:#e8edf5;margin:22px 0}
+.heading{font-size:12px;font-weight:650;margin-bottom:13px;color:#395371}
+.line{display:flex;align-items:center;gap:9px;min-height:31px;font-size:13px;color:#4d627e}
+.check{width:15px;height:15px;border:1px solid #b7c7dd;border-radius:4px;display:grid;place-items:center;color:white;font-size:10px}
+.line.done .check{background:#285cab;border-color:#285cab}.line.done .label{color:#7e8fa6;text-decoration:line-through}
+.draft{font-size:13px;line-height:1.9;min-height:64px;width:403px;color:#405674;white-space:pre-wrap}
+.draft-placeholder{color:#9aa7ba}.draft.active{cursor:text}
+.caret{display:inline-block;height:15px;border-left:1.5px solid #285cab;vertical-align:-3px}
+.mini-wrap{position:absolute;left:690px;top:244px;width:281.6px;height:183.04px;border-radius:13px;box-shadow:0 18px 35px #10254330;overflow:hidden}
+iframe{display:block;width:320px;height:208px;border:0;transform:scale(.88);transform-origin:top left;background:transparent;pointer-events:none}
+.cursor{position:absolute;width:19px;height:25px;filter:drop-shadow(0 1px 1px #ffffffd0);z-index:10;pointer-events:none}
+.cursor svg{display:block;width:19px;height:25px}.cursor .ibeam{display:none}.cursor.text .arrow{display:none}.cursor.text .ibeam{display:block}
+.click-ring{position:absolute;width:18px;height:18px;border:1px solid #476992;border-radius:50%;z-index:9;pointer-events:none;opacity:0}
+.demo-caption{position:absolute;left:25px;bottom:25px;font-size:10px;color:#fff;text-shadow:0 1px 3px #102543}
+.driver{width:1080px;height:60px;padding:16px;font-size:12px;background:white;display:flex;gap:16px;align-items:center}.driver button{font:inherit}.driver output{font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body tabindex="0" aria-label="Desktop demonstration. Arrow Right advances one frame.">
+<main class="desktop" aria-label="Simulated desktop with a document and ClickPulse mini mode">
+ <img class="wallpaper" src="mini-desktop-scenery.png" alt="">
+ <div class="menubar"><strong>Notes</strong><span>File</span><span>Edit</span><span>View</span><span>Window</span><span>Help</span><span class="right">Thu Oct 8 &nbsp; 9:41 AM</span></div>
+ <section class="notes" aria-label="Sample notes document">
+  <div class="titlebar"><i class="traffic"></i><i class="traffic"></i><i class="traffic"></i><strong>Release notes</strong><span class="file-status" id="save-state">Saved</span></div>
+  <div class="notes-main">
+   <aside class="note-sidebar"><div class="folder active"><svg viewBox="0 0 16 16"><path d="M2 3h5l2 2h5v8H2Z"/></svg>Workspace</div><div class="folder">Release notes</div><div class="folder">Meeting notes</div><div class="folder">Archive</div></aside>
+   <article class="paper"><div class="kicker">THURSDAY, OCTOBER 8</div><h1>Prepare the release</h1><p>ClickPulse 0.1.0 · Preview</p><div class="divider"></div>
+    <div class="heading">Checklist</div><div class="line" id="task-one"><span class="check"></span><span class="label">Review the package</span></div><div class="line" id="task-two"><span class="check"></span><span class="label">Draft the release notes</span></div>
+    <div class="divider"></div><div class="heading">Draft</div><div class="draft" id="draft"><span id="draft-text"></span><i class="caret" id="caret"></i><span class="draft-placeholder" id="draft-placeholder">Write a short description…</span></div>
+   </article>
+  </div>
+ </section>
+ <div class="mini-wrap"><iframe title="ClickPulse mini mode, English, deep blue" src="index.html?locale=en&amp;page=mini"></iframe></div>
+ <div class="cursor" id="cursor"><svg class="arrow" viewBox="0 0 24 30"><path d="M3 2v23l6-6 5 10 4-2-5-10 8-1Z" fill="#263448" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="ibeam" viewBox="0 0 24 30"><path d="M8 5h8M12 5v20M8 25h8" fill="none" stroke="#fff" stroke-width="3"/><path d="M8 5h8M12 5v20M8 25h8" fill="none" stroke="#263448" stroke-width="1"/></svg></div><div class="click-ring" id="click-ring"></div>
+ <span class="demo-caption">Simulated desktop · Demo data</span>
+</main>
+<div class="driver"><button id="previous">Previous frame</button><button id="next">Next frame</button><button id="play">Play / stop</button><output id="frame-state">Loading mini mode…</output></div>
+<script src="mini-demo-timeline.js"></script>
+<script>
+// Deterministic frame stepping keeps text, cursor and counts in sync.
+// The iframe uses production HTML/CSS/fonts and the normal receive() renderer.
+const CAPTURE_SCALE = new URLSearchParams(location.search).get('scale') === '1.25' ? 1.25 : 1;
+document.body.style.zoom=String(CAPTURE_SCALE);
+const timeline = window.ClickPulseMiniDemo;
+const MAX_FRAME = timeline.maxFrame;
+const snapshotPromise = fetch('synthetic-snapshot.json').then(response=>response.json());
+const mini = document.querySelector('iframe');
+let snapshot, frame = 0, timer;
+const byId = id=>document.getElementById(id);
+const ease = n=>n*n*(3-2*n);
+const point = element=>{const r=element.getBoundingClientRect();return {x:(r.x+r.width/2)/CAPTURE_SCALE,y:(r.y+r.height/2)/CAPTURE_SCALE};};
+let anchors;
+function between(a,b,start,end){const t=Math.max(0,Math.min(1,(frame-start)/(end-start))),n=ease(t);return {x:a.x+(b.x-a.x)*n,y:a.y+(b.y-a.y)*n-12*Math.sin(t*Math.PI)};}
+function render() {
+ const s = timeline.stateAt(frame);
+ const drag = between(anchors.grab,anchors.drop,19,34);
+ const miniWrap=document.querySelector('.mini-wrap');miniWrap.style.left=(690+drag.x-anchors.grab.x)+'px';miniWrap.style.top=(244+drag.y-anchors.grab.y)+'px';
+ let cursor;
+ if(frame<19)cursor=between(anchors.start,anchors.grab,7,18);
+ else if(frame<36)cursor=drag;
+ else if(frame<50)cursor=between(anchors.drop,anchors.review,36,48);
+ else if(frame<62)cursor=between(anchors.review,anchors.draft,52,60);
+ else if(frame<timeline.saveFrame+5)cursor=anchors.draft;
+ else if(frame<=timeline.finishFrame)cursor=between(anchors.draft,anchors.finish,timeline.saveFrame+5,timeline.finishFrame-1);
+ else cursor=between(anchors.finish,anchors.rest,timeline.finishFrame+5,timeline.finishFrame+14);
+ const textCursor=frame>=60&&frame<timeline.saveFrame+6;
+ const hidePointer=frame>=68&&frame<timeline.saveFrame+5;
+ const caretVisible=s.focused&&!s.finished&&(frame-s.lastKeyFrame<7||frame%12<7);
+ byId('draft-text').textContent=s.text;
+ byId('draft-placeholder').hidden=s.focused;
+ byId('caret').style.display=s.focused?'inline-block':'none';byId('caret').style.opacity=caretVisible?'1':'0';
+ byId('draft').classList.toggle('active',s.focused&&!s.finished);
+ for(const [id,done] of [['task-one',s.reviewed],['task-two',s.finished]]){byId(id).classList.toggle('done',done);byId(id).querySelector('.check').textContent=done?'✓':'';}
+ byId('save-state').textContent=s.text&&!s.saved?'Edited':'Saved';
+ byId('cursor').classList.toggle('text',textCursor);byId('cursor').style.opacity=hidePointer?'0':'1';
+ byId('cursor').style.left=(cursor.x-(textCursor?9.5:2.4))+'px';byId('cursor').style.top=(cursor.y-(textCursor?12.5:1.7))+'px';
+ const clickTarget=s.click?.type==='drag'?anchors.grab:s.click?.type==='review'?anchors.review:s.click?.type==='focus'?anchors.draft:anchors.finish;
+ byId('click-ring').style.left=(clickTarget.x-9)+'px';byId('click-ring').style.top=(clickTarget.y-9)+'px';byId('click-ring').style.opacity=s.click&&!s.dragging?'.35':'0';
+ const updated=structuredClone(snapshot);
+ for(const field of ['today','week','lifetime'])updated[field]={keyboard:snapshot[field].keyboard+s.keys,mouse:snapshot[field].mouse+s.clicks};
+ updated.demo=true;updated.paused=false;
+ mini.contentWindow.receive(updated);
+ byId('frame-state').textContent=`Frame ${frame} / ${MAX_FRAME} · Keys ${updated.today.keyboard} · Clicks ${updated.today.mouse}`;
+ document.documentElement.dataset.frame=String(frame);
+ document.documentElement.dataset.keys=String(updated.today.keyboard);document.documentElement.dataset.clicks=String(updated.today.mouse);
+ document.documentElement.dataset.frameCount=String(timeline.frameCount);document.documentElement.dataset.frameMs=String(timeline.frameMs);
+}
+function move(step){frame=(frame+step+MAX_FRAME+1)%(MAX_FRAME+1);render();}
+byId('next').onclick=()=>move(1);byId('previous').onclick=()=>move(-1);
+byId('play').onclick=()=>{if(timer){clearInterval(timer);timer=null;}else timer=setInterval(()=>move(1),timeline.frameMs);};
+document.addEventListener('keydown',event=>{if(['ArrowRight','ArrowLeft','Home'].includes(event.key)){event.preventDefault();if(event.key==='Home'){frame=0;render();}else move(event.key==='ArrowRight'?1:-1);}});
+Promise.all([snapshotPromise,document.fonts.ready,new Promise(resolve=>mini.addEventListener('load',resolve)),new Promise(resolve=>{const image=document.querySelector('.wallpaper');if(image.complete)resolve();else image.addEventListener('load',resolve,{once:true});})]).then(async results=>{
+ snapshot=results[0];await mini.contentDocument.fonts.ready;
+ const draft=byId('draft').getBoundingClientRect();
+ anchors={start:{x:549,y:403},grab:{x:790,y:272},drop:{x:802,y:160},review:point(document.querySelector('#task-one .check')),finish:point(document.querySelector('#task-two .check')),draft:{x:draft.left/CAPTURE_SCALE+5,y:draft.top/CAPTURE_SCALE+12},rest:{x:598,y:542}};
+ render();document.documentElement.dataset.previewReady='true';
+});
+</script>
+</body>
+</html>

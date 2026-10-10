@@ -1,0 +1,124 @@
+name: Release draft
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag matching Cargo.toml (for example v0.1.0)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Resolve version and source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      revision: ${{ steps.plan.outputs.revision }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Validate the tag and platform versions
+        id: plan
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python scripts/release.py plan --tag "$RELEASE_TAG" --require-tag --github-output "$GITHUB_OUTPUT"
+
+  packages:
+    needs: version
+    uses: ./.github/workflows/packages.yml
+    with:
+      ref: ${{ needs.version.outputs.revision }}
+
+  prepare:
+    name: Verify and assemble release assets
+    needs: [version, packages]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.version.outputs.revision }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ClickPulse-${{ needs.version.outputs.version }}-*
+          merge-multiple: true
+          path: dist
+      - name: Build corresponding source archive
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          SOURCE_REVISION: ${{ needs.version.outputs.revision }}
+        run: python scripts/package_github_draft.py --release --tag "$RELEASE_TAG" --revision "$SOURCE_REVISION"
+      - name: Verify every package and write release notes
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          SOURCE_REVISION: ${{ needs.version.outputs.revision }}
+        run: >-
+          python scripts/release.py prepare --tag "$RELEASE_TAG" --revision "$SOURCE_REVISION"
+          --packages dist --output dist/release --notes dist/release-notes.md
+          --repository "$GITHUB_REPOSITORY" --github-summary "$GITHUB_STEP_SUMMARY"
+          ${{ github.event.repository.private && '--private' || '' }}
+      - name: Retain the verified release candidate
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Release-candidate-${{ needs.version.outputs.version }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/release/*
+            dist/release-notes.md
+
+  draft:
+    name: Create an unpublished preview draft
+    needs: [version, prepare]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Release-candidate-${{ needs.version.outputs.version }}
+          path: candidate
+      - name: Confirm the source tag has not moved
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          SOURCE_REVISION: ${{ needs.version.outputs.revision }}
+        run: |
+          revision=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)
+          if [[ "$revision" != "$SOURCE_REVISION" ]]; then
+            echo "The tag moved after validation. No release will be created."
+            exit 1
+          fi
+      - name: Create draft with all verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+        run: >-
+          gh release create "$RELEASE_TAG" candidate/release/* --verify-tag --draft --prerelease
+          --title "ClickPulse $RELEASE_VERSION — Preview" --notes-file candidate/release-notes.md

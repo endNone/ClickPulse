@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="185" height="28" viewBox="0 0 185 28" role="img" aria-label="Windows: 10/11 · x64">
+  <title>Windows: 10/11 · x64</title>
+  <linearGradient id="shine" x2="0" y2="100%"><stop offset="0" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#000" stop-opacity=".08"/></linearGradient>
+  <clipPath id="round"><rect width="185" height="28" rx="4"/></clipPath>
+  <g clip-path="url(#round)"><rect width="83" height="28" fill="#555"/><rect x="83" width="102" height="28" fill="#0879b8"/><rect width="185" height="28" fill="url(#shine)"/></g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,DejaVu Sans,sans-serif" font-size="13"><text x="41.5" y="19">Windows</text><text x="134.0" y="19" font-weight="600">10/11 · x64</text></g>
+</svg>
