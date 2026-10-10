@@ -84,6 +84,15 @@ pub(super) fn set_compact(
         window.set_fullscreen(None);
         window.set_resizable(false);
         window.set_decorations(false);
+        #[cfg(target_os = "windows")]
+        {
+            use tao::platform::windows::WindowExtWindows;
+            // Tao's undecorated shadow keeps native frame insets, including
+            // a top line. The region is relative to the outer HWND, whereas
+            // WebView2 fills its client area. Remove those insets so their
+            // origins match before sizing and clipping the mini window.
+            window.set_undecorated_shadow(false);
+        }
         fix_compact_size(window);
         if let Some(monitor) = window.current_monitor() {
             let origin = monitor.position();
@@ -98,6 +107,11 @@ pub(super) fn set_compact(
         window.set_max_inner_size(None::<LogicalSize<f64>>);
         window.set_resizable(true);
         window.set_decorations(cfg!(target_os = "macos"));
+        #[cfg(target_os = "windows")]
+        {
+            use tao::platform::windows::WindowExtWindows;
+            window.set_undecorated_shadow(true);
+        }
         restore_full_window(window, layout.full_size, layout.full_position);
         #[cfg(target_os = "windows")]
         window.set_maximized(layout.full_maximized);
@@ -182,4 +196,77 @@ pub(super) fn restore_full_window(
     }
     #[cfg(target_os = "windows")]
     apply(window);
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::*;
+    use tao::{
+        event_loop::EventLoopBuilder,
+        platform::windows::{EventLoopBuilderExtWindows, WindowExtWindows},
+        window::WindowBuilder,
+    };
+    use windows_sys::Win32::{
+        Foundation::{HWND, POINT, RECT},
+        Graphics::Gdi::{ClientToScreen, ERROR, GetWindowRgnBox},
+        UI::WindowsAndMessaging::{GetClientRect, GetWindowRect},
+    };
+
+    #[test]
+    fn mini_client_fills_rounded_window_and_full_view_restores_native_frame() {
+        let mut builder = EventLoopBuilder::<UiEvent>::with_user_event();
+        builder.with_any_thread(true);
+        let mut event_loop = builder.build();
+        event_loop.set_device_event_filter(tao::event_loop::DeviceEventFilter::Always);
+        let window = Arc::new(
+            WindowBuilder::new()
+                .with_visible(false)
+                .with_decorations(false)
+                .with_inner_size(LogicalSize::new(960.0, 720.0))
+                .build(&event_loop)
+                .unwrap(),
+        );
+        let mut layout = WindowLayout {
+            full_size: window.inner_size().to_logical(window.scale_factor()),
+            full_position: None,
+            compact: false,
+            full_maximized: false,
+            region_size: None,
+        };
+        let hwnd = window.hwnd() as HWND;
+        assert!(window.has_undecorated_shadow());
+
+        // Reentering mini mode also exercises invalidation of its old region.
+        for _ in 0..2 {
+            set_compact(&window, &mut layout, true, false);
+            assert!(!window.has_undecorated_shadow());
+            assert!(!window.is_resizable());
+            assert_eq!(
+                window.inner_size(),
+                COMPACT_SIZE.to_physical::<u32>(window.scale_factor())
+            );
+            let mut outer = RECT::default();
+            let mut client = RECT::default();
+            let mut origin = POINT::default();
+            let mut region = RECT::default();
+            unsafe {
+                assert_ne!(GetWindowRect(hwnd, &mut outer), 0);
+                assert_ne!(GetClientRect(hwnd, &mut client), 0);
+                assert_ne!(ClientToScreen(hwnd, &mut origin), 0);
+                assert_ne!(GetWindowRgnBox(hwnd, &mut region), ERROR);
+            }
+            assert_eq!((origin.x, origin.y), (outer.left, outer.top));
+            assert_eq!(client.right, outer.right - outer.left);
+            assert_eq!(client.bottom, outer.bottom - outer.top);
+            assert_eq!((region.left, region.top), (0, 0));
+
+            set_compact(&window, &mut layout, false, false);
+            assert!(window.has_undecorated_shadow());
+            assert!(window.is_resizable());
+            assert!(layout.region_size.is_none());
+            unsafe {
+                assert_eq!(GetWindowRgnBox(hwnd, &mut region), ERROR);
+            }
+        }
+    }
 }

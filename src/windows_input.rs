@@ -2,18 +2,50 @@
 //! never converts input to characters and is testable without native capture.
 use std::collections::HashSet;
 
+// RAWKEYBOARD flags and virtual keys, kept platform independent so packet
+// normalization can be tested without starting a Windows input listener.
+const RI_KEY_BREAK: u16 = 1;
+const VK_SHIFT: u16 = 0x10;
+const VK_PAUSE: u16 = 0x13;
+const VK_NUMLOCK: u16 = 0x90;
+
 #[derive(Default)]
 pub struct WindowsKeyboard {
     held: HashSet<(usize, u16)>,
 }
 impl WindowsKeyboard {
     pub fn event(&mut self, device: usize, make: u16, flags: u16, vk: u16) -> Option<u32> {
-        if vk == 255 || make == 0xff {
+        if vk >= 255 || make == 0xff {
             return None;
         }
         let identity = make | ((flags & 6) << 7);
-        let identity = if make == 0 { 0x8000 | vk } else { identity };
-        if flags & 1 != 0 {
+        // PrintScreen and Pause can include fake Shift/Ctrl prefix packets.
+        // These are parts of one physical key, not additional key presses.
+        if matches!(identity, 0x12a | 0x21d) {
+            return None;
+        }
+        // Shift reverses NumLock. Windows can report the resulting synthetic
+        // Shift transitions using the *numpad* scan code. Tracking those packets
+        // would count a phantom numpad press and clear a genuinely held key.
+        if vk == VK_SHIFT && matches!(identity, 0x47..=0x49 | 0x4b..=0x4d | 0x4f..=0x53) {
+            return None;
+        }
+        if vk == VK_PAUSE {
+            // Pause is not an auto-repeating key and may have no separate break
+            // packet. Do not leave it held forever or confuse it with NumLock,
+            // which can have the same 0x45 make code.
+            return (flags & RI_KEY_BREAK == 0).then_some(canonical_code(0x245));
+        }
+        let identity = if vk == VK_NUMLOCK {
+            // Drivers differ on the E0 flag for NumLock; use one identity for
+            // both transitions and retain the existing stored NumLock code.
+            0x45
+        } else if make == 0 {
+            0x8000 | vk
+        } else {
+            identity
+        };
+        if flags & RI_KEY_BREAK != 0 {
             self.held.remove(&(device, identity));
             None
         } else if self.held.insert((device, identity)) {
@@ -168,6 +200,72 @@ mod tests {
         assert_eq!(keyboard.event(1, 0x4b, 2, 0x25), Some(123));
         assert_eq!(keyboard.event(1, 0x1c, 0, 0x0d), Some(36));
         assert_eq!(keyboard.event(1, 0x1c, 2, 0x0d), Some(76));
+    }
+    #[test]
+    fn shifted_numpad_packets_count_only_the_physical_presses() {
+        let mut keyboard = WindowsKeyboard::default();
+        let mut counts = Vec::new();
+        // Hold Shift and tap Numpad1 twice with NumLock on. Each tap is wrapped
+        // in fake Shift transitions whose scan code misleadingly says Numpad1.
+        let packets = [
+            (0x2a, 0, VK_SHIFT),
+            (0x4f, 1, VK_SHIFT),
+            (0x4f, 0, 0x23),
+            (0x4f, 0, 0x23), // auto-repeat
+            (0x4f, 1, 0x23),
+            (0x4f, 0, VK_SHIFT),
+            (0x4f, 1, VK_SHIFT),
+            (0x4f, 0, 0x23),
+            (0x4f, 1, 0x23),
+            (0x4f, 0, VK_SHIFT),
+            (0x2a, 1, VK_SHIFT),
+            (0x4f, 0, 0x61), // physical Numpad1 again, after releasing Shift
+            (0x4f, 1, 0x61),
+        ];
+        for (make, flags, vk) in packets {
+            counts.extend(keyboard.event(1, make, flags, vk));
+        }
+        assert_eq!(counts, vec![56, 83, 83, 83]);
+    }
+    #[test]
+    fn fake_shift_packets_do_not_release_a_held_numpad_key() {
+        let mut keyboard = WindowsKeyboard::default();
+        for (make, code) in [(0x47, 89), (0x4c, 87), (0x53, 65)] {
+            assert_eq!(keyboard.event(1, make, 0, 0x60), Some(code));
+            assert_eq!(keyboard.event(1, make, 1, VK_SHIFT), None);
+            assert_eq!(keyboard.event(1, make, 0, VK_SHIFT), None);
+            assert_eq!(keyboard.event(1, make, 0, 0x60), None);
+            assert_eq!(keyboard.event(1, make, 1, 0x60), None);
+            assert_eq!(keyboard.event(1, make, 0, 0x60), Some(code));
+        }
+    }
+    #[test]
+    fn print_screen_prefixes_do_not_add_shift_counts() {
+        let mut keyboard = WindowsKeyboard::default();
+        for _ in 0..2 {
+            assert_eq!(keyboard.event(1, 0x2a, 2, VK_SHIFT), None);
+            assert_eq!(keyboard.event(1, 0x37, 2, 0x2c), Some(0x10137));
+            assert_eq!(keyboard.event(1, 0x37, 2, 0x2c), None);
+            assert_eq!(keyboard.event(1, 0x37, 3, 0x2c), None);
+            assert_eq!(keyboard.event(1, 0x2a, 3, VK_SHIFT), None);
+        }
+        // A real Shift key remains independent of the ignored prefix.
+        assert_eq!(keyboard.event(1, 0x2a, 0, VK_SHIFT), Some(56));
+    }
+    #[test]
+    fn pause_counts_each_press_without_a_break_and_stays_separate_from_numlock() {
+        let mut keyboard = WindowsKeyboard::default();
+        assert_eq!(keyboard.event(1, 0x45, 0, VK_NUMLOCK), Some(71));
+        for _ in 0..2 {
+            assert_eq!(keyboard.event(1, 0x1d, 4, 0x11), None);
+            assert_eq!(keyboard.event(1, 0x45, 0, VK_PAUSE), Some(0x10245));
+        }
+        assert_eq!(keyboard.event(1, 0x45, 4, VK_PAUSE), Some(0x10245));
+        assert_eq!(keyboard.event(1, 0x45, 5, VK_PAUSE), None);
+        // A changed extended flag must not leave NumLock stuck or recount it.
+        assert_eq!(keyboard.event(1, 0x45, 2, VK_NUMLOCK), None);
+        assert_eq!(keyboard.event(1, 0x45, 3, VK_NUMLOCK), None);
+        assert_eq!(keyboard.event(1, 0x45, 2, VK_NUMLOCK), Some(71));
     }
     #[test]
     fn overrun_packets_are_ignored_and_unknown_keys_remain_disjoint() {

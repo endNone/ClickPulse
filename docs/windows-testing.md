@@ -47,6 +47,14 @@ Verify package SHA256 values and manifest file hashes. Extract the complete pack
 
 Remote tools may inject input differently from physical devices and Raw Input. Report remote and local physical-input results separately. Complete capture validation requires a person at the Windows machine to press keys, click and hold a key. Missing remote-input counts alone do not prove capture failed.
 
+### Counting and mini-window regression checks
+
+Use a temporary database (`--db <temporary-path>`) and compare before/after counts. Press and release a normal key ten times, then hold it: expect ten plus one keyboard events. Click each available mouse button ten times; releases, pointer movement and scrolling must add no clicks. Repeat with the main window focused, another app focused, and ClickPulse hidden in the tray.
+
+Check PrintScreen, repeated Pause presses, and Shift with NumLock/keypad navigation separately. Synthetic Shift/Ctrl prefix packets must not add operations or release an actually held modifier; Pause must remain countable without a release packet. Record the physical sequence and expected delta, including any modifiers pressed by the tester.
+
+Start directly with `--mini`, then expand and re-enter mini mode. Check the left and top edges at 100%, 150% and 200% scaling where available: the content must fill the rounded outline with no white/gray strip or clipped right/bottom edge. Confirm full-window resizing, maximizing/restoring and mini drag/pin controls still work. These manual checks remain **Not tested** until observed on the target hardware.
+
 ## Read-only totals
 
 After the desktop app initializes its database, run in the signed-in user's PowerShell, adjusting the program path if needed:

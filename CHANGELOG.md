@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Remove Windows mini-mode shadow insets so the WebView fills the rounded window without white or gray edges; restore the normal shadow when expanding.
+- Ignore synthetic Windows keyboard prefixes around PrintScreen, Pause and keypad input, and count repeated Pause presses without requiring a release packet.
+
 ## 0.1.0 — Private preview · 2026-10-09
 
 - Restore dashboard startup on earlier macOS 12 WebKit versions by avoiding newer JavaScript helpers; regression checks run the real interface modules without those helpers.
