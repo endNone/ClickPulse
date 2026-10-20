@@ -84,11 +84,8 @@ impl LiveSource {
         };
         let now_ms = now.timestamp_millis();
         let windows = activity.windows;
-        let start = Local
-            .from_local_datetime(&now.date_naive().and_hms_opt(0, 0, 0).unwrap())
-            .earliest()
-            .context("本地午夜不存在")?
-            .timestamp_millis();
+        let start =
+            crate::db::first_valid_local_instant(&Local, now.date_naive())?.timestamp_millis();
         let mut hours = vec![Counts::default(); 24];
         let mut stmt=tx.prepare("SELECT CAST(strftime('%H',bucket*60,'unixepoch','localtime') AS INTEGER),dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY 1,2")?;
         for row in stmt.query_map(
