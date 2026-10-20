@@ -171,13 +171,16 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
     let path = agent(APP_LABEL)?;
     let service = format!("{}/{}", domain()?, APP_LABEL);
     if enabled {
-        if path.exists() {
+        let previous = if path.exists() {
             let contents = std::fs::read_to_string(&path)?;
             ensure!(
                 contents.contains(APP_LABEL),
                 "自动启动配置名称冲突，请检查原文件"
             );
-        }
+            Some(contents)
+        } else {
+            None
+        };
         let app = app_path()?;
         let content = format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>Label</key><string>{APP_LABEL}</string><key>ProgramArguments</key><array><string>/usr/bin/open</string><string>-g</string><string>-j</string><string>{}</string><string>--args</string><string>--background</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><false/><key>ProcessType</key><string>Interactive</string></dict></plist>\n",
@@ -193,12 +196,14 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
         ensure!(checked.status.success(), "自动启动配置校验失败");
         let _ = launchctl(&["bootout", &service]);
         std::fs::rename(temp, &path)?;
-        launchctl(&["enable", &service])?;
-        launchctl(&[
-            "bootstrap",
-            &domain()?,
-            path.to_str().context("应用路径无效")?,
-        ])?;
+        activate_with_plist_rollback(&path, previous.as_deref(), || {
+            launchctl(&["enable", &service])?;
+            launchctl(&[
+                "bootstrap",
+                &domain()?,
+                path.to_str().context("应用路径无效")?,
+            ])
+        })?;
     } else if path.exists() {
         let _ = launchctl(&["bootout", &service]);
         let retired = home()?.join("Library/Application Support/ClickPulse/retired");
@@ -212,6 +217,20 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+fn activate_with_plist_rollback(
+    path: &Path,
+    previous: Option<&str>,
+    activate: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    activate().inspect_err(|_| {
+        // Preserve the activation error even if restoring the file also fails.
+        let _ = match previous {
+            Some(contents) => std::fs::write(path, contents),
+            None => std::fs::remove_file(path),
+        };
+    })
 }
 
 /// The old agent is restored on every failure before the new runtime starts.
@@ -343,4 +362,36 @@ pub fn rollback(output: &Path) -> Result<()> {
     ]);
     launchctl(&["kickstart", &service])?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failed_auto_start_restores_previous_plist_or_removes_new_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("login.plist");
+        for previous in [None, Some("previous plist contents")] {
+            for failure in ["enable failed", "bootstrap failed"] {
+                std::fs::write(&path, "new plist contents").unwrap();
+                let error =
+                    activate_with_plist_rollback(&path, previous, || bail!(failure)).unwrap_err();
+                assert_eq!(error.to_string(), failure);
+                match previous {
+                    Some(contents) => assert_eq!(std::fs::read_to_string(&path).unwrap(), contents),
+                    None => assert!(!path.exists()),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn successful_auto_start_keeps_new_plist() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("login.plist");
+        std::fs::write(&path, "new plist contents").unwrap();
+        activate_with_plist_rollback(&path, Some("previous plist contents"), || Ok(())).unwrap();
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "new plist contents");
+    }
 }
