@@ -132,6 +132,14 @@ impl EventDb {
         }
         let legacy = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .with_context(|| format!("无法只读打开旧数据库 {}", path.display()))?;
+        let invalid: bool = legacy.query_row(
+            "SELECT EXISTS(SELECT 1 FROM events WHERE dev NOT IN (0,1) OR cnt<0)",
+            [],
+            |r| r.get(0),
+        )?;
+        if invalid {
+            bail!("旧数据库包含无效的设备或计数");
+        }
         let mut stmt = legacy.prepare(
             "SELECT bucket, dev, SUM(cnt) FROM events GROUP BY bucket,dev ORDER BY bucket",
         )?;
@@ -560,6 +568,30 @@ mod tests {
         assert!(db.import_legacy(&path).is_err());
         assert!(!db.legacy_imported().unwrap());
         assert_eq!(db.lifetime().unwrap(), Counts::default());
+    }
+
+    #[test]
+    fn legacy_negative_count_cannot_be_hidden_by_aggregation() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("bad.sqlite3");
+        let old = Connection::open(&path).unwrap();
+        old.execute_batch("CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER); INSERT INTO events VALUES(2,1,1,10),(2,1,2,-4);").unwrap();
+        let mut db = db();
+        assert_eq!(
+            db.import_legacy(&path).unwrap_err().to_string(),
+            "旧数据库包含无效的设备或计数"
+        );
+        assert!(!db.legacy_imported().unwrap());
+        assert_eq!(db.lifetime().unwrap(), Counts::default());
+        for table in ["legacy_minutes", "daily"] {
+            assert_eq!(
+                db.conn
+                    .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r
+                        .get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+        }
     }
 
     #[test]
