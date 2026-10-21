@@ -162,7 +162,7 @@ impl Runtime {
             Storage::App(CollectorDb::open(path)?)
         } else {
             let mut db = EventDb::open(path)?;
-            if let Some(legacy) = legacy.filter(|p| p.is_file()) {
+            if let Some(legacy) = legacy {
                 db.import_legacy(legacy)?;
             }
             Storage::Independent(db)
@@ -1178,5 +1178,33 @@ mod tests {
         tx.send(Command::Stop).unwrap();
         writer.join().unwrap().unwrap();
         assert_eq!(EventDb::open(&path).unwrap().lifetime().unwrap().mouse, 257);
+    }
+
+    #[test]
+    fn missing_explicit_legacy_database_fails_startup() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("db.sqlite3");
+        let missing = temp.path().join("missing.sqlite3");
+        assert!(Runtime::start(&path, Some(&missing), true).is_err());
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn imported_legacy_database_can_be_missing_on_restart() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("db.sqlite3");
+        let legacy = temp.path().join("legacy.sqlite3");
+        let conn = rusqlite::Connection::open(&legacy).unwrap();
+        conn.execute_batch("CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER); INSERT INTO events VALUES(2,1,97,3),(2,0,1,2);").unwrap();
+        drop(conn);
+        let first = Runtime::start(&path, Some(&legacy), true).unwrap();
+        assert_eq!(first.snapshot().unwrap().stats.lifetime.total(), 5);
+        drop(first);
+        std::fs::remove_file(&legacy).unwrap();
+        let second = Runtime::start(&path, Some(&legacy), true).unwrap();
+        let snapshot = second.snapshot().unwrap();
+        assert!(snapshot.stats.legacy_imported);
+        assert_eq!(snapshot.stats.lifetime.total(), 5);
+        assert!(!legacy.exists());
     }
 }
