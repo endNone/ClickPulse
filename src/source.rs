@@ -39,26 +39,7 @@ impl LiveSource {
         let ready = aggregates_ready(&tx)?;
         let activity = activity_counts(&tx, now.timestamp_millis(), ready)?;
         let lifetime = activity.lifetime;
-        let daily_sql = if ready {
-            "SELECT day,dev,cnt FROM daily_totals WHERE day<=?1 ORDER BY day"
-        } else {
-            "SELECT date(bucket*60,'unixepoch','localtime') AS day,dev,SUM(cnt) FROM events GROUP BY day,dev HAVING day<=?1 ORDER BY day"
-        };
-        let mut history = BTreeMap::new();
-        let mut stmt = tx.prepare(daily_sql)?;
-        for row in stmt.query_map([&today_s], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, i64>(1)?,
-                r.get::<_, i64>(2)?,
-            ))
-        })? {
-            let (day, dev, cnt) = row?;
-            history
-                .entry(day)
-                .or_insert_with(Counts::default)
-                .add(dev, cnt);
-        }
+        let history = daily_history(&tx, ready, Some(&today_s))?;
         let today = history.get(&today_s).copied().unwrap_or_default();
         let mut week = Counts::default();
         for (day, c) in &history {
@@ -211,22 +192,53 @@ impl LiveSource {
 
     pub fn export_daily(&self, path: &Path) -> Result<()> {
         use std::io::Write;
-        let snapshot = self.snapshot(Local::now())?;
+        let history = {
+            let tx = self.conn.unchecked_transaction()?;
+            daily_history(&tx, aggregates_ready(&tx)?, None)?
+        };
         let mut file = std::fs::File::create_new(path)?;
         writeln!(file, "date,keyboard,mouse,total")?;
-        for day in snapshot.history_days {
+        for (day, counts) in history {
             writeln!(
                 file,
                 "{},{},{},{}",
-                day.day,
-                day.counts.keyboard,
-                day.counts.mouse,
-                day.counts.total()
+                day,
+                counts.keyboard,
+                counts.mouse,
+                counts.total()
             )?;
         }
         file.sync_all()?;
         Ok(())
     }
+}
+
+fn daily_history(
+    conn: &Connection,
+    ready: bool,
+    through: Option<&str>,
+) -> Result<BTreeMap<String, Counts>> {
+    let daily_sql = if ready {
+        "SELECT day,dev,cnt FROM daily_totals WHERE ?1 IS NULL OR day<=?1 ORDER BY day"
+    } else {
+        "SELECT date(bucket*60,'unixepoch','localtime') AS day,dev,SUM(cnt) FROM events GROUP BY day,dev HAVING ?1 IS NULL OR day<=?1 ORDER BY day"
+    };
+    let mut history = BTreeMap::new();
+    let mut stmt = conn.prepare(daily_sql)?;
+    for row in stmt.query_map([through], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, i64>(2)?,
+        ))
+    })? {
+        let (day, dev, cnt) = row?;
+        history
+            .entry(day)
+            .or_insert_with(Counts::default)
+            .add(dev, cnt);
+    }
+    Ok(history)
 }
 
 fn aggregates_ready(conn: &Connection) -> Result<bool> {
@@ -308,6 +320,66 @@ fn counts(conn: &Connection, sql: &str, values: impl rusqlite::Params) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn daily_export_includes_future_days_but_snapshot_stops_at_today() {
+        use crate::{
+            collector::CollectorDb,
+            input::{Device, InputEvent},
+        };
+
+        let now = Local::now();
+        let today = now.date_naive();
+        let tomorrow = today + Days::new(1);
+        for ready in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("source.sqlite3");
+            let mut writer = CollectorDb::open(&path).unwrap();
+            writer
+                .insert(&[InputEvent {
+                    ts_ms: now.timestamp_millis(),
+                    device: Device::Keyboard,
+                    code: 0,
+                }])
+                .unwrap();
+            if !ready {
+                Connection::open(&path)
+                    .unwrap()
+                    .execute(
+                        "DELETE FROM clickpulse_metadata WHERE key='aggregates_ready'",
+                        [],
+                    )
+                    .unwrap();
+            }
+            let reader = LiveSource::open(&path).unwrap();
+            let current_csv = temp.path().join("current.csv");
+            reader.export_daily(&current_csv).unwrap();
+            let expected = format!("date,keyboard,mouse,total\n{today},1,0,1\n");
+            assert_eq!(std::fs::read_to_string(&current_csv).unwrap(), expected);
+
+            writer
+                .insert(&[InputEvent {
+                    ts_ms: crate::db::first_valid_local_instant(&Local, tomorrow)
+                        .unwrap()
+                        .timestamp_millis(),
+                    device: Device::Mouse,
+                    code: 1,
+                }])
+                .unwrap();
+            let snapshot = reader.snapshot(now).unwrap();
+            assert_eq!(snapshot.lifetime.total(), 2);
+            assert_eq!(snapshot.history_days.len(), 1);
+            assert_eq!(snapshot.history_days[0].day, today.to_string());
+            assert_eq!(snapshot.history_days[0].counts.keyboard, 1);
+            assert_eq!(snapshot.history_days[0].counts.mouse, 0);
+            let all_csv = temp.path().join("all.csv");
+            reader.export_daily(&all_csv).unwrap();
+            assert_eq!(
+                std::fs::read_to_string(&all_csv).unwrap(),
+                format!("{expected}{tomorrow},0,1,1\n")
+            );
+        }
+    }
+
     #[test]
     fn read_only_encoding_metadata_overrides_date_heuristics() {
         let temp = tempfile::tempdir().unwrap();
