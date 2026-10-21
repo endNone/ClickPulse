@@ -312,6 +312,7 @@ impl EventDb {
     }
 
     pub fn snapshot(&self, now: DateTime<Local>) -> Result<Snapshot> {
+        let _tx = self.conn.unchecked_transaction()?;
         let today_date = now.date_naive();
         let today_s = today_date.format("%Y-%m-%d").to_string();
         let week_s = (today_date - Days::new(6)).format("%Y-%m-%d").to_string();
