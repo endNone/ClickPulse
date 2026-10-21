@@ -782,6 +782,25 @@ mod tests {
     }
 
     #[test]
+    fn rejected_async_snapshot_replies_exactly_once_with_an_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut runtime = Runtime::start(&temp.path().join("stopped.sqlite3"), None, true).unwrap();
+        runtime.shutdown().unwrap();
+        let replies = Arc::new(Mutex::new(Vec::new()));
+        let callback_replies = replies.clone();
+        assert!(
+            runtime
+                .request_snapshot(move |result| {
+                    callback_replies.lock().unwrap().push(result.is_err());
+                })
+                .is_err()
+        );
+        assert_eq!(*replies.lock().unwrap(), vec![true]);
+        drop(runtime);
+        assert_eq!(*replies.lock().unwrap(), vec![true]);
+    }
+
+    #[test]
     fn failed_storage_completes_pending_async_requests_with_an_error() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("failure.sqlite3");
