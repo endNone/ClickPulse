@@ -735,9 +735,8 @@ pub fn run(
                             });
                         }) {
                             Ok(()) => {}
-                            Err(error) => {
-                                snapshots.complete(id);
-                                report_error(&webview, locale, "error.stats", &error);
+                            Err(_) => {
+                                // The dropped delivery reports failure through the normal snapshot path.
                             }
                         }
                     }

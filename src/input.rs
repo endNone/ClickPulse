@@ -1,6 +1,11 @@
 use std::collections::HashSet;
 
+use crossbeam_channel::TrySendError;
 use serde::{Deserialize, Serialize};
+
+pub(crate) fn input_queue_closed<T>(result: &Result<(), TrySendError<T>>) -> bool {
+    matches!(result, Err(TrySendError::Disconnected(_)))
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[repr(i64)]
@@ -44,6 +49,15 @@ impl KeyTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn input_queue_only_stops_capture_when_disconnected() {
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        assert!(!input_queue_closed(&tx.try_send(())));
+        assert!(!input_queue_closed(&tx.try_send(())));
+        drop(rx);
+        assert!(input_queue_closed(&tx.try_send(())));
+    }
 
     #[test]
     fn held_key_and_repeat_count_once_until_release() {

@@ -1,7 +1,7 @@
 //! Passive Windows Raw Input listener on a dedicated message-only window.
 //! Read scan codes and button transitions only; no text or pointer coordinates.
 use crate::{
-    input::{Device, InputEvent},
+    input::{Device, InputEvent, input_queue_closed},
     runtime::{CaptureStatus, Command},
     windows_input::{WindowsKeyboard, mouse_buttons},
 };
@@ -59,14 +59,11 @@ impl Listener {
     fn enqueue(&self, device: Device, code: u32) {
         if !self.paused.load(Ordering::Relaxed)
             && !self.stop.load(Ordering::Relaxed)
-            && self
-                .tx
-                .try_send(Command::Input(InputEvent {
-                    ts_ms: Local::now().timestamp_millis(),
-                    device,
-                    code,
-                }))
-                .is_err()
+            && input_queue_closed(&self.tx.try_send(Command::Input(InputEvent {
+                ts_ms: Local::now().timestamp_millis(),
+                device,
+                code,
+            })))
         {
             self.fail(
                 "error.queue",
