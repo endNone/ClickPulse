@@ -149,12 +149,22 @@ impl Runtime {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)?;
         }
+        let lock_path = if path.exists() {
+            std::fs::canonicalize(path)?
+        } else {
+            let parent = path
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            std::fs::canonicalize(parent)?.join(path.file_name().unwrap_or_default())
+        }
+        .with_extension("lock");
         let instance_lock = std::fs::OpenOptions::new()
             .create(true)
             .truncate(false)
             .read(true)
             .write(true)
-            .open(path.with_extension("lock"))?;
+            .open(lock_path)?;
         instance_lock
             .try_lock()
             .map_err(|_| anyhow!("此数据库已有 ClickPulse 正在运行，请从菜单栏打开原窗口"))?;
@@ -1095,6 +1105,37 @@ mod tests {
         drop(first);
         let second = Runtime::start(&path, None, true).unwrap();
         assert!(second.snapshot().unwrap().paused);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn database_symlink_shares_instance_lock_and_releases_on_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("db.sqlite3");
+        let alias = temp.path().join("alias.sqlite3");
+        let first = Runtime::start(&path, None, true).unwrap();
+        std::os::unix::fs::symlink(&path, &alias).unwrap();
+        assert!(Runtime::start(&alias, None, true).is_err());
+        drop(first);
+        let second = Runtime::start(&alias, None, true).unwrap();
+        assert_eq!(
+            second.snapshot().unwrap().database_path,
+            alias.display().to_string()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn new_database_in_symlinked_directory_uses_canonical_lock() {
+        let temp = tempfile::tempdir().unwrap();
+        let directory = temp.path().join("real");
+        let alias = temp.path().join("alias");
+        std::fs::create_dir(&directory).unwrap();
+        std::os::unix::fs::symlink(&directory, &alias).unwrap();
+        let first = Runtime::start(&alias.join("db.sqlite3"), None, true).unwrap();
+        assert!(Runtime::start(&directory.join("db.sqlite3"), None, true).is_err());
+        drop(first);
+        assert!(Runtime::start(&directory.join("db.sqlite3"), None, true).is_ok());
     }
 
     #[test]
