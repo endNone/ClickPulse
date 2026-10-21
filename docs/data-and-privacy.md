@@ -41,7 +41,7 @@ The reference is [Project Gutenberg’s English edition, number 1342](https://ww
 
 ## Saving, updates and migration
 
-SQLite uses WAL. A persistence or queue failure stops capture and shows an error. Auxiliary log failures retry without blocking the database. Normal exit stops input and drains pending records first.
+SQLite uses WAL. A failed save is retried for up to 60 seconds while pending records stay in memory; if saving keeps failing, capture stops and shows an error. A queue failure stops capture and shows an error. Auxiliary log failures retry without blocking the database. Normal exit stops input and drains pending records first.
 
 First launch creates the standard user-data directory. Program updates and uninstalling retain its history and preferences; startup does not automatically import a developer folder or backup.
 

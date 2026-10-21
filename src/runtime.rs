@@ -643,48 +643,95 @@ pub fn auto_start_enabled() -> bool {
     crate::platform::auto_start_enabled()
 }
 
-fn storage_loop(mut db: Storage, rx: Receiver<Command>) -> Result<()> {
+fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
+    const RETRY_INTERVAL: Duration = Duration::from_secs(1);
+    const GIVE_UP_AFTER: Duration = Duration::from_secs(60);
+    storage_loop_inner(db, rx, RETRY_INTERVAL, GIVE_UP_AFTER)
+}
+
+fn storage_loop_inner(
+    mut db: Storage,
+    rx: Receiver<Command>,
+    retry_interval: Duration,
+    give_up_after: Duration,
+) -> Result<()> {
     let mut batch = Vec::with_capacity(128);
-    let mut flush = Instant::now();
+    let mut next_flush = Instant::now() + Duration::from_millis(200);
+    let mut failed_since = None;
     let mut cache_cleanup = Instant::now();
     let mut log = Instant::now();
     let mut status_log = StatusLog::for_runtime();
     loop {
-        match rx.recv_timeout(Duration::from_millis(100)) {
-            Ok(Command::Input(event)) => batch.push(event),
-            Ok(Command::Snapshot(reply)) => {
-                db.insert(&batch)?;
-                batch.clear();
-                let _ = reply.send(db.snapshot(Local::now()));
+        let timeout = next_flush
+            .saturating_duration_since(Instant::now())
+            .min(Duration::from_millis(100));
+        let command = match rx.recv_timeout(timeout) {
+            Ok(Command::Input(event)) => {
+                batch.push(event);
+                None
             }
-            Ok(Command::SnapshotAsync(delivery)) => {
-                db.insert(&batch)?;
-                batch.clear();
-                delivery.complete(db.snapshot(Local::now()));
+            Ok(command) => Some(command),
+            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => Some(Command::Stop),
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => None,
+        };
+        let stopping = matches!(command, Some(Command::Stop));
+        // A deadline flushes even during continuous input: no dependence on idle gaps.
+        // After a failure, a large batch must not bypass the retry interval.
+        if command.is_some()
+            || (failed_since.is_none() && batch.len() >= 128)
+            || Instant::now() >= next_flush
+        {
+            let mut terminal_error = None;
+            let result = match db.insert(&batch) {
+                Ok(()) => {
+                    batch.clear();
+                    failed_since = None;
+                    next_flush = Instant::now() + Duration::from_millis(200);
+                    Ok(())
+                }
+                Err(error) => {
+                    let now = Instant::now();
+                    let since = *failed_since.get_or_insert(now);
+                    next_flush = (now + retry_interval).min(since + give_up_after);
+                    if stopping || now.duration_since(since) >= give_up_after {
+                        // Complete any current request before returning the original error.
+                        let reply_error = anyhow!("{error:#}");
+                        terminal_error = Some(error);
+                        Err(reply_error)
+                    } else {
+                        Err(error)
+                    }
+                }
+            };
+            match command {
+                Some(Command::Snapshot(reply)) => {
+                    let _ = reply.send(result.and_then(|()| db.snapshot(Local::now())));
+                }
+                Some(Command::SnapshotAsync(delivery)) => {
+                    delivery.complete(result.and_then(|()| db.snapshot(Local::now())));
+                }
+                Some(Command::Export(path, reply)) => {
+                    let _ = reply.send(result.and_then(|()| db.export_daily(&path)));
+                }
+                _ => {}
             }
-            Ok(Command::Export(path, reply)) => {
-                db.insert(&batch)?;
-                batch.clear();
-                let _ = reply.send(db.export_daily(&path));
+            if let Some(error) = terminal_error {
+                return Err(error);
             }
-            Ok(Command::Stop) | Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                db.insert(&batch)?;
+            if stopping {
                 break;
             }
-            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
-        }
-        // A deadline flushes even during continuous input: no dependence on idle gaps.
-        if batch.len() >= 128 || flush.elapsed() >= Duration::from_millis(200) {
-            db.insert(&batch)?;
-            batch.clear();
-            flush = Instant::now();
         }
         if cache_cleanup.elapsed() >= Duration::from_secs(3600) {
-            db.prune_rolling_cache(Local::now().timestamp_millis())?;
+            if let Err(error) = db.prune_rolling_cache(Local::now().timestamp_millis()) {
+                eprintln!("{error:#}");
+            }
             cache_cleanup = Instant::now();
         }
         if log.elapsed() >= Duration::from_secs(2) {
-            db.log_status(&mut status_log)?;
+            if let Err(error) = db.log_status(&mut status_log) {
+                eprintln!("{error:#}");
+            }
             log = Instant::now();
         }
     }
@@ -1094,6 +1141,155 @@ mod tests {
                 .contains("simulated write failure")
         );
         assert_eq!(EventDb::open(&path).unwrap().lifetime().unwrap().total(), 0);
+    }
+
+    fn failing_storage(path: &Path, owned: bool) -> (Storage, rusqlite::Connection) {
+        let db = if owned {
+            Storage::App(CollectorDb::open(path).unwrap())
+        } else {
+            Storage::Independent(EventDb::open(path).unwrap())
+        };
+        let conn = rusqlite::Connection::open(path).unwrap();
+        let table = if owned { "recent_counts" } else { "recent" };
+        conn.execute_batch(&format!(
+            "CREATE TRIGGER fail BEFORE INSERT ON {table} BEGIN SELECT RAISE(FAIL,'simulated write failure'); END;"
+        ))
+        .unwrap();
+        (db, conn)
+    }
+
+    #[test]
+    fn transient_storage_failure_retries_without_loss_or_double_counting() {
+        for owned in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("retry.sqlite3");
+            let (db, conn) = failing_storage(&path, owned);
+            let (tx, rx) = bounded(8192);
+            let writer = thread::spawn(move || {
+                storage_loop_inner(db, rx, Duration::from_millis(50), Duration::from_secs(10))
+            });
+            let event = InputEvent {
+                ts_ms: Local::now().timestamp_millis(),
+                device: Device::Keyboard,
+                code: 0,
+            };
+            // Exceed the size threshold so a periodic flush fails before the requests.
+            for _ in 0..150 {
+                tx.send(Command::Input(event.clone())).unwrap();
+            }
+            let (reply, response) = bounded(1);
+            tx.send(Command::Snapshot(reply)).unwrap();
+            assert!(
+                response
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("simulated write failure")
+            );
+            let (reply, response) = bounded(1);
+            tx.send(Command::SnapshotAsync(SnapshotDelivery {
+                capture: Arc::new(Mutex::new(CaptureStatus::default())),
+                paused: Arc::new(AtomicBool::new(false)),
+                path: path.clone(),
+                source_mode: false,
+                setup_pending: false,
+                database_mode: DatabaseMode::Custom,
+                reply: Some(Box::new(move |result| reply.send(result).unwrap())),
+            }))
+            .unwrap();
+            assert!(
+                response
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("simulated write failure")
+            );
+            let output = temp.path().join("failed.csv");
+            let (reply, response) = bounded(1);
+            tx.send(Command::Export(output.clone(), reply)).unwrap();
+            assert!(
+                response
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("simulated write failure")
+            );
+            assert!(!output.exists());
+            let totals = if owned { "lifetime_totals" } else { "totals" };
+            let total = || {
+                conn.query_row(&format!("SELECT SUM(cnt) FROM {totals}"), [], |r| {
+                    r.get::<_, i64>(0)
+                })
+                .unwrap()
+            };
+            assert_eq!(total(), 0);
+            // Input still drains after failed requests, even with an oversized batch.
+            for _ in 0..10 {
+                tx.send(Command::Input(event.clone())).unwrap();
+            }
+            conn.execute_batch("DROP TRIGGER fail").unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while total() != 160 && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(10));
+            }
+            let saved = total();
+            // Always join, including on a missing retry, to avoid leaking a worker.
+            tx.send(Command::Stop).unwrap();
+            writer.join().unwrap().unwrap();
+            assert_eq!(
+                saved, 160,
+                "periodic retry did not persist the entire batch"
+            );
+            assert_eq!(total(), 160);
+        }
+    }
+
+    #[test]
+    fn persistent_storage_failure_stops_after_the_give_up_window() {
+        for owned in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let (db, _conn) = failing_storage(&temp.path().join("give-up.sqlite3"), owned);
+            let (tx, rx) = bounded(128);
+            let (finished, result) = bounded(1);
+            let give_up_after = Duration::from_millis(150);
+            let writer = thread::spawn(move || {
+                finished
+                    .send(storage_loop_inner(
+                        db,
+                        rx,
+                        Duration::from_millis(25),
+                        give_up_after,
+                    ))
+                    .unwrap();
+            });
+            let started = Instant::now();
+            tx.send(Command::Input(InputEvent {
+                ts_ms: Local::now().timestamp_millis(),
+                device: Device::Mouse,
+                code: 1,
+            }))
+            .unwrap();
+            let (reply, response) = bounded(1);
+            tx.send(Command::Snapshot(reply)).unwrap();
+            assert!(
+                response
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .is_err()
+            );
+            let outcome = result.recv_timeout(Duration::from_secs(5));
+            let elapsed = started.elapsed();
+            // Disconnect only after waiting: normal completion must be automatic.
+            drop(tx);
+            writer.join().unwrap();
+            let error = outcome.unwrap().unwrap_err();
+            assert!(error.to_string().contains("simulated write failure"));
+            assert!(error.downcast_ref::<rusqlite::Error>().is_some());
+            assert!(elapsed >= give_up_after);
+        }
     }
 
     #[test]
