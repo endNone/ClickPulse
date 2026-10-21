@@ -23,7 +23,7 @@ use core_graphics::event::{
 use crossbeam_channel::Sender;
 
 use crate::{
-    input::{Device, InputEvent, KeyTracker},
+    input::{Device, InputEvent, KeyTracker, input_queue_closed},
     runtime::{CaptureStatus, Command},
 };
 
@@ -161,7 +161,7 @@ pub(crate) fn spawn(
                                 device,
                                 code,
                             };
-                            if cb_tx.try_send(Command::Input(input)).is_err() {
+                            if input_queue_closed(&cb_tx.try_send(Command::Input(input))) {
                                 stop_with_error(&cb_stop, &cb_status);
                             }
                         }
