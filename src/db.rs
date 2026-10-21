@@ -423,21 +423,83 @@ impl EventDb {
 
 fn day_bounds(date: NaiveDate) -> Result<(i64, i64)> {
     let next = date.succ_opt().context("日期溢出")?;
-    let midnight = |d: NaiveDate| {
-        Local
-            .from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
-            .earliest()
-            .context("本地午夜不存在")
-    };
     Ok((
-        midnight(date)?.timestamp_millis(),
-        midnight(next)?.timestamp_millis(),
+        first_valid_local_instant(&Local, date)?.timestamp_millis(),
+        first_valid_local_instant(&Local, next)?.timestamp_millis(),
     ))
+}
+
+pub(crate) fn first_valid_local_instant<T: TimeZone>(
+    timezone: &T,
+    date: NaiveDate,
+) -> Result<DateTime<T>> {
+    let midnight = date.and_hms_opt(0, 0, 0).unwrap();
+    // Search by seconds so historical transitions with sub-minute offsets work too.
+    (0..86400)
+        .find_map(|seconds| {
+            timezone
+                .from_local_datetime(&(midnight + chrono::Duration::seconds(seconds)))
+                .earliest()
+        })
+        .context("本地午夜不存在")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[derive(Clone)]
+    struct MidnightTransition {
+        ambiguous: bool,
+    }
+
+    impl TimeZone for MidnightTransition {
+        type Offset = chrono::FixedOffset;
+
+        fn from_offset(_: &Self::Offset) -> Self {
+            Self { ambiguous: false }
+        }
+
+        fn offset_from_local_date(&self, date: &NaiveDate) -> chrono::LocalResult<Self::Offset> {
+            self.offset_from_local_datetime(&date.and_hms_opt(0, 0, 0).unwrap())
+        }
+
+        fn offset_from_local_datetime(
+            &self,
+            date: &chrono::NaiveDateTime,
+        ) -> chrono::LocalResult<Self::Offset> {
+            let offset = chrono::FixedOffset::east_opt(3600).unwrap();
+            if date.hour() != 0 {
+                chrono::LocalResult::Single(offset)
+            } else if self.ambiguous {
+                chrono::LocalResult::Ambiguous(offset, chrono::FixedOffset::east_opt(0).unwrap())
+            } else {
+                chrono::LocalResult::None
+            }
+        }
+
+        fn offset_from_utc_date(&self, _: &NaiveDate) -> Self::Offset {
+            chrono::FixedOffset::east_opt(3600).unwrap()
+        }
+
+        fn offset_from_utc_datetime(&self, date: &chrono::NaiveDateTime) -> Self::Offset {
+            self.offset_from_utc_date(&date.date())
+        }
+    }
+
+    #[test]
+    fn day_start_handles_missing_and_ambiguous_midnight() {
+        let date = NaiveDate::from_ymd_opt(2026, 9, 6).unwrap();
+        let start =
+            first_valid_local_instant(&MidnightTransition { ambiguous: false }, date).unwrap();
+        assert_eq!(start.naive_local(), date.and_hms_opt(1, 0, 0).unwrap());
+        let start =
+            first_valid_local_instant(&MidnightTransition { ambiguous: true }, date).unwrap();
+        assert_eq!(start.naive_local(), date.and_hms_opt(0, 0, 0).unwrap());
+        assert_eq!(start.offset().local_minus_utc(), 3600);
+        let start = first_valid_local_instant(&chrono::Utc, date).unwrap();
+        assert_eq!(start.naive_local(), date.and_hms_opt(0, 0, 0).unwrap());
+    }
+
     #[test]
     fn independent_schema_upgrade_is_idempotent_and_rejects_newer_versions() {
         let temp = tempfile::tempdir().unwrap();
