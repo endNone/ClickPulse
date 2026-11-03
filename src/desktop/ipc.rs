@@ -20,11 +20,20 @@ pub(super) enum Request {
     Pin {},
     Hide {},
     Refresh {},
+    SportSample {},
+    Sport {
+        enabled: bool,
+    },
+    SportVisible {
+        visible: bool,
+    },
     Pause {},
     Permission {},
     Autostart {},
     Export {},
     Reveal {},
+    StorageDirectory {},
+    ImportHistory {},
     Quit {},
     Close {},
     #[cfg(target_os = "macos")]
@@ -55,8 +64,13 @@ mod tests {
             r#"{"action":"theme"}"#,
             r#"{"action":"theme","theme":"unknown"}"#,
             r#"{"action":"language","language":null}"#,
-            r#"{"action":"language","language":"fr"}"#,
+            r#"{"action":"language","language":"it"}"#,
             r#"{"action":"quit","theme":"blue"}"#,
+            r#"{"action":"sport","enabled":"true"}"#,
+            r#"{"action":"sport_skin","skin":"unknown"}"#,
+            // Warp is the only Sport effect; there is no skin choice to send.
+            r#"{"action":"sport_skin","skin":"warp"}"#,
+            r#"{"action":"sport_sample","mouse":99999}"#,
         ] {
             assert!(serde_json::from_str::<Request>(body).is_err(), "{body}");
         }

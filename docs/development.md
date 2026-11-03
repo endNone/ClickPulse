@@ -57,7 +57,7 @@ cargo run --locked -- --demo
 cargo fmt --check
 cargo test --all-targets --locked
 cargo clippy --all-targets --locked -- -D warnings
-node --test tests/history.test.cjs tests/i18n.test.cjs tests/keyboard.test.cjs tests/rendering.test.cjs tests/dropdown.test.cjs tests/themes.test.cjs
+node --test tests/history.test.cjs tests/i18n.test.cjs tests/keyboard.test.cjs tests/rendering.test.cjs tests/dropdown.test.cjs tests/themes.test.cjs tests/sport.test.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
@@ -67,9 +67,11 @@ Desktop refresh queues one snapshot at a time without waiting on the interface t
 
 `.github/workflows/ci.yml` checks macOS/Windows code. Packages reuses those checks before building CI artifacts. Release draft runs the same pipeline for a version tag, verifies corresponding source and complete packages, then creates an unpublished preview draft. See [Builds and releases](releases.md). The initial preview passes the GitHub checks and complete packaging/release workflow on Apple Silicon, Intel Mac and Windows x64.
 
+For an interactive Mini Sport preview, run `node scripts/prepare-sport-preview.cjs` and serve `dist/sport-preview/` locally. The preview shows the production Warp Mini window using simulated click counts. Try C/B/A/S/SS, the Mini lightning switch, or the link to the actual Personalization settings. This does not open a database or start a capture listener.
+
 ## Paths and explicit migration
 
-CLI help, statistics and success messages use English. The desktop app retains English and Simplified Chinese interfaces.
+CLI help, statistics and success messages use English. The desktop app shares eight complete catalogs across native controls and the WebView: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German and Spanish. Keep locale matching and English fallback consistent in Rust and JavaScript, and include native bundle localization resources when adding a language.
 
 Default desktop startup uses the platform's ClickPulse user-data directory and creates its database there. Replacing, moving or uninstalling program files does not move that data. A missing WebView2 runtime is detected before starting the collector. Startup and installation never automatically pick a legacy recorder, database or service.
 
@@ -106,6 +108,6 @@ The timestamp is an example; use the recorder's actual change time and original 
 
 ## Version and publication
 
-Project metadata identifies the **0.1.0** public preview (internal build 55). The app and `--version` include the internal build so test reports distinguish binaries sharing a public preview version. `build.rs` validates the Windows and macOS package versions and embeds that build in the executable. Use a new public version for each tagged release; never move a published tag or replace its packages with a different source revision. Internal build numbers identify unpublished revisions. Keep Cargo, macOS public version and Windows ProductVersion aligned. Verify signatures, versions, manifests, checksums, third-party licenses and absence of user data before distribution.
+The published **0.1.0** preview is internal build 55. Current unpublished development source is internal build 63. The app and `--version` include the internal build so test reports distinguish binaries sharing a public preview version. `build.rs` validates the Windows and macOS package versions and embeds that build in the executable. Use a new public version for each tagged release; never move a published tag or replace its packages with a different source revision. Internal build numbers identify unpublished revisions. Keep Cargo, macOS public version and Windows ProductVersion aligned. Verify signatures, versions, manifests, checksums, third-party licenses and absence of user data before distribution.
 
 Project code is licensed under [GPL-3.0-or-later](../LICENSE). Source archives and both platforms' packages include the full license; fonts and other third-party components retain their own licenses. Mac packages are ad-hoc signed and Windows packages are unsigned. Hardware-specific validation is tracked in the Windows checklist and roadmap. See the [roadmap](roadmap.md). Local scripts do not create repositories or publish Releases; the tag workflow creates an unpublished draft for manual review.

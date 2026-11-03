@@ -24,8 +24,47 @@ pub(crate) enum Command {
     Input(InputEvent),
     Snapshot(Sender<Result<Snapshot>>),
     SnapshotAsync(SnapshotDelivery),
-    Export(PathBuf, Sender<Result<()>>),
+    SportSample(SportDelivery),
+    Export(PathBuf, Completion<()>),
+    Import(
+        PathBuf,
+        PathBuf,
+        Completion<crate::history_import::ImportReport>,
+    ),
+    Relocate(PathBuf, PathBuf, PathBuf, Completion<()>),
     Stop,
+}
+
+/// A queued operation always completes, including worker errors and dropped queues.
+pub(crate) struct Completion<T> {
+    reply: Option<Box<dyn FnOnce(Result<T>) + Send>>,
+}
+impl<T> Completion<T> {
+    fn new(reply: impl FnOnce(Result<T>) + Send + 'static) -> Self {
+        Self {
+            reply: Some(Box::new(reply)),
+        }
+    }
+    fn complete(mut self, result: Result<T>) {
+        if let Some(reply) = self.reply.take() {
+            reply(result);
+        }
+    }
+}
+impl<T> Drop for Completion<T> {
+    fn drop(&mut self) {
+        if let Some(reply) = self.reply.take() {
+            reply(Err(anyhow!(
+                "Data operation worker stopped before completing the request"
+            )));
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Relocation {
+    path: PathBuf,
+    lock: std::fs::File,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -67,6 +106,44 @@ pub struct AppSnapshot {
 }
 
 type SnapshotCallback = Box<dyn FnOnce(Result<String>) + Send>;
+
+pub(crate) struct SportDelivery {
+    capture: Arc<Mutex<CaptureStatus>>,
+    paused: Arc<AtomicBool>,
+    reply: Option<SnapshotCallback>,
+}
+
+impl SportDelivery {
+    fn complete(mut self, counts: Result<crate::db::Counts>) {
+        let result = (|| {
+            let counts = counts?;
+            let capture = self
+                .capture
+                .lock()
+                .map_err(|_| anyhow!("Capture status is unavailable"))?;
+            Ok(serde_json::to_string(&serde_json::json!({
+                "now_ms": Local::now().timestamp_millis(),
+                "keyboard": counts.keyboard,
+                "mouse": counts.mouse,
+                "paused": self.paused.load(Ordering::Relaxed),
+                "available": capture.listening && capture.error.is_none(),
+            }))?)
+        })();
+        if let Some(reply) = self.reply.take() {
+            reply(result);
+        }
+    }
+}
+
+impl Drop for SportDelivery {
+    fn drop(&mut self) {
+        if let Some(reply) = self.reply.take() {
+            reply(Err(anyhow!(
+                "Sport sample worker stopped before completing the request"
+            )));
+        }
+    }
+}
 
 pub(crate) struct SnapshotDelivery {
     capture: Arc<Mutex<CaptureStatus>>,
@@ -330,6 +407,123 @@ impl Runtime {
         self.database_mode.can_manage_auto_start()
     }
 
+    pub fn import_history(&self, source: PathBuf) -> Result<crate::history_import::ImportReport> {
+        let (tx, rx) = bounded(1);
+        self.request_import_history(source, move |result| {
+            let _ = tx.send(result);
+        })?;
+        rx.recv().context("History import worker stopped")?
+    }
+
+    pub fn database_path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn request_import_history(
+        &self,
+        source: PathBuf,
+        reply: impl FnOnce(Result<crate::history_import::ImportReport>) + Send + 'static,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            self.database_mode == DatabaseMode::Default,
+            "History import is only available for the normal app profile"
+        );
+        self.tx
+            .try_send(Command::Import(
+                source,
+                self.path.clone(),
+                Completion::new(reply),
+            ))
+            .map_err(|_| anyhow!("History import worker is unavailable"))?;
+        Ok(())
+    }
+
+    pub fn change_directory(&mut self, directory: &Path) -> Result<bool> {
+        self.change_directory_with_config(directory, &crate::storage::config_path()?)
+    }
+
+    fn change_directory_with_config(&mut self, directory: &Path, config: &Path) -> Result<bool> {
+        let (tx, rx) = bounded(1);
+        if !self.request_directory_with_config(directory, config, move |result| {
+            let _ = tx.send(result);
+        })? {
+            return Ok(false);
+        }
+        self.finish_relocation(rx.recv().context("Storage worker stopped")??);
+        Ok(true)
+    }
+
+    pub fn request_directory_change(
+        &self,
+        directory: &Path,
+        reply: impl FnOnce(Result<Relocation>) + Send + 'static,
+    ) -> Result<bool> {
+        self.request_directory_with_config(directory, &crate::storage::config_path()?, reply)
+    }
+
+    fn request_directory_with_config(
+        &self,
+        directory: &Path,
+        config: &Path,
+        reply: impl FnOnce(Result<Relocation>) + Send + 'static,
+    ) -> Result<bool> {
+        anyhow::ensure!(
+            self.database_mode == DatabaseMode::Default,
+            "Storage changes are only available for the normal app profile"
+        );
+        let directory = directory
+            .canonicalize()
+            .context("Selected folder is unavailable")?;
+        anyhow::ensure!(directory.is_dir(), "Select a directory");
+        let output = directory.join("events.sqlite3");
+        if output == self.path.canonicalize()? {
+            return Ok(false);
+        }
+        anyhow::ensure!(
+            !output.exists(),
+            "Destination already contains events.sqlite3; select another folder or import that database"
+        );
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(output.with_extension("lock"))?;
+        lock.try_lock()
+            .context("Another ClickPulse instance is using the selected folder")?;
+        self.tx
+            .try_send(Command::Relocate(
+                self.path.clone(),
+                output.clone(),
+                config.to_owned(),
+                Completion::new(move |result| {
+                    reply(result.map(|()| Relocation { path: output, lock }));
+                }),
+            ))
+            .map_err(|_| anyhow!("Storage worker is unavailable"))?;
+        Ok(true)
+    }
+
+    pub fn finish_relocation(&mut self, relocation: Relocation) {
+        self.path = relocation.path;
+        self._instance_lock = relocation.lock;
+    }
+
+    /// Read cumulative keyboard/mouse counts on the worker, without a history snapshot.
+    pub fn request_sport_sample(
+        &self,
+        reply: impl FnOnce(Result<String>) + Send + 'static,
+    ) -> Result<()> {
+        self.tx
+            .try_send(Command::SportSample(SportDelivery {
+                capture: self.status.clone(),
+                paused: self.paused.clone(),
+                reply: Some(Box::new(reply)),
+            }))
+            .map_err(|_| anyhow!("Sport sample request queue is unavailable"))?;
+        Ok(())
+    }
+
     pub fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::Relaxed);
     }
@@ -346,13 +540,26 @@ impl Runtime {
         self.paused.load(Ordering::Relaxed)
     }
 
+    /// Blocking convenience API for non-UI callers; waits for the actual result.
     pub fn export(&self, path: PathBuf) -> Result<()> {
         let (tx, rx) = bounded(1);
+        self.request_export(path, move |result| {
+            let _ = tx.send(result);
+        })?;
+        // Wait for the definite result: a timeout must not report failure while
+        // a queued export may still go on to publish its file.
+        rx.recv().context("Export worker stopped")?
+    }
+
+    /// Queue CSV export without waiting on the caller's UI thread.
+    pub fn request_export(
+        &self,
+        path: PathBuf,
+        reply: impl FnOnce(Result<()>) + Send + 'static,
+    ) -> Result<()> {
         self.tx
-            .send_timeout(Command::Export(path, tx), Duration::from_secs(3))
-            .map_err(|_| anyhow!("导出请求线程不可用"))?;
-        rx.recv_timeout(Duration::from_secs(10))
-            .context("导出超时")??;
+            .try_send(Command::Export(path, Completion::new(reply)))
+            .map_err(|_| anyhow!("Export worker is unavailable"))?;
         Ok(())
     }
 
@@ -406,6 +613,7 @@ fn source_loop_inner(
     let mut cached: Option<Snapshot> = None;
     while let Ok(command) = rx.recv() {
         match command {
+            Command::SportSample(delivery) => delivery.complete(source.lifetime()),
             Command::Snapshot(_) | Command::SnapshotAsync(_) => {
                 let now = Local::now();
                 let result = if paused.load(Ordering::Relaxed)
@@ -440,7 +648,13 @@ fn source_loop_inner(
                 }
             }
             Command::Export(path, reply) => {
-                let _ = reply.send(source.export_daily(&path));
+                reply.complete(source.export_daily(&path));
+            }
+            Command::Import(_, _, reply) => {
+                reply.complete(Err(anyhow!("Read-only source cannot import history")));
+            }
+            Command::Relocate(_, _, _, reply) => {
+                reply.complete(Err(anyhow!("Read-only source cannot change storage")));
             }
             Command::Stop => break,
             Command::Input(_) if probe => {} // Probe only: the old collector still owns persistence.
@@ -460,6 +674,12 @@ enum Storage {
     App(CollectorDb),
 }
 impl Storage {
+    fn lifetime(&self) -> Result<crate::db::Counts> {
+        match self {
+            Self::Independent(db) => db.lifetime(),
+            Self::App(db) => db.lifetime(),
+        }
+    }
     fn insert(&mut self, events: &[InputEvent]) -> Result<()> {
         match self {
             Self::Independent(db) => db.insert(events),
@@ -633,40 +853,153 @@ pub fn auto_start_enabled() -> bool {
     crate::platform::auto_start_enabled()
 }
 
-fn storage_loop(mut db: Storage, rx: Receiver<Command>) -> Result<()> {
-    let mut batch = Vec::with_capacity(128);
+/// A finished data job returns the connection plus its deferred reply.
+type FinishedJob = (Storage, Box<dyn FnOnce() + Send>);
+
+/// Data operations own the connection on a helper thread. The worker keeps
+/// draining capture into memory, so a slow copy cannot fill the bounded input
+/// queue and stop recording. Other requests wait until the connection returns.
+struct StorageWorker {
+    db: Option<Storage>,
+    job: Option<Receiver<FinishedJob>>,
+    deferred: std::collections::VecDeque<Command>,
+    batch: Vec<InputEvent>,
+}
+
+impl StorageWorker {
+    fn flush(&mut self) -> Result<()> {
+        if let Some(db) = &mut self.db {
+            db.insert(&self.batch)?;
+            self.batch.clear();
+        }
+        Ok(())
+    }
+
+    fn spawn_job(
+        &mut self,
+        run: impl FnOnce(&mut Storage) -> Box<dyn FnOnce() + Send> + Send + 'static,
+    ) -> Result<()> {
+        let mut db = self.db.take().context("Storage is unavailable")?;
+        let (tx, rx) = bounded(1);
+        thread::Builder::new()
+            .name("clickpulse-data-job".into())
+            .spawn(move || {
+                let finish = run(&mut db);
+                let _ = tx.send((db, finish));
+            })?;
+        self.job = Some(rx);
+        Ok(())
+    }
+
+    fn handle(&mut self, command: Command) -> Result<()> {
+        if self.job.is_some() {
+            self.deferred.push_back(command);
+            return Ok(());
+        }
+        self.flush()?;
+        let db = self.db.as_mut().context("Storage is unavailable")?;
+        match command {
+            Command::Snapshot(reply) => {
+                let _ = reply.send(db.snapshot(Local::now()));
+            }
+            Command::SnapshotAsync(delivery) => delivery.complete(db.snapshot(Local::now())),
+            Command::SportSample(delivery) => delivery.complete(db.lifetime()),
+            Command::Export(path, reply) => self.spawn_job(move |db| {
+                let result = db.export_daily(&path);
+                Box::new(move || reply.complete(result))
+            })?,
+            Command::Import(source, current, reply) => self.spawn_job(move |db| {
+                let result = match db {
+                    Storage::App(db) => db.import_history(&source, &current),
+                    _ => Err(anyhow!("This database cannot import history")),
+                };
+                Box::new(move || reply.complete(result))
+            })?,
+            Command::Relocate(source, output, config, reply) => self.spawn_job(move |db| {
+                let result = crate::storage::relocate(&source, &output, &config).map(|new| {
+                    *db = Storage::App(new);
+                });
+                Box::new(move || reply.complete(result))
+            })?,
+            Command::Input(event) => self.batch.push(event),
+            Command::Stop => {}
+        }
+        Ok(())
+    }
+
+    /// Input captured during the job lands after it, then queued requests resume.
+    fn finish(&mut self, finished: FinishedJob) -> Result<()> {
+        let (db, reply) = finished;
+        self.db = Some(db);
+        self.job = None;
+        let input_result = self.flush();
+        // The job has already committed or rolled back. An unrelated buffered
+        // input write failure must not turn a committed import into "failed".
+        reply();
+        input_result?;
+        while self.job.is_none()
+            && let Some(command) = self.deferred.pop_front()
+        {
+            self.handle(command)?;
+        }
+        Ok(())
+    }
+
+    fn wait_for_job(&mut self) -> Result<()> {
+        while let Some(job) = self.job.clone() {
+            let finished = job
+                .recv()
+                .map_err(|_| anyhow!("Data operation worker stopped"))?;
+            self.finish(finished)?;
+        }
+        Ok(())
+    }
+}
+
+fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
+    let mut worker = StorageWorker {
+        db: Some(db),
+        job: None,
+        deferred: Default::default(),
+        batch: Vec::with_capacity(128),
+    };
+    let idle = crossbeam_channel::never();
     let mut flush = Instant::now();
     let mut cache_cleanup = Instant::now();
     let mut log = Instant::now();
     let mut status_log = StatusLog::for_runtime();
     loop {
-        match rx.recv_timeout(Duration::from_millis(100)) {
-            Ok(Command::Input(event)) => batch.push(event),
-            Ok(Command::Snapshot(reply)) => {
-                db.insert(&batch)?;
-                batch.clear();
-                let _ = reply.send(db.snapshot(Local::now()));
+        let job = worker.job.clone().unwrap_or_else(|| idle.clone());
+        let mut select = crossbeam_channel::Select::new();
+        let command_index = select.recv(&rx);
+        select.recv(&job);
+        match select.select_timeout(Duration::from_millis(100)) {
+            Ok(operation) if operation.index() == command_index => match operation.recv(&rx) {
+                Ok(Command::Input(event)) => worker.batch.push(event),
+                Ok(Command::Stop) | Err(_) => {
+                    // Requests queued before Stop still complete, as before.
+                    worker.wait_for_job()?;
+                    worker.flush()?;
+                    break;
+                }
+                Ok(command) => worker.handle(command)?,
+            },
+            Ok(operation) => {
+                let finished = operation
+                    .recv(&job)
+                    .map_err(|_| anyhow!("Data operation worker stopped"))?;
+                worker.finish(finished)?;
             }
-            Ok(Command::SnapshotAsync(delivery)) => {
-                db.insert(&batch)?;
-                batch.clear();
-                delivery.complete(db.snapshot(Local::now()));
-            }
-            Ok(Command::Export(path, reply)) => {
-                db.insert(&batch)?;
-                batch.clear();
-                let _ = reply.send(db.export_daily(&path));
-            }
-            Ok(Command::Stop) | Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                db.insert(&batch)?;
-                break;
-            }
-            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+            Err(_) => {}
         }
+        // Periodic database work waits while a job owns the connection.
+        let Some(db) = &mut worker.db else {
+            continue;
+        };
         // A deadline flushes even during continuous input: no dependence on idle gaps.
-        if batch.len() >= 128 || flush.elapsed() >= Duration::from_millis(200) {
-            db.insert(&batch)?;
-            batch.clear();
+        if worker.batch.len() >= 128 || flush.elapsed() >= Duration::from_millis(200) {
+            db.insert(&worker.batch)?;
+            worker.batch.clear();
             flush = Instant::now();
         }
         if cache_cleanup.elapsed() >= Duration::from_secs(3600) {
@@ -684,7 +1017,471 @@ fn storage_loop(mut db: Storage, rx: Receiver<Command>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn exported_counts(path: &Path) -> crate::db::Counts {
+        let csv = std::fs::read_to_string(path).unwrap();
+        let mut lines = csv.lines();
+        assert_eq!(lines.next(), Some("date,keyboard,mouse,total"));
+        let mut total = crate::db::Counts::default();
+        for line in lines {
+            let columns = line.split(',').collect::<Vec<_>>();
+            assert_eq!(columns.len(), 4);
+            let keyboard = columns[1].parse::<i64>().unwrap();
+            let mouse = columns[2].parse::<i64>().unwrap();
+            assert_eq!(columns[3].parse::<i64>().unwrap(), keyboard + mouse);
+            total.keyboard += keyboard;
+            total.mouse += mouse;
+        }
+        total
+    }
+
+    #[test]
+    fn queued_export_returns_immediately_and_shutdown_waits_for_accepted_work() {
+        let temp = tempfile::tempdir().unwrap();
+        let current = temp.path().join("current.sqlite3");
+        let source = temp.path().join("locked.sqlite3");
+        let output = temp.path().join("exported-counts.csv");
+        let lock = rusqlite::Connection::open(&source).unwrap();
+        lock.execute_batch(&format!("CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER,PRIMARY KEY(bucket,dev,code)); INSERT INTO events VALUES(28000000,1,{},5); BEGIN EXCLUSIVE;", crate::collector::PHYSICAL_CODE_BASE)).unwrap();
+        let mut runtime = Runtime::start_owned(&current, true).unwrap();
+        let (reply, imported) = bounded(1);
+        runtime
+            .request_import_history(source, move |result| {
+                let _ = reply.send(result);
+            })
+            .unwrap();
+        assert!(imported.recv_timeout(Duration::from_millis(50)).is_err());
+        for _ in 0..20_000 {
+            runtime
+                .tx
+                .send_timeout(
+                    Command::Input(InputEvent {
+                        ts_ms: Local::now().timestamp_millis(),
+                        device: crate::input::Device::Mouse,
+                        code: 1,
+                    }),
+                    Duration::from_secs(1),
+                )
+                .unwrap();
+        }
+        // End the stress producer before testing the nonblocking request API.
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while runtime.tx.is_full() && Instant::now() < deadline {
+            thread::yield_now();
+        }
+        assert!(!runtime.tx.is_full());
+        let (reply, exported) = bounded(1);
+        let start = Instant::now();
+        runtime
+            .request_export(output.clone(), move |result| {
+                let _ = reply.send(result);
+            })
+            .unwrap();
+        assert!(start.elapsed() < Duration::from_secs(1));
+        assert!(exported.recv_timeout(Duration::from_millis(50)).is_err());
+        assert!(!output.exists());
+        lock.execute_batch("ROLLBACK").unwrap();
+        // Quit while import/export are still queued: both must finish normally.
+        runtime.shutdown().unwrap();
+        assert_eq!(
+            imported
+                .recv_timeout(Duration::from_secs(1))
+                .unwrap()
+                .unwrap()
+                .added
+                .keyboard,
+            5
+        );
+        exported
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            exported_counts(&output),
+            crate::db::Counts {
+                keyboard: 5,
+                mouse: 20_000
+            }
+        );
+        assert_eq!(
+            LiveSource::open(&current).unwrap().lifetime().unwrap(),
+            exported_counts(&output)
+        );
+    }
+
+    #[test]
+    fn failed_export_preserves_existing_file_and_does_not_stop_recording() {
+        for owned in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("counts.sqlite3");
+            let existing = temp.path().join("existing.csv");
+            std::fs::write(&existing, b"keep original").unwrap();
+            let mut runtime = if owned {
+                Runtime::start_owned(&path, true)
+            } else {
+                Runtime::start(&path, None, true)
+            }
+            .unwrap();
+            let (reply, receive) = bounded(1);
+            runtime
+                .request_export(existing.clone(), move |result| {
+                    let _ = reply.send(result);
+                })
+                .unwrap();
+            assert!(
+                receive
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .is_err()
+            );
+            assert_eq!(std::fs::read(existing).unwrap(), b"keep original");
+            runtime
+                .tx
+                .send(Command::Input(InputEvent {
+                    ts_ms: Local::now().timestamp_millis(),
+                    device: crate::input::Device::Mouse,
+                    code: 1,
+                }))
+                .unwrap();
+            let output = temp.path().join("new.csv");
+            runtime.export(output.clone()).unwrap();
+            assert_eq!(
+                exported_counts(&output),
+                crate::db::Counts {
+                    keyboard: 0,
+                    mouse: 1
+                }
+            );
+            assert!(runtime.capture_status().unwrap().error.is_none());
+            runtime.shutdown().unwrap();
+        }
+    }
+
+    #[test]
+    fn read_only_source_export_completes_without_default_profile_access() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source.sqlite3");
+        let output = temp.path().join("source.csv");
+        let mut db = CollectorDb::open(&source).unwrap();
+        db.insert(&[InputEvent {
+            ts_ms: Local::now().timestamp_millis(),
+            device: crate::input::Device::Keyboard,
+            code: 0,
+        }])
+        .unwrap();
+        drop(db);
+        let source = LiveSource::open(&source).unwrap();
+        let (tx, rx) = bounded(8);
+        let worker = thread::spawn(move || {
+            source_loop_inner(
+                source,
+                rx,
+                Arc::new(AtomicBool::new(true)),
+                Arc::new(Mutex::new(CaptureStatus::default())),
+                false,
+            )
+        });
+        let (reply, result) = bounded(1);
+        tx.send(Command::Export(
+            output.clone(),
+            Completion::new(move |value| {
+                let _ = reply.send(value);
+            }),
+        ))
+        .unwrap();
+        tx.send(Command::Stop).unwrap();
+        worker.join().unwrap().unwrap();
+        result
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            exported_counts(&output),
+            crate::db::Counts {
+                keyboard: 1,
+                mouse: 0
+            }
+        );
+    }
+
+    #[test]
+    fn committed_job_reply_survives_a_later_buffered_input_write_failure() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("committed.sqlite3");
+        let mut db = CollectorDb::open(&path).unwrap();
+        db.insert(&[InputEvent {
+            ts_ms: Local::now().timestamp_millis(),
+            device: crate::input::Device::Keyboard,
+            code: 0,
+        }])
+        .unwrap();
+        db.conn.execute_batch("CREATE TRIGGER fail_later_input BEFORE INSERT ON events WHEN NEW.dev=0 BEGIN SELECT RAISE(ABORT,'test input flush failure'); END;").unwrap();
+        let (tx, rx) = bounded(1);
+        let completion = Completion::new(move |result: Result<usize>| {
+            let _ = tx.send(result);
+        });
+        let mut worker = StorageWorker {
+            db: None,
+            job: None,
+            deferred: Default::default(),
+            batch: vec![InputEvent {
+                ts_ms: Local::now().timestamp_millis(),
+                device: crate::input::Device::Mouse,
+                code: 1,
+            }],
+        };
+        assert!(
+            worker
+                .finish((
+                    Storage::App(db),
+                    Box::new(move || completion.complete(Ok(1)))
+                ))
+                .is_err()
+        );
+        assert_eq!(rx.recv_timeout(Duration::from_secs(1)).unwrap().unwrap(), 1);
+        assert_eq!(
+            LiveSource::open(&path).unwrap().lifetime().unwrap(),
+            crate::db::Counts {
+                keyboard: 1,
+                mouse: 0
+            }
+        );
+    }
+    #[test]
+    fn asynchronous_import_returns_before_a_source_lock_and_keeps_queued_input() {
+        let temp = tempfile::tempdir().unwrap();
+        let current = temp.path().join("current.sqlite3");
+        let source = temp.path().join("locked.sqlite3");
+        let source_conn = rusqlite::Connection::open(&source).unwrap();
+        source_conn.execute_batch(&format!("CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER,PRIMARY KEY(bucket,dev,code)); INSERT INTO events VALUES(28000000,1,{},5); BEGIN EXCLUSIVE;",crate::collector::PHYSICAL_CODE_BASE)).unwrap();
+        let mut runtime = Runtime::start_owned(&current, true).unwrap();
+        let (reply, receive) = bounded(1);
+        let start = Instant::now();
+        runtime
+            .request_import_history(source, move |result| {
+                let _ = reply.send(result);
+            })
+            .unwrap();
+        assert!(start.elapsed() < Duration::from_secs(1));
+        assert!(receive.recv_timeout(Duration::from_millis(50)).is_err());
+        // More than the 8192-slot input queue: a blocked import must not stall it.
+        for _ in 0..20_000 {
+            runtime
+                .tx
+                .send_timeout(
+                    Command::Input(InputEvent {
+                        ts_ms: Local::now().timestamp_millis(),
+                        device: crate::input::Device::Mouse,
+                        code: 1,
+                    }),
+                    Duration::from_secs(1),
+                )
+                .unwrap();
+        }
+        source_conn.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(
+            receive
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap()
+                .unwrap()
+                .added
+                .keyboard,
+            5
+        );
+        assert_eq!(
+            runtime.snapshot().unwrap().stats.lifetime,
+            crate::db::Counts {
+                keyboard: 5,
+                mouse: 20_000
+            }
+        );
+        runtime.shutdown().unwrap();
+    }
+
+    #[test]
+    fn dropping_a_queued_operation_notifies_the_interface() {
+        let (reply, receive) = bounded(1);
+        let completion = Completion::<()>::new(move |result| {
+            let _ = reply.send(result);
+        });
+        drop(completion);
+        assert!(
+            receive
+                .recv_timeout(Duration::from_secs(1))
+                .unwrap()
+                .is_err()
+        );
+    }
+    #[test]
+    fn relocation_drains_pending_input_retains_pause_and_routes_future_input_to_new_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let original = temp.path().join("old.sqlite3");
+        let directory = temp.path().join("新目录");
+        std::fs::create_dir(&directory).unwrap();
+        let config = temp.path().join("profile/storage.json");
+        let mut runtime = Runtime::start_owned(&original, true).unwrap();
+        let now = Local::now().timestamp_millis();
+        runtime
+            .tx
+            .send(Command::Input(InputEvent {
+                ts_ms: now,
+                device: crate::input::Device::Keyboard,
+                code: 0,
+            }))
+            .unwrap();
+        assert!(
+            runtime
+                .change_directory_with_config(&directory, &config)
+                .unwrap()
+        );
+        assert!(runtime.is_paused());
+        assert_eq!(runtime.snapshot().unwrap().stats.lifetime.keyboard, 1);
+        assert!(
+            !runtime
+                .change_directory_with_config(&directory, &config)
+                .unwrap()
+        );
+        assert!(Runtime::start_owned(&directory.join("events.sqlite3"), true).is_err());
+        runtime
+            .tx
+            .send(Command::Input(InputEvent {
+                ts_ms: now + 1,
+                device: crate::input::Device::Mouse,
+                code: 1,
+            }))
+            .unwrap();
+        runtime.shutdown().unwrap();
+        assert_eq!(
+            LiveSource::open(&original).unwrap().lifetime().unwrap(),
+            crate::db::Counts {
+                keyboard: 1,
+                mouse: 0
+            }
+        );
+        assert_eq!(
+            LiveSource::open(&directory.join("events.sqlite3"))
+                .unwrap()
+                .lifetime()
+                .unwrap(),
+            crate::db::Counts {
+                keyboard: 1,
+                mouse: 1
+            }
+        );
+    }
+
+    #[test]
+    fn import_flushes_pending_input_and_continues_recording_after_duplicate_import() {
+        let temp = tempfile::tempdir().unwrap();
+        let current = temp.path().join("current.sqlite3");
+        let source = temp.path().join("source.sqlite3");
+        let mut source_db = CollectorDb::open(&source).unwrap();
+        let at = Local::now().timestamp_millis() - 120_000;
+        source_db
+            .insert(&[InputEvent {
+                ts_ms: at,
+                device: crate::input::Device::Keyboard,
+                code: 0,
+            }])
+            .unwrap();
+        let mut runtime = Runtime::start_owned(&current, false).unwrap();
+        runtime
+            .tx
+            .send(Command::Input(InputEvent {
+                ts_ms: at,
+                device: crate::input::Device::Mouse,
+                code: 1,
+            }))
+            .unwrap();
+        assert_eq!(
+            runtime
+                .import_history(source.clone())
+                .unwrap()
+                .added
+                .keyboard,
+            1
+        );
+        assert_eq!(runtime.import_history(source).unwrap().added.total(), 0);
+        runtime
+            .tx
+            .send(Command::Input(InputEvent {
+                ts_ms: at,
+                device: crate::input::Device::Mouse,
+                code: 1,
+            }))
+            .unwrap();
+        runtime.shutdown().unwrap();
+        assert_eq!(
+            LiveSource::open(&current).unwrap().lifetime().unwrap(),
+            crate::db::Counts {
+                keyboard: 1,
+                mouse: 2
+            }
+        );
+    }
     use crate::input::Device;
+
+    #[test]
+    fn sport_sample_flushes_both_devices_without_materializing_history() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("sport.sqlite3");
+        let mut runtime = Runtime::start_owned(&path, false).unwrap();
+        for device in [Device::Mouse, Device::Mouse, Device::Keyboard] {
+            runtime
+                .tx
+                .send(Command::Input(InputEvent {
+                    ts_ms: Local::now().timestamp_millis(),
+                    device,
+                    code: 1,
+                }))
+                .unwrap();
+        }
+        let caller = thread::current().id();
+        let (reply, response) = bounded(1);
+        runtime
+            .request_sport_sample(move |result| {
+                reply.send((thread::current().id(), result)).unwrap();
+            })
+            .unwrap();
+        let (worker, result) = response.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_ne!(worker, caller);
+        let value: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(value["mouse"], 2);
+        assert_eq!(value["keyboard"], 1);
+        assert!(value.get("history_days").is_none());
+        assert_eq!(value.as_object().unwrap().len(), 5);
+        assert_eq!(runtime.snapshot().unwrap().stats.lifetime.keyboard, 1);
+        // A broken history table must not block this lightweight counter path.
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute("DROP TABLE daily_totals", []).unwrap();
+        let (reply, response) = bounded(1);
+        runtime
+            .request_sport_sample(move |result| {
+                reply.send(result).unwrap();
+            })
+            .unwrap();
+        let result = response
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(value["mouse"], 2);
+        assert_eq!(value["keyboard"], 1);
+        runtime.shutdown().unwrap();
+    }
+
+    #[test]
+    fn abandoned_sport_delivery_releases_the_ui_gate() {
+        let (reply, response) = bounded(1);
+        drop(SportDelivery {
+            capture: Arc::new(Mutex::new(CaptureStatus::default())),
+            paused: Arc::new(AtomicBool::new(false)),
+            reply: Some(Box::new(move |result| {
+                reply.send(result.is_err()).unwrap();
+            })),
+        });
+        assert!(response.recv_timeout(Duration::from_millis(500)).unwrap());
+    }
 
     #[test]
     fn async_snapshot_serializes_on_worker_after_flushing_pending_input() {

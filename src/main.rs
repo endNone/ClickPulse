@@ -109,13 +109,21 @@ fn main() {
     #[cfg(target_os = "windows")]
     clickpulse::platform::windows::attach_parent_console();
     let cli = Cli::parse();
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     let desktop_mode = cli.command.is_none();
     if let Err(error) = run(cli) {
         eprintln!("ClickPulse: {error:#}");
         #[cfg(target_os = "windows")]
         if desktop_mode {
             clickpulse::platform::windows::show_startup_error(&error);
+        }
+        #[cfg(target_os = "macos")]
+        if desktop_mode {
+            rfd::MessageDialog::new()
+                .set_title("ClickPulse")
+                .set_description(format!("{error:#}"))
+                .set_level(rfd::MessageLevel::Error)
+                .show();
         }
         std::process::exit(1);
     }
@@ -143,13 +151,16 @@ fn run(cli: Cli) -> Result<()> {
         );
         return Ok(());
     }
-    let app_path = clickpulse::collector::data_path()?;
     // A fresh installation always owns its platform user-data directory.
     // Legacy databases are accessed only through explicit CLI arguments.
     let source_mode = cli.source_db.is_some();
     let owned = cli.db.is_none() && !source_mode;
     let setup_pending = false;
-    let path = cli.db.or(cli.source_db).unwrap_or(app_path);
+    let path = match cli.db.or(cli.source_db) {
+        Some(path) => path,
+        None if cli.demo => PathBuf::new(),
+        None => clickpulse::collector::data_path()?,
+    };
     if let Some(command) = cli.command {
         if cli.demo {
             bail!("--demo is only available for desktop previews");

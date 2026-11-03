@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
-const output = path.join(root, 'dist', 'readme-preview');
+const output = path.resolve(process.argv[2] || path.join(root, 'dist', 'readme-preview'));
 const K = require('../ui/keyboard.js');
 let seed = 0xC11C2026;
 const random = () => {
@@ -43,8 +43,8 @@ const snapshot = {
 };
 assert.equal(physical.reduce((n,k)=>n+k.count,0), lifetime.keyboard);
 assert.deepEqual(sum(history), lifetime);
-const scripts = ['i18n.js','themes.js','dropdown.js','history.js','keyboard.js','app.js','presentation.js'];
-const styles = ['style.css','history.css','compact.css','themes.css','dropdown.css'];
+const scripts = ['i18n.js','themes.js','dropdown.js','history.js','keyboard.js','sport.js','app.js','presentation.js'];
+const styles = ['style.css','history.css','compact.css','themes.css','dropdown.css','sport.css'];
 const fonts = [['ClickPulse UI','Inter.ttf'],['ClickPulse Sans','NotoSansSC.ttf'],['ClickPulse Mono','NotoSansMono.ttf']];
 fs.mkdirSync(path.join(output,'fonts'),{recursive:true});
 for (const [,name] of fonts) fs.copyFileSync(path.join(root,'assets','fonts',name),path.join(output,'fonts',name));
@@ -58,19 +58,21 @@ body:not(.compact)[data-capture-scale]{min-height:calc(100vh / var(--capture-sca
 body.compact[data-capture-scale]{width:320px;height:208px}`;
 const boot = `(() => {
   const options = new URLSearchParams(location.search);
-  const locale = options.get('locale') === 'zh-CN' ? 'zh-CN' : 'en';
+  const locale = createClickPulseI18n(window.clickpulseMessages,options.get('locale')||'en').locale;
   const scale = Number(options.get('scale'));
   if([2,3].includes(scale)){
     document.body.dataset.captureScale=String(scale);
     document.body.style.setProperty('--capture-scale',String(scale));
     document.body.style.setProperty('--capture-width','1280px');
   }
-  const view = {compact:options.get('page') === 'mini',pinned:true,visible:true,locale,language_preference:locale,theme:'blue'};
+  const view = {compact:options.get('page') === 'mini',pinned:true,visible:true,locale,language_preference:locale,theme:'blue',sport_enabled:false,sport_visible:true};
   const snapshot = ${JSON.stringify(snapshot)};
   window.ipc = {postMessage(message){
     const request = JSON.parse(message);
-    if(request.action === 'language'){view.locale = request.language === 'zh-CN' ? 'zh-CN' : 'en';view.language_preference=request.language;}
+    if(request.action === 'language'){view.locale = createClickPulseI18n(window.clickpulseMessages,request.language==='system'?locale:request.language).locale;view.language_preference=request.language;}
     if(request.action === 'theme')view.theme=request.theme;
+    if(request.action === 'sport')view.sport_enabled=request.enabled&&view.sport_visible;
+    if(request.action === 'sport_visible'){view.sport_visible=request.visible;if(!request.visible)view.sport_enabled=false;}
     if(request.action === 'compact')view.compact=true;
     if(request.action === 'expand')view.compact=false;
     if(request.action === 'pin')view.pinned=!view.pinned;

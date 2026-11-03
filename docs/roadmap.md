@@ -4,7 +4,7 @@ These are possible directions, not release-date commitments.
 
 ## Implemented
 
-Native Rust capture, local SQLite summaries, full history, activity calendar, keyboard heatmap and treemap, CSV export, mini mode, pause, background recording, launch at login, four themes, English and Simplified Chinese, explicit migration and bounded diagnostic log rotation. The common build entry point generates Mac App/DMG/ZIP and Windows x64 portable ZIP. Program updates and removal preserve the separate user-data directory.
+Native Rust capture, local SQLite summaries, full history, activity calendar, keyboard heatmap and treemap, CSV export, mini mode, pause, background recording, launch at login, four themes, eight interface languages, explicit migration and bounded diagnostic log rotation. The common build entry point generates Mac App/DMG/ZIP and Windows x64 portable ZIP. Program updates and removal preserve the separate user-data directory.
 
 The 0.1.0 preview adds transactional schema versions, explicit legacy encoding metadata, preserved damaged preferences with a localized recovery notice, asynchronous snapshot delivery, strict typed IPC validation and compatibility fixes for earlier macOS 12 WebKit versions.
 

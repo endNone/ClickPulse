@@ -30,7 +30,7 @@ Verify package SHA256 values and manifest file hashes. Extract the complete pack
 | Check | Pass criteria |
 | --- | --- |
 | First launch | Complete main window, correct fonts and tray icon; missing dependencies produce a clear error |
-| Language and theme | System language defaults; English/Chinese and all four themes switch correctly and survive restart |
+| Language and theme | Defaults follow the first supported system language; all eight interface languages and four themes switch correctly and survive restart |
 | Physical input | Real keyboard/button presses update counts; holding a key does not repeat the count |
 | Pause/resume | Input while paused adds no counts; recording continues after resuming |
 | Main window | Native title bar is absent; app minimize, maximize/restore, close and header dragging work while scrolling |

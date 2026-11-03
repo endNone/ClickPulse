@@ -1,7 +1,7 @@
 (() => {
-  const view={compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue'};
+  const view={compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:true};
   window.presentationView=view;
-  const put=(id,value)=>{$(id).textContent=value;};
+  const put=(id,value)=>window.setSelectableText($(id),value);
   const onWindows=window.clickpulsePlatform==='windows';
   if(onWindows||window.clickpulsePlatform==='macos'){
     document.querySelector('header').addEventListener('mousedown',event=>{
@@ -58,6 +58,7 @@
     document.body.classList.toggle('compact',view.compact);
     if(view.compact||!view.visible)Dropdowns.closeAll();
     $('mini-widget').hidden=!view.compact;
+    window.updateSportActivity?.();
     $('mini-pin').setAttribute('aria-pressed',String(view.pinned));
     $('mini-pin').setAttribute('aria-label',t(view.pinned?'mini.unpin':'mini.pin'));
     $('mini-pin').title=t(view.pinned?'mini.unpin':'mini.pin');

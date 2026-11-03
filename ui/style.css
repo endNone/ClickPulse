@@ -184,3 +184,9 @@ body.compact .close-dialog {padding:14px}
 body.compact .close-dialog-heading h2 {font-size:14px}
 body.compact .close-dialog p {font-size:11px;margin:8px 0 10px}
 body.compact .close-dialog-actions {margin-top:12px}
+
+/* Keep data selectable while action controls and drag handles remain stable. */
+.content,.mini-total,.mini-counts {user-select:text;-webkit-user-select:text}
+button,select,.preference-switch {user-select:none;-webkit-user-select:none}
+.setting-actions {display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.settings-footer {display:flex;justify-content:flex-end;padding-top:18px}

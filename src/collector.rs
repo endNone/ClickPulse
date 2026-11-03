@@ -16,11 +16,11 @@ use std::{
 pub const PHYSICAL_CODE_BASE: i64 = 1 << 40;
 
 pub fn data_path() -> Result<PathBuf> {
-    Ok(crate::platform::data_dir()?.join("events.sqlite3"))
+    crate::storage::database_path()
 }
 
 pub struct CollectorDb {
-    conn: Connection,
+    pub(crate) conn: Connection,
     reader: LiveSource,
 }
 
@@ -161,6 +161,9 @@ impl CollectorDb {
     pub fn snapshot(&self, now: DateTime<Local>) -> Result<Snapshot> {
         self.reader.snapshot(now)
     }
+    pub fn lifetime(&self) -> Result<crate::db::Counts> {
+        self.reader.lifetime()
+    }
     pub fn activity_counts(&self, now: DateTime<Local>) -> Result<crate::source::ActivityCounts> {
         self.reader.activity_counts(now)
     }
@@ -184,7 +187,7 @@ impl CollectorDb {
     }
 }
 
-fn initialize(conn: &mut Connection) -> Result<()> {
+pub(crate) fn initialize(conn: &mut Connection) -> Result<()> {
     conn.busy_timeout(Duration::from_secs(5))?;
     crate::storage_schema::require_supported(conn)?;
     crate::storage_schema::require_key_encoding(conn)?;

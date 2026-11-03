@@ -32,12 +32,15 @@ Confirm **Recording**, then press a few keys and click in another app to check t
 
 ## Features
 
+The download links above still point to public preview build 55. Mini Sport, the expanded language options and data management below are in development source and are not included in that published preview.
+
 - **Activity overview:** daily trends, seven-day and all-time totals, and an activity calendar.
 - **Keyboard views:** physical-key heatmap and a treemap sized by usage.
 - **History:** year filtering and CSV export of daily totals.
-- **Mini mode:** floating counts with pin, pause and expand controls; optional launch at login.
+- **Mini mode:** floating counts with pin, pause and expand controls; optional launch at login. Sport feedback grades combined keyboard/mouse speed from C to SS.
+- **Data management:** choose a save folder, merge compatible SQLite history with automatic backups, and export CSV in the background.
 
-Four themes and English/Simplified Chinese interface options are available in Settings. Closing a window can keep recording; use **Quit ClickPulse** from the menu bar or tray to stop. See [Usage](docs/usage.md).
+Four themes and eight interface languages are available in Settings: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German and Spanish. The language follows the system by default. Closing a window can keep recording; use **Quit ClickPulse** from the menu bar or tray to stop. See [Usage](docs/usage.md).
 
 ## Screenshots
 
