@@ -1185,6 +1185,33 @@ fn demo_snapshot(paused: bool) -> AppSnapshot {
         remaining.mouse -= counts.mouse;
         hours[*hour as usize] = counts;
     }
+    let mut hourly = clickpulse::hourly::empty(now);
+    let mut remainder = today;
+    let weights: Vec<_> = hourly
+        .iter()
+        .map(|hour| {
+            use chrono::{TimeZone, Timelike};
+            let local_hour = Local.timestamp_millis_opt(hour.start_ms).unwrap().hour();
+            let activity = match local_hour {
+                8..=11 => 5,
+                12..=13 => 2,
+                14..=18 => 7,
+                19..=22 => 3,
+                _ => 1,
+            };
+            activity * (hour.end_ms - hour.start_ms)
+        })
+        .collect();
+    let mut weight_left: i64 = weights.iter().sum();
+    for (hour, weight) in hourly.iter_mut().zip(weights) {
+        hour.counts = Counts {
+            keyboard: remainder.keyboard * weight / weight_left,
+            mouse: remainder.mouse * weight / weight_left,
+        };
+        weight_left -= weight;
+        remainder.keyboard -= hour.counts.keyboard;
+        remainder.mouse -= hour.counts.mouse;
+    }
     AppSnapshot {
         setup_pending: false,
         auto_start_available: false,
@@ -1209,6 +1236,7 @@ fn demo_snapshot(paused: bool) -> AppSnapshot {
             days,
             history_days,
             hours,
+            hourly,
             top_keys,
             legacy_imported: false,
             keyboard_stats: KeyboardStats {
@@ -1260,6 +1288,25 @@ mod window_tests {
                 sum
             });
         assert_eq!(hours, demo.stats.today);
+        let hourly = demo
+            .stats
+            .hourly
+            .iter()
+            .fold(Counts::default(), |mut sum, hour| {
+                sum.keyboard += hour.counts.keyboard;
+                sum.mouse += hour.counts.mouse;
+                sum
+            });
+        assert_eq!(
+            hourly,
+            demo.stats
+                .windows
+                .iter()
+                .find(|w| w.seconds == 86_400)
+                .unwrap()
+                .counts
+        );
+
         assert_eq!(
             demo.stats
                 .keyboard_stats

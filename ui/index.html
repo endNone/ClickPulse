@@ -29,6 +29,12 @@
         <article class="metric"><div class="metric-label"><span data-i18n="metric.lifetime">累计操作</span></div><div class="metric-number" id="lifetime">—</div><div class="metric-details" id="lifetime-detail" data-i18n="metric.placeholder">键盘 — &nbsp; / &nbsp; 鼠标 —</div><div class="metric-bottom" id="legacy-note"><span data-i18n="metric.all">全部记录</span></div></article>
       </div>
       <article class="live card"><div><span class="live-dot"></span><strong><span data-i18n="live.title">实时计数</span></strong><small><span data-i18n="live.refresh">2 秒刷新</span></small></div><div id="windows" class="windows"></div><button class="button" id="pause"><span data-i18n="action.pause">暂停记录</span></button></article>
+      <article class="card hourly-card">
+        <div class="card-heading"><div><h2 data-i18n="chart.hourly">24 小时时段统计</h2><p id="hourly-range"></p></div><strong id="hourly-total" class="hourly-total"></strong></div>
+        <div class="legend"><span class="keyboard-dot"></span><span data-i18n="common.keyboard">键盘</span><span class="mouse-dot"></span><span data-i18n="common.mouse">鼠标</span><span class="hourly-note" data-i18n="chart.hourly_note">按小时统计，首尾为实际时长</span></div>
+        <div id="hourly-chart" class="chart hourly-chart" role="group" data-i18n-aria="chart.hourly"></div>
+        <p id="hourly-detail" class="hourly-detail"></p>
+      </article>
       <div class="chart-grid">
         <article class="card trend"><div class="card-heading"><div><h2><span data-i18n="chart.trend">每日趋势</span></h2><p><span data-i18n="chart.daily">按日统计</span></p></div><div class="segments" id="trend-range"><button class="selected" data-range="14" data-i18n="common.days" data-count="14">14 天</button><button data-range="90" data-i18n="common.days" data-count="90">90 天</button></div></div><div class="legend"><span class="keyboard-dot"></span><span data-i18n="common.keyboard">键盘</span><span class="mouse-dot"></span><span data-i18n="common.mouse">鼠标</span></div><div id="trend-chart" class="chart"></div></article>
         <article class="card composition"><div class="card-heading"><div><h2><span data-i18n="chart.composition">操作占比</span></h2><p><span data-i18n="chart.lifetime">累计记录</span></p></div></div><div id="donut"></div><div id="composition-legend"></div></article>

@@ -146,6 +146,7 @@ window.receive=snapshot=>{
     renderChanged('windows',data.windows,()=>$('windows').replaceChildren(...data.windows.map(w=>{
       const node=document.createElement('div');node.className='window';const count=document.createElement('strong'),label=document.createElement('span');count.textContent=(w.approximate?'≈ ':'')+n(total(w.counts));label.textContent=t('window.'+w.seconds);node.append(count,label);return node;
     })));
+    renderChanged('hourly',data.hourly||[],()=>renderHourly(data.hourly||[]));
     renderChanged('trend',[range,data.days.slice(-range)],()=>renderTrend($('trend-chart'),data.days.slice(-range)));
     renderChanged('donut',data.lifetime,()=>renderDonut(data.lifetime));
     updateRangeOptions($('calendar-range-select'),true);calendarRange=$('calendar-range-select').value;
@@ -178,6 +179,63 @@ function renderSettings(){
 }
 const svgNode=(tag,attrs={})=>{const node=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const[key,value]of Object.entries(attrs))node.setAttribute(key,String(value));return node};
 const svgText=(text,x,y,attrs={})=>{const el=svgNode('text',{x,y,...attrs});el.textContent=text;return el};
+let hourlyNodes=null;
+function renderHourly(hours){
+  const container=$('hourly-chart'),keys=hours.map((h,i)=>i?h.start_ms:h.end_ms-3600000).join(','),
+    counts=hours.reduce((sum,h)=>({keyboard:sum.keyboard+h.counts.keyboard,mouse:sum.mouse+h.counts.mouse}),{keyboard:0,mouse:0}),
+    approximate=hours.some(h=>h.approximate),{ceiling,ticks}=H.countScale(Math.max(0,...hours.map(h=>total(h.counts))));
+  const formatRange=h=>I.date(h.start_ms,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'short'})+' — '+I.date(h.end_ms,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'short'});
+  const description=h=>t('chart.tooltip',{period:formatRange(h),keyboard:(h.approximate?'≈ ':'')+n(h.counts.keyboard),mouse:(h.approximate?'≈ ':'')+n(h.counts.mouse)});
+  setSelectableText($('hourly-total'),(approximate?'≈ ':'')+n(total(counts)));
+  $('hourly-total').setAttribute('aria-label',t('chart.hourly_total',{count:(approximate?'≈ ':'')+n(total(counts))}));
+  setSelectableText($('hourly-range'),hours.length?formatRange({start_ms:hours[0].start_ms,end_ms:hours[hours.length-1].end_ms}):'');
+  if(!hourlyNodes||hourlyNodes.keys!==keys){
+    const focused=document.activeElement?.dataset.hour;
+    const plot=document.createElement('div'),yAxis=document.createElement('div'),xAxis=document.createElement('div'),empty=document.createElement('div');
+    plot.className='hourly-plot';yAxis.className='trend-y-axis';xAxis.className='trend-x-axis';empty.className='empty-label';
+    const slots=hours.map((h,i)=>{
+      const node=document.createElement('div'),keyboard=document.createElement('span'),mouse=document.createElement('span');
+      node.className='hourly-slot';node.tabIndex=0;node.dataset.hour=String(i?h.start_ms:h.end_ms-3600000);node.setAttribute('role','img');
+      keyboard.className='hourly-keyboard';mouse.className='hourly-mouse';node.append(keyboard,mouse);
+      for(const event of ['mouseenter','focus'])node.addEventListener(event,()=>{hourlyNodes.active=node.dataset.hour;updateHourlyDetail();});
+      node.addEventListener('keydown',event=>{
+        const direction=event.key==='ArrowRight'?1:event.key==='ArrowLeft'?-1:0;
+        const next=event.key==='Home'?0:event.key==='End'?hours.length-1:Math.max(0,Math.min(hours.length-1,i+direction));
+        if(direction||event.key==='Home'||event.key==='End'){event.preventDefault();hourlyNodes.slots[next].node.focus();}
+      });
+      plot.append(node);return {node,keyboard,mouse};
+    });
+    plot.addEventListener('mouseleave',()=>{if(!slots.some(slot=>slot.node===document.activeElement)){hourlyNodes.active=null;updateHourlyDetail();}});
+    container.replaceChildren(plot,yAxis,xAxis,empty);hourlyNodes={keys,plot,yAxis,xAxis,empty,slots,active:focused};
+    slots.find(slot=>slot.node.dataset.hour===focused)?.node.focus();
+  }
+  const chart=hourlyNodes;
+  chart.hours=hours;chart.description=description;
+  container.style.setProperty('--trend-gutter',Math.max(56,...ticks.map(value=>n(value).length*6+12))+'px');
+  chart.plot.style.gridTemplateColumns=`repeat(${Math.max(1,hours.length)},minmax(0,1fr))`;
+  chart.yAxis.replaceChildren(...ticks.map(value=>{
+    const label=document.createElement('span');label.textContent=n(value);label.style.top=(1-value/ceiling)*100+'%';return label;
+  }));
+  chart.plot.style.setProperty('--hourly-grid-step',100/(ticks.length-1)+'%');
+  chart.slots.forEach(({node,keyboard,mouse},i)=>{
+    const h=hours[i];node.setAttribute('aria-label',description(h));
+    keyboard.style.height=h.counts.keyboard/ceiling*100+'%';mouse.style.height=h.counts.mouse/ceiling*100+'%';
+    node.classList.toggle('partial',h.end_ms-h.start_ms<3600000);
+  });
+  chart.xAxis.replaceChildren(...H.trendLabelIndices(hours.length).map(i=>{
+    const h=hours[i],label=document.createElement('span'),time=document.createElement('span'),date=document.createElement('small');
+    label.className='trend-date';label.style.left=(i+.5)/hours.length*100+'%';
+    time.textContent=I.date(h.start_ms,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'});date.textContent=I.date(h.start_ms,{month:'short',day:'numeric'});label.append(time,date);return label;
+  }));
+  chart.empty.hidden=hours.some(h=>total(h.counts)>0);chart.empty.textContent=t('common.empty');
+  chart.defaultDescription=t('chart.hourly_hint');updateHourlyDetail();
+}
+function updateHourlyDetail(){
+  if(!hourlyNodes?.hours)return;
+  const chart=hourlyNodes,index=chart.slots.findIndex(slot=>slot.node.dataset.hour===chart.active);
+  chart.slots.forEach((slot,i)=>{slot.node.classList.toggle('active',i===index);slot.node.tabIndex=i===(index>=0?index:chart.slots.length-1)?0:-1;});
+  setSelectableText($('hourly-detail'),index>=0?chart.description(chart.hours[index]):chart.defaultDescription);
+}
 function renderTrend(container,days){
   const svg=svgNode('svg',{viewBox:'0 0 600 132',preserveAspectRatio:'none',class:'trend-plot',role:'img','aria-label':t('chart.aria')});
   const {ceiling,ticks}=H.countScale(Math.max(0,...days.map(d=>total(d.counts))));

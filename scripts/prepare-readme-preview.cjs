@@ -41,6 +41,22 @@ const snapshot = {
   demo:true,paused:false,source_mode:false,setup_pending:false,auto_start:false,legacy_imported:false,
   database_path:'Demo data — no database connection'
 };
+const end=Date.parse(snapshot.now),start=end-86400000,hour=3600000;
+snapshot.hourly=[];
+for(let boundary=Math.floor(start/hour)*hour;boundary<end;boundary+=hour){
+  const hourStart=Math.max(start,boundary),hourEnd=Math.min(end,boundary+hour),localHour=new Date(boundary).getHours();
+  const weight=(localHour>=8&&localHour<=20?1+Math.sin(localHour*1.7)*.5:.04)*(hourEnd-hourStart)/hour;
+  snapshot.hourly.push({start_ms:hourStart,end_ms:hourEnd,counts:{keyboard:0,mouse:0},approximate:false,weight});
+}
+const hourlyWeight=snapshot.hourly.reduce((n,h)=>n+h.weight,0),remaining={...snapshot.windows[3].counts};
+snapshot.hourly.forEach((h,i)=>{
+  for(const dev of ['keyboard','mouse']){
+    h.counts[dev]=i===snapshot.hourly.length-1?remaining[dev]:Math.floor(snapshot.windows[3].counts[dev]*h.weight/hourlyWeight);
+    remaining[dev]-=h.counts[dev];
+  }
+  delete h.weight;
+});
+assert.deepEqual(sum(snapshot.hourly),snapshot.windows[3].counts);
 assert.equal(physical.reduce((n,k)=>n+k.count,0), lifetime.keyboard);
 assert.deepEqual(sum(history), lifetime);
 const scripts = ['i18n.js','themes.js','dropdown.js','history.js','keyboard.js','sport.js','app.js','presentation.js'];

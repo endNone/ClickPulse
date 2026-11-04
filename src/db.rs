@@ -72,6 +72,7 @@ pub struct Snapshot {
     pub days: Vec<DayCount>,
     pub history_days: Vec<DayCount>,
     pub hours: Vec<Counts>,
+    pub hourly: Vec<crate::hourly::HourCount>,
     pub top_keys: Vec<KeyCount>,
     pub keyboard_stats: KeyboardStats,
     pub legacy_imported: bool,
@@ -401,6 +402,19 @@ impl EventDb {
                 .or_insert_with(Counts::default)
                 .add(dev, cnt);
         }
+        let mut hourly = crate::hourly::empty(now);
+        crate::hourly::accumulate(
+            &self.conn,
+            &mut hourly,
+            "recent",
+            crate::hourly::Resolution::Millisecond,
+        )?;
+        crate::hourly::accumulate(
+            &self.conn,
+            &mut hourly,
+            "legacy_minutes",
+            crate::hourly::Resolution::Minute,
+        )?;
         Ok(Snapshot {
             now: now.to_rfc3339(),
             today,
@@ -419,6 +433,7 @@ impl EventDb {
                 .map(|(day, counts)| DayCount { day, counts })
                 .collect(),
             hours,
+            hourly,
             top_keys,
             keyboard_stats: KeyboardStats {
                 physical: physical_keys,
@@ -540,6 +555,57 @@ mod tests {
 
     fn db() -> EventDb {
         EventDb::from_connection(Connection::open_in_memory().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn hourly_combines_native_and_legacy_once_and_matches_the_rolling_day() {
+        let mut db = db();
+        let now = DateTime::parse_from_rfc3339("2026-11-03T00:37:15-08:00")
+            .unwrap()
+            .with_timezone(&Local);
+        let end = now.timestamp_millis();
+        let start = end - 86_400_000;
+        for (stamp, device) in [
+            (start, Device::Keyboard),
+            (start + 1, Device::Keyboard),
+            (end, Device::Mouse),
+            (end + 1, Device::Mouse),
+        ] {
+            db.insert(&[InputEvent {
+                ts_ms: stamp,
+                device,
+                code: 0,
+            }])
+            .unwrap();
+        }
+        db.conn
+            .execute(
+                "INSERT INTO legacy_minutes VALUES(?1,1,7),(?2,0,3),(?3,1,99)",
+                params![
+                    start.div_euclid(60_000),
+                    (end - 3_600_000).div_euclid(60_000),
+                    end.div_euclid(60_000) + 1
+                ],
+            )
+            .unwrap();
+        let stats = db.snapshot(now).unwrap();
+        let counts = stats
+            .hourly
+            .iter()
+            .fold(Counts::default(), |mut sum, hour| {
+                sum.keyboard += hour.counts.keyboard;
+                sum.mouse += hour.counts.mouse;
+                sum
+            });
+        assert_eq!(
+            counts,
+            Counts {
+                keyboard: 8,
+                mouse: 4
+            }
+        );
+        assert_eq!(counts, db.rolling(86_400, end).unwrap().counts);
+        assert_eq!(stats.hourly.iter().filter(|h| h.approximate).count(), 2);
     }
     fn event(ts_ms: i64) -> InputEvent {
         InputEvent {

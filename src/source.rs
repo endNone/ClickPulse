@@ -165,6 +165,18 @@ impl LiveSource {
                 .and_then(|ms| Local.timestamp_millis_opt(ms).single())
                 .map(|date| date.to_rfc3339()),
         };
+        let mut hourly = crate::hourly::empty(now);
+        let precise = coverage.is_some_and(|since| now_ms - 86_400_000 >= since);
+        crate::hourly::accumulate(
+            &tx,
+            &mut hourly,
+            if precise { "recent_counts" } else { "events" },
+            if precise {
+                crate::hourly::Resolution::Millisecond
+            } else {
+                crate::hourly::Resolution::Minute
+            },
+        )?;
         Ok(Snapshot {
             now: now.to_rfc3339(),
             today,
@@ -177,6 +189,7 @@ impl LiveSource {
                 .map(|(day, counts)| DayCount { day, counts })
                 .collect(),
             hours,
+            hourly,
             top_keys,
             keyboard_stats,
             legacy_imported: ready
@@ -339,6 +352,98 @@ fn counts(conn: &Connection, sql: &str, values: impl rusqlite::Params) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hourly_matches_the_rolling_day_for_precise_and_minute_sources() {
+        use crate::input::{Device, InputEvent};
+        let now = DateTime::parse_from_rfc3339("2026-11-03T00:37:15-08:00")
+            .unwrap()
+            .with_timezone(&Local);
+        let end = now.timestamp_millis();
+        let start = end - 86_400_000;
+        let events: Vec<_> = [
+            (start - 1, Device::Keyboard, 0),
+            (start + 1, Device::Keyboard, 0),
+            (start + 2, Device::Keyboard, 1),
+            (end - 3_600_000, Device::Mouse, 1),
+            (end, Device::Mouse, 1),
+            (end + 60_000, Device::Keyboard, 2),
+        ]
+        .into_iter()
+        .map(|(ts_ms, device, code)| InputEvent {
+            ts_ms,
+            device,
+            code,
+        })
+        .collect();
+        for mode in ["precise", "warming", "legacy"] {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("hourly.sqlite3");
+            if mode == "legacy" {
+                let conn = Connection::open(&path).unwrap();
+                conn.execute_batch(
+                    "CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER);",
+                )
+                .unwrap();
+                for event in &events {
+                    conn.execute(
+                        "INSERT INTO events VALUES(?1,?2,?3,1)",
+                        params![
+                            event.ts_ms.div_euclid(60_000),
+                            event.device as i64,
+                            crate::collector::PHYSICAL_CODE_BASE + i64::from(event.code)
+                        ],
+                    )
+                    .unwrap();
+                }
+            } else {
+                let mut writer = crate::collector::CollectorDb::open(&path).unwrap();
+                writer.insert(&events).unwrap();
+                let conn = Connection::open(&path).unwrap();
+                conn.execute(
+                    "INSERT OR REPLACE INTO clickpulse_metadata VALUES('precise_since_ms',?1)",
+                    [(if mode == "precise" { start } else { start + 1 }).to_string()],
+                )
+                .unwrap();
+            }
+            let source = LiveSource::open(&path).unwrap();
+            let stats = source.snapshot(now).unwrap();
+            let day = stats.windows.iter().find(|w| w.seconds == 86_400).unwrap();
+            let sum = stats
+                .hourly
+                .iter()
+                .fold(Counts::default(), |mut sum, hour| {
+                    sum.keyboard += hour.counts.keyboard;
+                    sum.mouse += hour.counts.mouse;
+                    sum
+                });
+            assert_eq!(sum, day.counts, "{mode}");
+            assert_eq!(sum.keyboard, if mode == "precise" { 2 } else { 3 });
+            assert_eq!(sum.mouse, 2);
+            assert_eq!(
+                stats.hourly.iter().any(|h| h.approximate),
+                mode != "precise"
+            );
+            assert_eq!(stats.hourly.len(), 25);
+            assert!(stats.hourly.iter().any(|h| h.counts.total() == 0));
+            // Read-only source mode sees later WAL commits without a restart.
+            if mode != "legacy" {
+                let mut writer = crate::collector::CollectorDb::open(&path).unwrap();
+                writer
+                    .insert(&[InputEvent {
+                        ts_ms: end - 1,
+                        device: Device::Mouse,
+                        code: 1,
+                    }])
+                    .unwrap();
+                let updated = source.snapshot(now).unwrap();
+                assert_eq!(
+                    updated.hourly.iter().map(|h| h.counts.mouse).sum::<i64>(),
+                    3
+                );
+            }
+        }
+    }
 
     #[test]
     fn daily_export_keeps_all_saved_dates_while_the_ui_excludes_future_days() {

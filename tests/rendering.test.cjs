@@ -42,7 +42,7 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   document={documentElement:root,body:new Element(),getElementById:get,
     querySelector(selector){return get(selector==='header'?'header':selector==='.sidebar'?'sidebar':'main');},
     querySelectorAll(selector){return selector==='nav button'?nav:selector==='.page'?pages:[];},
-    createElement(){return new Element();},createElementNS(){return new Element();}};
+    createElement(){const node=new Element();node.ownerDocument=document;return node;},createElementNS(){const node=new Element();node.ownerDocument=document;return node;}};
   const window={ipc:{postMessage(){}},presentationView:{compact:false},clickpulsePlatform:platform,clickpulseMessages:messages,clickpulseLocale:'en'};
   Object.assign(window,{matchMedia:()=>({matches:reducedMotion,addEventListener(){}}),performance:{now:()=>now},setInterval(handler,ms){const id=++timerId;intervals.set(id,{handler,ms});return id;},clearInterval(id){intervals.delete(id);}});
   const context=vm.createContext({document,window,setTimeout,clearTimeout,...(legacyWebKit?{}:{ClickPulseSport:Sport,ClickPulseThemes:Themes,ClickPulseDropdowns:Dropdowns,ClickPulseI18n:createI18n(messages,'en',platform),ClickPulseHistory:H,ClickPulseKeyboard:K.create(platform)})});
@@ -514,4 +514,78 @@ test('weekly dates begin at the first recorded day and multi-year axes retain th
   const months=a.get('history-chart').children[2].children;
   assert.equal(months[0].children[0].textContent,'Dec');assert.equal(months[0].children[1].textContent,'2024');
   assert.equal(months.at(-1).children[0].textContent,'Mar');assert.equal(months.at(-1).children[1].textContent,'2026');
+});
+
+function hourlyFixture(){
+  const start=Date.parse('2026-11-02T00:37:15-08:00'),end=start+86400000,hour=3600000;
+  const hours=[];
+  for(let boundary=Math.floor(start/hour)*hour;boundary<end;boundary+=hour){
+    hours.push({start_ms:Math.max(start,boundary),end_ms:Math.min(end,boundary+hour),counts:{keyboard:0,mouse:0},approximate:false});
+  }
+  hours[0].counts={keyboard:7,mouse:2};hours[24].counts={keyboard:3,mouse:1};
+  return {...snapshot(),now:new Date(end).toISOString(),hourly:hours};
+}
+
+test('hourly chart retains partial edges, zero hours and keyboard/mouse counts in all eight languages',()=>{
+  for(const locale of Object.keys(messages)){
+    const a=app(),s=hourlyFixture(),i=createI18n(messages,locale);
+    a.window.receiveView({locale,language_preference:locale});a.window.receive(s);
+    const chart=a.get('hourly-chart'),plot=chart.children[0];
+    assert.equal(plot.children.length,25);assert.equal(a.get('hourly-total').textContent,i.number(13));
+    assert.equal(plot.children[1].children[0].style.height,'0%');
+    assert.ok(parseFloat(plot.children[0].children[0].style.height)>parseFloat(plot.children[0].children[1].style.height));
+    assert.match(plot.children[0].attributes['aria-label'],new RegExp(messages[locale]['common.keyboard']));
+    plot.children[0].fire('mouseenter');
+    assert.equal(a.get('hourly-detail').textContent,plot.children[0].attributes['aria-label']);
+    assert.ok(a.get('hourly-detail').textContent.includes(i.number(7)));
+    assert.equal(a.get('hourly-detail').textContent.includes('chart.'),false);
+    const first=chart.children[2].children[0].children[0].textContent;
+    assert.equal(first,i.date(s.hourly[0].start_ms,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}));
+    assert.equal(chart.children[3].hidden,true);
+    s.hourly.forEach(h=>h.counts={keyboard:0,mouse:0});a.window.receive(s);
+    assert.equal(chart.children[3].hidden,false);assert.equal(chart.children[3].textContent,messages[locale]['common.empty']);
+  }
+});
+
+test('hourly live refresh preserves focused bars, updates details and marks approximate imported data',()=>{
+  const a=app(),s=hourlyFixture();a.window.receive(s);
+  const chart=a.get('hourly-chart'),plot=chart.children[0],bar=plot.children[24],replacements=chart.replacements;
+  bar.focus();bar.fire('focus');
+  s.hourly[24].counts.mouse=6;s.hourly[24].end_ms+=2000;s.hourly[0].start_ms+=2000;s.hourly[0].approximate=true;
+  a.window.receive(s);
+  assert.equal(chart.replacements,replacements);assert.equal(chart.children[0],plot);
+  assert.equal(a.context.document.activeElement,bar);
+  assert.equal(a.get('hourly-detail').textContent,bar.attributes['aria-label']);
+  assert.match(a.get('hourly-total').textContent,/^≈ /);
+  assert.match(plot.children[0].attributes['aria-label'],/≈ /);
+  bar.listeners.keydown({key:'ArrowLeft',preventDefault(){}});
+  assert.equal(a.context.document.activeElement,plot.children[23]);
+  bar.listeners.keydown({key:'Home',preventDefault(){}});
+  assert.equal(a.context.document.activeElement,plot.children[0]);
+  a.window.receiveView({compact:true});s.hourly[0].counts.keyboard=50;a.window.receive(s);
+  assert.equal(chart.replacements,replacements);
+  a.window.receiveView({compact:false});
+  assert.match(plot.children[0].attributes['aria-label'],/50/);
+});
+
+test('hourly local times distinguish repeated DST hours and span the spring clock jump',()=>{
+  const previous=process.env.TZ;
+  try{
+    process.env.TZ='America/Los_Angeles';
+    for(const [start,repeat] of [['2026-11-01T00:00:00-07:00',true],['2026-03-08T00:00:00-08:00',false]]){
+      const a=app(),s=snapshot(),base=Date.parse(start);
+      s.hourly=Array.from({length:24},(_,index)=>({start_ms:base+index*3600000,end_ms:base+(index+1)*3600000,counts:{keyboard:1,mouse:0},approximate:false}));
+      a.window.receive(s);
+      const bars=a.get('hourly-chart').children[0].children;
+      assert.equal(bars.length,24);
+      if(repeat){
+        assert.match(bars[1].attributes['aria-label'],/01:00/);assert.match(bars[2].attributes['aria-label'],/01:00/);
+        assert.notEqual(bars[1].attributes['aria-label'],bars[2].attributes['aria-label']);
+        assert.match(bars[1].attributes['aria-label'],/PDT/);assert.match(bars[2].attributes['aria-label'],/PST/);
+      }else{
+        assert.match(bars[1].attributes['aria-label'],/01:00.*03:00/);
+        assert.match(bars[2].attributes['aria-label'],/03:00.*04:00/);
+      }
+    }
+  }finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous;}
 });

@@ -12,6 +12,8 @@ The statistics app works offline, with no telemetry, account, cloud sync or uplo
 
 Today and the last seven days follow local calendar days. Rolling windows cover `(now − window, now]` and exclude future timestamps. Older minute-only records show `≈` until precise records cover the entire window.
 
+The overview’s hourly chart covers that same trailing 24-hour interval, with separate keyboard and mouse counts. Intervals align with the current local hour: 24 full hours or 25 columns with partial hours at the edges. Each full interval covers one elapsed hour, including across clock changes. Hover or keyboard-focus a column for its actual date, time range and counts. Repeated daylight-saving hours stay separate; empty hours remain visible. Minute-only records are grouped once and marked approximate.
+
 | Data | Retention |
 | --- | --- |
 | Minute details | Permanent |

@@ -12,6 +12,7 @@ pub mod db;
 #[cfg(target_os = "macos")]
 pub mod handoff;
 pub mod history_import;
+pub mod hourly;
 pub mod input;
 pub mod localization;
 pub mod platform;
