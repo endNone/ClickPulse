@@ -77,7 +77,6 @@ Default desktop startup uses the platform's ClickPulse user-data directory and c
 
 ```sh
 cargo run --locked -- stats --json
-cargo run --locked -- export --output /path/to/new-activity.csv
 cargo run --locked -- --source-db /path/to/existing.sqlite3 stats --json
 cargo run --locked -- migrate --source /path/to/existing.sqlite3 --output /path/to/new.sqlite3
 ```

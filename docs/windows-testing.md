@@ -9,7 +9,6 @@ The 0.1.0 preview's Windows x64 portable package passes automated Rust/interface
 | Program | `%LOCALAPPDATA%\Programs\ClickPulse` | Another fixed folder is allowed; keep the EXE, Loader DLL and licenses together |
 | Statistics and preferences | `%LOCALAPPDATA%\ClickPulse` | Belongs to the signed-in Windows user, independently of the program folder |
 | Log | `%LOCALAPPDATA%\ClickPulse\logs\clickpulse.log` | Recording status and startup/capture diagnostics |
-| Test exports | A folder chosen by the tester | CSV export must not overwrite an existing file |
 
 Install and run in the target user's interactive desktop session. Confirm the user and environment variables before choosing paths; an administrator account, SSH session or WSL shell may use a different profile. Use Windows-local history or synthetic test data.
 
@@ -42,7 +41,7 @@ Verify package SHA256 values and manifest file hashes. Extract the complete pack
 | Reopen/single instance | Tray double-click or running the EXE again opens full statistics with one collector process |
 | Keyboard views | Compact PC layout ends at the Space/modifier row, with no stretched navigation/numpad rows below it; both views report used visible keys consistently while preserving all stored counts |
 | Persistence | Totals survive normal exit/reopen and continue increasing |
-| CSV | Export agrees with displayed history and refuses to overwrite an existing path |
+| Removed CSV export | Current source has no toolbar/history export actions and rejects the former `export` command without creating files |
 | Data location | Default launch uses `%LOCALAPPDATA%\ClickPulse\events.sqlite3` independently of the working directory; Settings distinguishes custom/read-only/demo sessions |
 | Launch at login | Only default-database sessions expose and handle startup changes; custom `--db`, read-only and demo sessions cannot change the default startup entry. Record an actual sign-out/sign-in test separately |
 

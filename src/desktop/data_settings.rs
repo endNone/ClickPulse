@@ -119,15 +119,3 @@ pub(super) fn show_error(window: &tao::window::Window, locale: Locale, error: &s
         .set_level(MessageLevel::Error)
         .show();
 }
-
-pub(super) fn show_export_error(window: &tao::window::Window, locale: Locale, error: &str) {
-    MessageDialog::new()
-        .set_parent(window)
-        .set_title(locale.text("native.export_title"))
-        .set_description(format!(
-            "{}\n\n{error}",
-            locale.text("message.export_failed")
-        ))
-        .set_level(MessageLevel::Error)
-        .show();
-}

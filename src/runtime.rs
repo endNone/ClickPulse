@@ -25,7 +25,6 @@ pub(crate) enum Command {
     Snapshot(Sender<Result<Snapshot>>),
     SnapshotAsync(SnapshotDelivery),
     SportSample(SportDelivery),
-    Export(PathBuf, Completion<()>),
     Import(
         PathBuf,
         PathBuf,
@@ -540,29 +539,6 @@ impl Runtime {
         self.paused.load(Ordering::Relaxed)
     }
 
-    /// Blocking convenience API for non-UI callers; waits for the actual result.
-    pub fn export(&self, path: PathBuf) -> Result<()> {
-        let (tx, rx) = bounded(1);
-        self.request_export(path, move |result| {
-            let _ = tx.send(result);
-        })?;
-        // Wait for the definite result: a timeout must not report failure while
-        // a queued export may still go on to publish its file.
-        rx.recv().context("Export worker stopped")?
-    }
-
-    /// Queue CSV export without waiting on the caller's UI thread.
-    pub fn request_export(
-        &self,
-        path: PathBuf,
-        reply: impl FnOnce(Result<()>) + Send + 'static,
-    ) -> Result<()> {
-        self.tx
-            .try_send(Command::Export(path, Completion::new(reply)))
-            .map_err(|_| anyhow!("Export worker is unavailable"))?;
-        Ok(())
-    }
-
     pub fn shutdown(&mut self) -> Result<()> {
         // Stop and join all producers before draining the storage queue.
         self.stop_capture.store(true, Ordering::Relaxed);
@@ -647,9 +623,6 @@ fn source_loop_inner(
                     _ => unreachable!(),
                 }
             }
-            Command::Export(path, reply) => {
-                reply.complete(source.export_daily(&path));
-            }
             Command::Import(_, _, reply) => {
                 reply.complete(Err(anyhow!("Read-only source cannot import history")));
             }
@@ -690,12 +663,6 @@ impl Storage {
         match self {
             Self::Independent(db) => db.snapshot(now),
             Self::App(db) => db.snapshot(now),
-        }
-    }
-    fn export_daily(&self, path: &Path) -> Result<()> {
-        match self {
-            Self::Independent(db) => db.export_daily(path),
-            Self::App(db) => db.export_daily(path),
         }
     }
     fn prune_rolling_cache(&mut self, now: i64) -> Result<()> {
@@ -904,10 +871,6 @@ impl StorageWorker {
             }
             Command::SnapshotAsync(delivery) => delivery.complete(db.snapshot(Local::now())),
             Command::SportSample(delivery) => delivery.complete(db.lifetime()),
-            Command::Export(path, reply) => self.spawn_job(move |db| {
-                let result = db.export_daily(&path);
-                Box::new(move || reply.complete(result))
-            })?,
             Command::Import(source, current, reply) => self.spawn_job(move |db| {
                 let result = match db {
                     Storage::App(db) => db.import_history(&source, &current),
@@ -1018,29 +981,11 @@ fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
 mod tests {
     use super::*;
 
-    fn exported_counts(path: &Path) -> crate::db::Counts {
-        let csv = std::fs::read_to_string(path).unwrap();
-        let mut lines = csv.lines();
-        assert_eq!(lines.next(), Some("date,keyboard,mouse,total"));
-        let mut total = crate::db::Counts::default();
-        for line in lines {
-            let columns = line.split(',').collect::<Vec<_>>();
-            assert_eq!(columns.len(), 4);
-            let keyboard = columns[1].parse::<i64>().unwrap();
-            let mouse = columns[2].parse::<i64>().unwrap();
-            assert_eq!(columns[3].parse::<i64>().unwrap(), keyboard + mouse);
-            total.keyboard += keyboard;
-            total.mouse += mouse;
-        }
-        total
-    }
-
     #[test]
-    fn queued_export_returns_immediately_and_shutdown_waits_for_accepted_work() {
+    fn queued_sample_and_shutdown_wait_for_import_and_all_accepted_input() {
         let temp = tempfile::tempdir().unwrap();
         let current = temp.path().join("current.sqlite3");
         let source = temp.path().join("locked.sqlite3");
-        let output = temp.path().join("exported-counts.csv");
         let lock = rusqlite::Connection::open(&source).unwrap();
         lock.execute_batch(&format!("CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER,PRIMARY KEY(bucket,dev,code)); INSERT INTO events VALUES(28000000,1,{},5); BEGIN EXCLUSIVE;", crate::collector::PHYSICAL_CODE_BASE)).unwrap();
         let mut runtime = Runtime::start_owned(&current, true).unwrap();
@@ -1064,24 +1009,22 @@ mod tests {
                 )
                 .unwrap();
         }
-        // End the stress producer before testing the nonblocking request API.
         let deadline = Instant::now() + Duration::from_secs(1);
         while runtime.tx.is_full() && Instant::now() < deadline {
             thread::yield_now();
         }
         assert!(!runtime.tx.is_full());
-        let (reply, exported) = bounded(1);
+        let (reply, sampled) = bounded(1);
         let start = Instant::now();
         runtime
-            .request_export(output.clone(), move |result| {
+            .request_sport_sample(move |result| {
                 let _ = reply.send(result);
             })
             .unwrap();
         assert!(start.elapsed() < Duration::from_secs(1));
-        assert!(exported.recv_timeout(Duration::from_millis(50)).is_err());
-        assert!(!output.exists());
+        assert!(sampled.recv_timeout(Duration::from_millis(50)).is_err());
         lock.execute_batch("ROLLBACK").unwrap();
-        // Quit while import/export are still queued: both must finish normally.
+        // Quit must still finish the accepted import, buffered input and queued read.
         runtime.shutdown().unwrap();
         assert_eq!(
             imported
@@ -1092,114 +1035,20 @@ mod tests {
                 .keyboard,
             5
         );
-        exported
-            .recv_timeout(Duration::from_secs(1))
-            .unwrap()
-            .unwrap();
+        let sample: serde_json::Value = serde_json::from_str(
+            &sampled
+                .recv_timeout(Duration::from_secs(1))
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(sample["keyboard"], 5);
+        assert_eq!(sample["mouse"], 20_000);
         assert_eq!(
-            exported_counts(&output),
+            LiveSource::open(&current).unwrap().lifetime().unwrap(),
             crate::db::Counts {
                 keyboard: 5,
                 mouse: 20_000
-            }
-        );
-        assert_eq!(
-            LiveSource::open(&current).unwrap().lifetime().unwrap(),
-            exported_counts(&output)
-        );
-    }
-
-    #[test]
-    fn failed_export_preserves_existing_file_and_does_not_stop_recording() {
-        for owned in [false, true] {
-            let temp = tempfile::tempdir().unwrap();
-            let path = temp.path().join("counts.sqlite3");
-            let existing = temp.path().join("existing.csv");
-            std::fs::write(&existing, b"keep original").unwrap();
-            let mut runtime = if owned {
-                Runtime::start_owned(&path, true)
-            } else {
-                Runtime::start(&path, None, true)
-            }
-            .unwrap();
-            let (reply, receive) = bounded(1);
-            runtime
-                .request_export(existing.clone(), move |result| {
-                    let _ = reply.send(result);
-                })
-                .unwrap();
-            assert!(
-                receive
-                    .recv_timeout(Duration::from_secs(5))
-                    .unwrap()
-                    .is_err()
-            );
-            assert_eq!(std::fs::read(existing).unwrap(), b"keep original");
-            runtime
-                .tx
-                .send(Command::Input(InputEvent {
-                    ts_ms: Local::now().timestamp_millis(),
-                    device: crate::input::Device::Mouse,
-                    code: 1,
-                }))
-                .unwrap();
-            let output = temp.path().join("new.csv");
-            runtime.export(output.clone()).unwrap();
-            assert_eq!(
-                exported_counts(&output),
-                crate::db::Counts {
-                    keyboard: 0,
-                    mouse: 1
-                }
-            );
-            assert!(runtime.capture_status().unwrap().error.is_none());
-            runtime.shutdown().unwrap();
-        }
-    }
-
-    #[test]
-    fn read_only_source_export_completes_without_default_profile_access() {
-        let temp = tempfile::tempdir().unwrap();
-        let source = temp.path().join("source.sqlite3");
-        let output = temp.path().join("source.csv");
-        let mut db = CollectorDb::open(&source).unwrap();
-        db.insert(&[InputEvent {
-            ts_ms: Local::now().timestamp_millis(),
-            device: crate::input::Device::Keyboard,
-            code: 0,
-        }])
-        .unwrap();
-        drop(db);
-        let source = LiveSource::open(&source).unwrap();
-        let (tx, rx) = bounded(8);
-        let worker = thread::spawn(move || {
-            source_loop_inner(
-                source,
-                rx,
-                Arc::new(AtomicBool::new(true)),
-                Arc::new(Mutex::new(CaptureStatus::default())),
-                false,
-            )
-        });
-        let (reply, result) = bounded(1);
-        tx.send(Command::Export(
-            output.clone(),
-            Completion::new(move |value| {
-                let _ = reply.send(value);
-            }),
-        ))
-        .unwrap();
-        tx.send(Command::Stop).unwrap();
-        worker.join().unwrap().unwrap();
-        result
-            .recv_timeout(Duration::from_secs(1))
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            exported_counts(&output),
-            crate::db::Counts {
-                keyboard: 1,
-                mouse: 0
             }
         );
     }

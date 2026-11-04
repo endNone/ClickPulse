@@ -25,7 +25,7 @@ History is not deleted by age. Only the temporary rolling cache is pruned; saved
 
 The status log is optional diagnostic output, separate from activity history. Identical consecutive status lines are skipped. Older log versions that exceed the limit are trimmed to their most recent bytes, and rotation replaces the oldest diagnostic copy. Log failures do not stop database recording.
 
-The calendar and CSV exports use all daily summaries, independently of the recent trend range. Storage paths and backup steps are listed in the [usage guide](usage.md#data-locations-and-backups).
+The calendar uses all daily summaries, independently of the recent trend range. Storage paths and backup steps are listed in the [usage guide](usage.md#data-locations-and-backups).
 
 ## Historical keys
 
@@ -51,4 +51,4 @@ Database schema upgrades are transactional and refuse a newer unsupported format
 
 Explicit migration uses SQLite backup, including committed WAL records, and validates daily totals, lifetime totals and database integrity. It creates a new destination and preserves the source. It rejects an existing destination, does not merge overlapping history and does not stop other services.
 
-CSV contains daily activity history. Use demo or redacted evidence in public screenshots and reports; do not attach real databases, raw logs, preferences or personal paths.
+Use demo or redacted evidence in public screenshots and reports; do not attach real databases, raw logs, preferences or personal paths.

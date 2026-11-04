@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Remove CSV export from the toolbar, History page and command line; retain complete SQLite history, database import and automatic backups.
+
 ## 0.1.0 — Preview · 2026-10-10
 
 - Keep toolbar actions centered at the top while scrolling, with repeated page names removed.

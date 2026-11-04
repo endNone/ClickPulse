@@ -173,7 +173,7 @@ pub fn preferred_languages() -> Option<Vec<String>> {
 }
 
 pub fn attach_parent_console() {
-    // Preserve redirected pipes for CLI stats/exports invoked from scripts.
+    // Preserve redirected pipes for CLI statistics invoked from scripts.
     let handles = [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE]
         .map(|kind| (kind, unsafe { GetStdHandle(kind) }));
     if unsafe { AttachConsole(ATTACH_PARENT_PROCESS) } != 0 {

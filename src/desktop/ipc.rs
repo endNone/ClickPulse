@@ -30,7 +30,6 @@ pub(super) enum Request {
     Pause {},
     Permission {},
     Autostart {},
-    Export {},
     Reveal {},
     StorageDirectory {},
     ImportHistory {},
@@ -61,6 +60,7 @@ mod tests {
     fn invalid_actions_and_payloads_are_rejected() {
         for body in [
             r#"{"action":"unknown"}"#,
+            r#"{"action":"export"}"#,
             r#"{"action":"theme"}"#,
             r#"{"action":"theme","theme":"unknown"}"#,
             r#"{"action":"language","language":null}"#,

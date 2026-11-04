@@ -39,7 +39,7 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   get('keyboard-layout').parentElement=new Element();
   get('keyboard-treemap').clientWidth=640;get('keyboard-treemap').clientHeight=279;
   const root=new Element('root');root.lang='en';
-  document={documentElement:root,body:new Element(),getElementById:get,
+  document={documentElement:root,body:new Element(),getElementById:id=>['export','history-export'].includes(id)?null:get(id),
     querySelector(selector){return get(selector==='header'?'header':selector==='.sidebar'?'sidebar':'main');},
     querySelectorAll(selector){return selector==='nav button'?nav:selector==='.page'?pages:[];},
     createElement(){const node=new Element();node.ownerDocument=document;return node;},createElementNS(){const node=new Element();node.ownerDocument=document;return node;}};
@@ -320,28 +320,28 @@ test('refresh preserves selected statistics text until copying finishes',()=>{
 test('data processing prevents another mutation while page navigation remains available',()=>{
   const a=app();a.window.receive(snapshot());a.window.receiveDataBusy(true);
   assert.equal(a.get('data-operation-status').hidden,false);
-  for(const id of ['storage-directory','import-history','export','history-export','reveal'])assert.equal(a.get(id).disabled,true);
+  for(const id of ['storage-directory','import-history','reveal'])assert.equal(a.get(id).disabled,true);
   a.navigate('history');assert.equal(a.get('page-title').textContent,messages.en['page.history']);
   a.navigate('settings');assert.equal(a.get('reveal').disabled,true);
   a.window.receiveDataBusy(false);assert.equal(a.get('data-operation-status').hidden,true);
-  for(const id of ['storage-directory','import-history','export','history-export','reveal'])assert.equal(a.get(id).disabled,false);
+  for(const id of ['storage-directory','import-history','reveal'])assert.equal(a.get(id).disabled,false);
 });
 
-test('CSV export stays visible across language switches and keeps navigation while blocking overlapping work',()=>{
+test('history processing stays visible across language switches and blocks overlapping work',()=>{
   const a=app(),s={...snapshot(),source_mode:true,setup_pending:true,database_mode:'source'};a.window.receive(s);
-  a.window.receiveDataBusy(true,'export');
+  a.window.receiveDataBusy(true);
   for(const locale of Object.keys(messages)){
     a.window.setInterfaceLanguage(locale,locale);
-    assert.equal(a.get('data-operation-message').textContent,messages[locale]['storage.exporting']);
+    assert.equal(a.get('data-operation-message').textContent,messages[locale]['storage.processing']);
     a.navigate('settings');assert.equal(a.get('takeover').disabled,true);
-    a.navigate('history');assert.equal(a.get('history-export').disabled,true);
+    a.navigate('history');assert.equal(a.get('import-history').disabled,true);
     assert.equal(a.get('data-operation-status').hidden,false);
   }
   a.window.receiveDataBusy(false);
   assert.equal(a.get('data-operation-status').hidden,true);
   assert.equal(a.get('takeover').disabled,false);
   a.window.receive({...s,capture:{listening:false,permission_needed:true,error:null}});
-  a.window.receiveDataBusy(true,'export');a.window.receiveDataBusy(false);
+  a.window.receiveDataBusy(true);a.window.receiveDataBusy(false);
   assert.equal(a.get('takeover').disabled,true);
 });
 

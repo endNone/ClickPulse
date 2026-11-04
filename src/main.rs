@@ -53,11 +53,6 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Export daily statistics to a new CSV file without overwriting
-    Export {
-        #[arg(short, long)]
-        output: PathBuf,
-    },
     /// Import a legacy database into the independently selected --db
     Import { path: PathBuf },
     /// Migrate an existing database to a new file without stopping any service
@@ -174,10 +169,6 @@ fn run(cli: Cli) -> Result<()> {
             let source = LiveSource::open(&path)?;
             match command {
                 Commands::Stats { json } => print_stats(source.snapshot(Local::now())?, json)?,
-                Commands::Export { output } => {
-                    source.export_daily(&output)?;
-                    println!("Exported to {}", output.display());
-                }
                 Commands::Import { .. } => unreachable!(),
                 Commands::Migrate { .. } => unreachable!(),
             }
@@ -188,10 +179,6 @@ fn run(cli: Cli) -> Result<()> {
             }
             match command {
                 Commands::Stats { json } => print_stats(db.snapshot(Local::now())?, json)?,
-                Commands::Export { output } => {
-                    db.export_daily(&output)?;
-                    println!("Exported to {}", output.display());
-                }
                 Commands::Import { path: source } => {
                     if source.canonicalize()? == path.canonicalize()? {
                         bail!("The legacy source and destination database must be different files");
@@ -223,6 +210,6 @@ fn run(cli: Cli) -> Result<()> {
     );
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     bail!(
-        "The desktop application requires macOS or Windows; use stats, import, export or migrate instead"
+        "The desktop application requires macOS or Windows; use stats, import or migrate instead"
     );
 }

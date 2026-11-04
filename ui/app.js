@@ -21,16 +21,15 @@ const Dropdowns=ClickPulseDropdowns.create(document,window);
 const total=c=>(c?.keyboard||0)+(c?.mouse||0);
 const send=(action,values={})=>window.ipc?.postMessage(JSON.stringify({action,...values}));
 let data=null,page='overview',range=14,toastTimer;
-let dataOperationBusy=false,dataOperationKind='history';
+let dataOperationBusy=false;
 function renderDataOperation(){
   $('data-operation-status').hidden=!dataOperationBusy;
-  $('data-operation-message').textContent=t(dataOperationKind==='export'?'storage.exporting':'storage.processing');
-  for(const id of ['storage-directory','import-history','export','history-export','reveal'])$(id).disabled=dataOperationBusy||(id==='reveal'&&!!data?.demo);
+  $('data-operation-message').textContent=t('storage.processing');
+  for(const id of ['storage-directory','import-history','reveal'])$(id).disabled=dataOperationBusy||(id==='reveal'&&!!data?.demo);
   $('takeover').disabled=dataOperationBusy||!data?.capture?.listening||!!data?.capture?.permission_needed;
 }
-window.receiveDataBusy=(busy,kind='history')=>{
+window.receiveDataBusy=busy=>{
   dataOperationBusy=!!busy;
-  dataOperationKind=kind==='export'?'export':'history';
   renderDataOperation();
 };
 let calendarRange='all',historyRange='all',historyPage=0,calendarLayout='',historySignature='';
@@ -106,7 +105,6 @@ document.querySelectorAll('[data-range]').forEach(button=>button.addEventListene
   range=Number(button.dataset.range);document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('selected',b===button));if(data)renderTrend($('trend-chart'),data.days.slice(-range));
 }));
 for(const id of ['pause','settings-pause'])$(id).addEventListener('click',()=>send('pause'));
-for(const id of ['export','history-export'])$(id).addEventListener('click',()=>send('export'));
 for(const id of ['permission','settings-permission'])$(id).addEventListener('click',()=>send('permission'));
 $('storage-directory').addEventListener('click',()=>send('storage_directory'));
 $('import-history').addEventListener('click',()=>send('import_history'));

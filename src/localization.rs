@@ -218,7 +218,7 @@ mod tests {
     fn shared_catalog_localizes_native_controls_and_preserves_placeholders() {
         assert_eq!(Locale::English.text("native.open"), "Open statistics");
         assert_eq!(Locale::Chinese.text("native.open"), "打开统计");
-        assert!(Locale::English.text("message.exported").contains("{path}"));
+        assert!(Locale::English.text("storage.imported").contains("{path}"));
         for (locale, label) in [
             (Locale::TraditionalChinese, "個人化"),
             (Locale::Japanese, "カスタマイズ"),

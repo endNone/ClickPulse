@@ -38,7 +38,6 @@ fn help_and_plain_statistics_use_english_and_preserve_the_source() {
     for args in [
         &["--help"][..],
         &["stats", "--help"][..],
-        &["export", "--help"][..],
         &["import", "--help"][..],
         &["migrate", "--help"][..],
     ] {
@@ -215,4 +214,27 @@ fn explicit_migration_preserves_source_and_refuses_an_existing_destination() {
         serde_json::from_slice::<serde_json::Value>(&stats.stdout).unwrap()["lifetime"]["keyboard"],
         123
     );
+}
+
+#[test]
+fn removed_csv_command_is_rejected_without_creating_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let database = temp.path().join("must-not-create.sqlite3");
+    let output = temp.path().join("must-not-create.csv");
+    let result = Command::new(env!("CARGO_BIN_EXE_clickpulse"))
+        .arg("--db")
+        .arg(&database)
+        .arg("export")
+        .arg("--output")
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    assert!(
+        String::from_utf8(result.stderr)
+            .unwrap()
+            .contains("unrecognized subcommand")
+    );
+    assert!(!database.exists());
+    assert!(!output.exists());
 }

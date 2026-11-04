@@ -1,5 +1,5 @@
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -60,19 +60,11 @@ enum UiEvent {
 enum DataOutcome {
     Imported(clickpulse::history_import::ImportReport),
     Relocated(clickpulse::runtime::Relocation),
-    Exported(PathBuf),
-}
-
-#[derive(Clone, Copy, Debug)]
-enum DataOperation {
-    History,
-    Export,
 }
 
 enum DataNotice {
     Imported(clickpulse::history_import::ImportReport),
-    Exported(PathBuf),
-    Failed(DataOperation, String),
+    Failed(String),
 }
 
 pub struct Options {
@@ -371,7 +363,7 @@ pub fn run(
     let mut snapshots = SnapshotGate::default();
     let mut sport_samples = SnapshotGate::default();
     let mut last_sport_sample = Instant::now() - Duration::from_secs(1);
-    let mut data_job: Option<(u64, DataOperation)> = None;
+    let mut data_job: Option<u64> = None;
     let mut next_data_job = 0u64;
     let mut quit_after_data = false;
     let mut data_notice: Option<DataNotice> = None;
@@ -386,7 +378,7 @@ pub fn run(
         let mut view_changed = false;
         match event {
             Event::UserEvent(UiEvent::DataFinished { id, result }) => {
-                if let Some((current, operation)) = data_job
+                if let Some(current) = data_job
                     && current == id
                 {
                     data_job = None;
@@ -399,9 +391,6 @@ pub fn run(
                         Ok(DataOutcome::Imported(report)) if !quit_after_data => {
                             data_notice = Some(DataNotice::Imported(report))
                         }
-                        Ok(DataOutcome::Exported(path)) if !quit_after_data => {
-                            data_notice = Some(DataNotice::Exported(path))
-                        }
                         Ok(DataOutcome::Relocated(relocation)) => {
                             if let Some(rt) = &mut runtime {
                                 rt.finish_relocation(relocation);
@@ -412,7 +401,7 @@ pub fn run(
                             if quit_after_data && (!visible || preferences.compact) {
                                 eprintln!("Data operation failed before quit: {error}");
                             } else {
-                                data_notice = Some(DataNotice::Failed(operation, error));
+                                data_notice = Some(DataNotice::Failed(error));
                             }
                         }
                     }
@@ -780,54 +769,6 @@ pub fn run(
                                 }
                             }
                         }
-                        Request::Export {} => {
-                            if data_job.is_some() {
-                                return;
-                            }
-                            if let Some(rt) = &runtime {
-                                let name = format!(
-                                    "ClickPulse-{}.csv",
-                                    Local::now().format("%Y%m%d-%H%M%S")
-                                );
-                                window.set_focus();
-                                if let Some(path) = rfd::FileDialog::new()
-                                    .set_parent(window.as_ref())
-                                    .set_title(locale.text("native.export_title"))
-                                    .set_file_name(name)
-                                    .add_filter("CSV", &["csv"])
-                                    .save_file()
-                                {
-                                    next_data_job = next_data_job.wrapping_add(1);
-                                    let id = next_data_job;
-                                    data_job = Some((id, DataOperation::Export));
-                                    let proxy = snapshot_proxy.clone();
-                                    if let Err(error) =
-                                        rt.request_export(path.clone(), move |result| {
-                                            let _ = proxy.send_event(UiEvent::DataFinished {
-                                                id,
-                                                result: result
-                                                    .map(|()| DataOutcome::Exported(path))
-                                                    .map_err(|error| format!("{error:#}")),
-                                            });
-                                        })
-                                    {
-                                        data_job = None;
-                                        report_error(
-                                            &webview,
-                                            locale,
-                                            "message.export_failed",
-                                            &error,
-                                        );
-                                    }
-                                    let _ = webview.evaluate_script(&format!("window.receiveDataBusy?.({},'export');window.receiveSport?.({{available:false}});", data_job.is_some()));
-                                    snapshots.invalidate();
-                                    sport_samples.invalidate();
-                                    refresh = true;
-                                }
-                            } else {
-                                toast(&webview, &locale.text("message.demo_export"));
-                            }
-                        }
                         Request::Reveal {} => {
                             if let Some(rt) = &runtime
                                 && let Err(error) = clickpulse::platform::reveal(rt.database_path())
@@ -842,7 +783,7 @@ pub fn run(
                             {
                                 next_data_job = next_data_job.wrapping_add(1);
                                 let id = next_data_job;
-                                data_job = Some((id, DataOperation::History));
+                                data_job = Some(id);
                                 let proxy = snapshot_proxy.clone();
                                 let reply = move |result: anyhow::Result<DataOutcome>| {
                                     let _ = proxy.send_event(UiEvent::DataFinished {
@@ -958,18 +899,7 @@ pub fn run(
                 DataNotice::Imported(report) => {
                     data_settings::show_import_report(&window, locale, report)
                 }
-                DataNotice::Exported(path) => toast(
-                    &webview,
-                    &locale
-                        .text("message.exported")
-                        .replace("{path}", &path.display().to_string()),
-                ),
-                DataNotice::Failed(DataOperation::History, error) => {
-                    data_settings::show_error(&window, locale, &error)
-                }
-                DataNotice::Failed(DataOperation::Export, error) => {
-                    data_settings::show_export_error(&window, locale, &error)
-                }
+                DataNotice::Failed(error) => data_settings::show_error(&window, locale, &error),
             }
         }
         if view_changed {

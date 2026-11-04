@@ -98,8 +98,8 @@ test('display dates are localized without moving a saved calendar day across tim
 
 test('template values are inserted literally and never interpreted as other parameters',()=>{
   const i=create(messages,'en');
-  const path='/tmp/<file>{count}.csv';
-  assert.equal(i.t('message.exported',{path}),`Exported: ${path}`);
+  const path='/tmp/<file>{count}.sqlite3';
+  assert.ok(i.t('storage.imported',{count:3,overlap:1,path}).includes(path));
   assert.equal(i.t('keys.tooltip',{key:'A',count:'12',percent:'1.00%'}),'A · 12 key presses · 1.00%');
 });
 

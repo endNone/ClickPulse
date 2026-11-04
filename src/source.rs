@@ -52,7 +52,7 @@ impl LiveSource {
         let ready = aggregates_ready(&tx)?;
         let activity = activity_counts(&tx, now.timestamp_millis(), ready)?;
         let lifetime = activity.lifetime;
-        let history = daily_counts(&tx, ready, Some(&today_s))?;
+        let history = daily_counts(&tx, ready, &today_s)?;
         let today = history.get(&today_s).copied().unwrap_or_default();
         let mut week = Counts::default();
         for (day, c) in &history {
@@ -215,49 +215,17 @@ impl LiveSource {
         Ok(metadata_int(&self.conn, "heartbeat_ms")?
             .is_some_and(|heartbeat| (now_ms - heartbeat).abs() < 10000))
     }
-
-    /// Read only the daily data needed by CSV, including every persisted date.
-    pub fn export_daily(&self, path: &Path) -> Result<()> {
-        use std::io::Write;
-        let history = {
-            let tx = self.conn.unchecked_transaction()?;
-            daily_counts(&tx, aggregates_ready(&tx)?, None)?
-        };
-        let mut file = std::fs::File::create_new(path)?;
-        writeln!(file, "date,keyboard,mouse,total")?;
-        for (day, counts) in history {
-            writeln!(
-                file,
-                "{},{},{},{}",
-                day,
-                counts.keyboard,
-                counts.mouse,
-                counts.total()
-            )?;
-        }
-        file.sync_all()?;
-        Ok(())
-    }
 }
 
-fn daily_counts(
-    conn: &Connection,
-    ready: bool,
-    through: Option<&str>,
-) -> Result<BTreeMap<String, Counts>> {
-    let sql = match (ready, through.is_some()) {
-        (true, true) => "SELECT day,dev,cnt FROM daily_totals WHERE day<=?1 ORDER BY day",
-        (true, false) => "SELECT day,dev,cnt FROM daily_totals ORDER BY day",
-        (false, true) => {
-            "SELECT date(bucket*60,'unixepoch','localtime') AS day,dev,SUM(cnt) FROM events GROUP BY day,dev HAVING day<=?1 ORDER BY day"
-        }
-        (false, false) => {
-            "SELECT date(bucket*60,'unixepoch','localtime') AS day,dev,SUM(cnt) FROM events GROUP BY day,dev ORDER BY day"
-        }
+fn daily_counts(conn: &Connection, ready: bool, through: &str) -> Result<BTreeMap<String, Counts>> {
+    let sql = if ready {
+        "SELECT day,dev,cnt FROM daily_totals WHERE day<=?1 ORDER BY day"
+    } else {
+        "SELECT date(bucket*60,'unixepoch','localtime') AS day,dev,SUM(cnt) FROM events GROUP BY day,dev HAVING day<=?1 ORDER BY day"
     };
     let mut history = BTreeMap::new();
     let mut stmt = conn.prepare(sql)?;
-    for row in stmt.query_map(rusqlite::params_from_iter(through), |r| {
+    for row in stmt.query_map([through], |r| {
         Ok((
             r.get::<_, String>(0)?,
             r.get::<_, i64>(1)?,
@@ -446,12 +414,11 @@ mod tests {
     }
 
     #[test]
-    fn daily_export_keeps_all_saved_dates_while_the_ui_excludes_future_days() {
+    fn snapshots_exclude_future_days_without_changing_saved_history() {
         use crate::input::{Device, InputEvent};
         for cached in [false, true] {
             let temp = tempfile::tempdir().unwrap();
             let path = temp.path().join("source.sqlite3");
-            let output = temp.path().join("saved-counts.csv");
             let now = Local::now();
             let future = now + chrono::Duration::days(2);
             if cached {
@@ -490,79 +457,31 @@ mod tests {
                 )
                 .unwrap();
             }
+            let before = std::fs::read(&path).unwrap();
             let source = LiveSource::open(&path).unwrap();
+            let stats = source.snapshot(now).unwrap();
             assert!(
-                !source
-                    .snapshot(now)
-                    .unwrap()
+                !stats
                     .history_days
                     .iter()
                     .any(|day| day.day == future.date_naive().to_string())
             );
-            source.export_daily(&output).unwrap();
-            let csv = std::fs::read_to_string(output).unwrap();
-            assert!(
-                csv.lines()
-                    .any(|line| line == format!("{},1,0,1", now.date_naive()))
-            );
-            assert!(
-                csv.lines()
-                    .any(|line| line == format!("{},0,2,2", future.date_naive())),
-                "every persisted day must be exported: {csv}"
-            );
-            assert_eq!(csv.lines().count(), 3);
-        }
-    }
-
-    #[test]
-    fn cached_daily_export_does_not_query_minutes_keys_or_rolling_windows() {
-        use crate::input::{Device, InputEvent};
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("source.sqlite3");
-        let output = temp.path().join("daily-counts.csv");
-        let mut db = crate::collector::CollectorDb::open(&path).unwrap();
-        db.insert(&[InputEvent {
-            ts_ms: Local::now().timestamp_millis(),
-            device: Device::Keyboard,
-            code: 0,
-        }])
-        .unwrap();
-        drop(db);
-        let source = LiveSource::open(&path).unwrap();
-        unsafe extern "C" fn only_daily_reads(
-            _: *mut std::ffi::c_void,
-            action: std::ffi::c_int,
-            table: *const std::ffi::c_char,
-            _: *const std::ffi::c_char,
-            _: *const std::ffi::c_char,
-            _: *const std::ffi::c_char,
-        ) -> std::ffi::c_int {
-            if action == rusqlite::ffi::SQLITE_READ && !table.is_null() {
-                let table = unsafe { std::ffi::CStr::from_ptr(table) }.to_bytes();
-                if !matches!(
-                    table,
-                    b"daily_totals" | b"clickpulse_metadata" | b"sqlite_master" | b"sqlite_schema"
-                ) {
-                    return rusqlite::ffi::SQLITE_DENY;
-                }
-            }
-            rusqlite::ffi::SQLITE_OK
-        }
-        unsafe {
             assert_eq!(
-                rusqlite::ffi::sqlite3_set_authorizer(
-                    source.conn.handle(),
-                    Some(only_daily_reads),
-                    std::ptr::null_mut()
-                ),
-                rusqlite::ffi::SQLITE_OK
+                stats.today,
+                Counts {
+                    keyboard: 1,
+                    mouse: 0
+                }
             );
+            assert_eq!(
+                stats.lifetime,
+                Counts {
+                    keyboard: 1,
+                    mouse: 2
+                }
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), before);
         }
-        assert!(source.snapshot(Local::now()).is_err());
-        source.export_daily(&output).unwrap();
-        let csv = std::fs::read_to_string(output).unwrap();
-        assert_eq!(csv.lines().count(), 2);
-        assert!(csv.ends_with(",1,0,1\n"));
     }
 
     #[test]

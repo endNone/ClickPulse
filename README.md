@@ -32,13 +32,13 @@ Confirm **Recording**, then press a few keys and click in another app to check t
 
 ## Features
 
-The download links above still point to public preview build 55. Mini Sport, the expanded language options and data management below are in development source and are not included in that published preview.
+The download links above still point to public preview build 55. Mini Sport, the expanded language options and data management below are in development source and are not included in that published preview. Current development source also removes CSV export; the published preview retains its original features.
 
 - **Activity overview:** daily trends, seven-day and all-time totals, and an activity calendar.
 - **Keyboard views:** physical-key heatmap and a treemap sized by usage.
-- **History:** year filtering and CSV export of daily totals.
+- **History:** year filtering and complete daily records.
 - **Mini mode:** floating counts with pin, pause and expand controls; optional launch at login. Sport feedback grades combined keyboard/mouse speed from C to SS.
-- **Data management:** choose a save folder, merge compatible SQLite history with automatic backups, and export CSV in the background.
+- **Data management:** choose a save folder and merge compatible SQLite history with automatic backups.
 
 Four themes and eight interface languages are available in Settings: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German and Spanish. The language follows the system by default. Closing a window can keep recording; use **Quit ClickPulse** from the menu bar or tray to stop. See [Usage](docs/usage.md).
 
@@ -62,7 +62,7 @@ Demo data, English interface, default deep blue theme. Click an image to view th
 
 Statistics stay on your device, with no account, telemetry or cloud sync. ClickPulse records key/button identities, counts and timestamps; it does not record typed text, pointer positions or screen contents.
 
-History is kept permanently. Updating or uninstalling the program retains your data. CSV contains daily totals, so use a database backup to preserve complete history. See [Data and privacy](docs/data-and-privacy.md).
+History is kept permanently. Updating or uninstalling the program retains your data. Use a complete SQLite backup to preserve history. See [Data and privacy](docs/data-and-privacy.md).
 
 ## Documentation
 

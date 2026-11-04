@@ -250,27 +250,6 @@ impl EventDb {
         self.query_counts("SELECT dev,cnt FROM totals", [])
     }
 
-    pub fn export_daily(&self, path: &Path) -> Result<()> {
-        use std::io::Write;
-        let mut output = std::fs::File::create_new(path)
-            .with_context(|| format!("无法创建导出文件 {}（不会覆盖已有文件）", path.display()))?;
-        writeln!(output, "date,keyboard,mouse,total")?;
-        let mut stmt = self.conn.prepare("SELECT day,SUM(CASE WHEN dev=1 THEN cnt ELSE 0 END),SUM(CASE WHEN dev=0 THEN cnt ELSE 0 END) FROM daily GROUP BY day ORDER BY day")?;
-        let rows = stmt.query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, i64>(1)?,
-                r.get::<_, i64>(2)?,
-            ))
-        })?;
-        for row in rows {
-            let (day, keyboard, mouse) = row?;
-            writeln!(output, "{day},{keyboard},{mouse},{}", keyboard + mouse)?;
-        }
-        output.sync_all()?;
-        Ok(())
-    }
-
     pub fn rolling(&self, seconds: i64, now_ms: i64) -> Result<WindowCount> {
         if seconds <= 0 || seconds > 86_400 {
             bail!("滚动窗口必须在 1 到 86400 秒之间");
@@ -720,28 +699,6 @@ mod tests {
                 0
             );
         }
-    }
-
-    #[test]
-    fn csv_exports_all_history_and_refuses_to_overwrite() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("activity.csv");
-        let mut db = db();
-        db.insert(&[
-            event(1_000),
-            InputEvent {
-                ts_ms: 1_000,
-                device: Device::Mouse,
-                code: 1,
-            },
-        ])
-        .unwrap();
-        db.export_daily(&path).unwrap();
-        let before = std::fs::read_to_string(&path).unwrap();
-        assert!(before.starts_with("date,keyboard,mouse,total\n"));
-        assert!(before.ends_with(",1,1,2\n"));
-        assert!(db.export_daily(&path).is_err());
-        assert_eq!(std::fs::read_to_string(path).unwrap(), before);
     }
 
     #[test]
