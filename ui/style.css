@@ -189,7 +189,6 @@ body.compact .close-dialog-actions {margin-top:12px}
 .content,.mini-total,.mini-counts {user-select:text;-webkit-user-select:text}
 button,select,.preference-switch {user-select:none;-webkit-user-select:none}
 .setting-actions {display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
-.settings-footer {display:flex;justify-content:flex-end;padding-top:18px}
 
 .hourly-card .card-heading {align-items:center;margin-bottom:14px}
 .hourly-total {font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}

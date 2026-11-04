@@ -14,7 +14,7 @@ On Windows, extract and keep the complete portable program folder. Install WebVi
 
 | Page or action | Purpose |
 | --- | --- |
-| Overview | Today, the last seven days, all-time and rolling counts, trends and the activity calendar |
+| Overview | Today, the last seven days, all-time and rolling counts, 14/30/90-day trends and the activity calendar |
 | History | Daily records, year filtering and pages of older activity |
 | Keyboard heatmap | Physical-key usage; switch to the treemap to compare block areas |
 | Mini Sport | Optional click-speed ranks and effects inside the Mini window |
@@ -24,7 +24,7 @@ A held key counts once until released. Mouse counts track button presses, not mo
 
 ## Sport in Mini mode
 
-Sport appears only in the existing **320 × 208** Mini window. Use the lightning switch in its top-right toolbar to enable or disable it. Combined keyboard and mouse speed replaces the status badge with the current rank and clicks per second (CPS); normal activity totals remain visible.
+Sport is off by default, including its Mini switch. Enable the Sport control in Settings when wanted. Sport appears only in the existing **320 × 208** Mini window. Use the lightning switch in its top-right toolbar to enable or disable it. Combined keyboard and mouse speed replaces the status badge with the current rank and clicks per second (CPS); normal activity totals remain visible.
 
 Rank C is below 2 CPS, B starts at 2, A at 5, S at 8, and red SS at 12. Speed uses a rolling one-second window and naturally falls back when you stop clicking. Each key press and mouse button press contributes once; native held-key repeat filtering is unchanged. CPS represents their combined presses per second.
 

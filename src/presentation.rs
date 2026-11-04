@@ -67,7 +67,7 @@ impl Default for Preferences {
             theme: Default::default(),
             close_action: Default::default(),
             sport_enabled: false,
-            sport_visible: true,
+            sport_visible: false,
             sport_skin: Default::default(),
         }
     }
@@ -203,7 +203,7 @@ mod tests {
         assert_eq!(prefs.theme, Theme::Blue);
         assert_eq!(prefs.close_action, CloseAction::Ask);
         assert!(!prefs.sport_enabled);
-        assert!(prefs.sport_visible);
+        assert!(!prefs.sport_visible);
         assert_eq!(prefs.sport_skin, SportSkin::Warp);
         assert!(prefs.compact);
         assert!(!prefs.pinned);
@@ -250,6 +250,17 @@ mod tests {
                 crate::localization::LanguagePreference::English
             );
         }
+    }
+
+    #[test]
+    fn sport_defaults_off_and_retains_an_explicit_saved_choice() {
+        let defaults = Preferences::default();
+        assert!(!defaults.sport_enabled && !defaults.sport_visible);
+        let old: Preferences = serde_json::from_str(r#"{"compact":true}"#).unwrap();
+        assert!(!old.sport_enabled && !old.sport_visible);
+        let opted_in: Preferences =
+            serde_json::from_str(r#"{"sport_enabled":true,"sport_visible":true}"#).unwrap();
+        assert!(opted_in.sport_enabled && opted_in.sport_visible);
     }
 
     #[test]

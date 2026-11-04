@@ -13,7 +13,7 @@ const Sport=require('../ui/sport.js');
 // Small DOM adapter to exercise the actual App event handlers and render flow.
 class Element {
   constructor(id=''){
-    this.id=id;this.dataset={};this.children=[];this.listeners={};this.attributes={};this.value='all';this.replacements=0;
+    this.id=id;this.dataset={};this.children=[];this.listeners={};this.attributes={};this.value='all';this.checked=false;this.replacements=0;
     this.classList={toggle(){}};this.style={values:{},setProperty(key,value){this.values[key]=value;}};
   }
   append(...children){this.children.push(...children);}
@@ -35,13 +35,14 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   };
   const nav=['overview','history','keys','settings'].map(id=>{const button=new Element();button.dataset.page=id;return button;});
   const pages=nav.map(button=>get(button.dataset.page));
+  const ranges=[14,30,90].map(days=>{const button=new Element();button.dataset.range=String(days);return button;});
   get('status').append(new Element());
   get('keyboard-layout').parentElement=new Element();
   get('keyboard-treemap').clientWidth=640;get('keyboard-treemap').clientHeight=279;
   const root=new Element('root');root.lang='en';
-  document={documentElement:root,body:new Element(),getElementById:id=>['export','history-export'].includes(id)?null:get(id),
+  document={documentElement:root,body:new Element(),getElementById:id=>['export','history-export','settings-pause','recording-description','quit'].includes(id)?null:get(id),
     querySelector(selector){return get(selector==='header'?'header':selector==='.sidebar'?'sidebar':'main');},
-    querySelectorAll(selector){return selector==='nav button'?nav:selector==='.page'?pages:[];},
+    querySelectorAll(selector){return selector==='nav button'?nav:selector==='.page'?pages:selector==='[data-range]'?ranges:[];},
     createElement(){const node=new Element();node.ownerDocument=document;return node;},createElementNS(){const node=new Element();node.ownerDocument=document;return node;}};
   const window={ipc:{postMessage(){}},presentationView:{compact:false},clickpulsePlatform:platform,clickpulseMessages:messages,clickpulseLocale:'en'};
   Object.assign(window,{matchMedia:()=>({matches:reducedMotion,addEventListener(){}}),performance:{now:()=>now},setInterval(handler,ms){const id=++timerId;intervals.set(id,{handler,ms});return id;},clearInterval(id){intervals.delete(id);}});
@@ -54,7 +55,7 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   }
   vm.runInContext(readFileSync('ui/app.js','utf8'),context);
   vm.runInContext(readFileSync('ui/presentation.js','utf8'),context);
-  return {window,get,root,context,intervals,setTime(value){now=value;},navigate(page){nav.find(button=>button.dataset.page===page).fire();}};
+  return {window,get,root,context,intervals,setTime(value){now=value;},selectRange(days){ranges.find(button=>Number(button.dataset.range)===days).fire();},navigate(page){nav.find(button=>button.dataset.page===page).fire();}};
 }
 
 test('Sport polls only in enabled visible Mini windows and discards historical or resume bursts',()=>{
@@ -76,7 +77,7 @@ test('Sport polls only in enabled visible Mini windows and discards historical o
 });
 
 test('reduced-motion Mini still shows SS speed without enabling animation',()=>{
-  const a=app('macos',false,true);a.window.receiveView({compact:true,sport_enabled:true});
+  const a=app('macos',false,true);a.window.receiveView({compact:true,sport_enabled:true,sport_visible:true});
   a.window.receiveSport({keyboard:0,mouse:100,available:true});
   for(let i=1;i<=4;i++){a.setTime(i*250);a.window.receiveSport({keyboard:0,mouse:100+i*3,available:true});}
   assert.equal(a.get('mini-sport-grade').textContent,'SS');
@@ -86,7 +87,7 @@ test('reduced-motion Mini still shows SS speed without enabling animation',()=>{
 test('Mini Sport controls retain Warp for old preferences and clear energy on pause or error',()=>{
   const a=app(),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
   a.get('mini-sport').fire();assert.deepEqual(sent.pop(),{action:'sport',enabled:true});
-  a.window.receiveView({compact:true,sport_enabled:true,sport_skin:'beat'});
+  a.window.receiveView({compact:true,sport_enabled:true,sport_visible:true,sport_skin:'beat'});
   assert.equal(a.get('mini-widget').dataset.sportSkin,'warp');
   a.window.receiveSport({keyboard:0,mouse:0,available:true});a.setTime(250);a.window.receiveSport({keyboard:0,mouse:2,available:true});
   a.window.receiveSport({keyboard:0,mouse:4,available:true,paused:true});assert.equal(a.get('mini-sport-cps').textContent,'0.0');
@@ -102,7 +103,7 @@ test('Mini Sport controls retain Warp for old preferences and clear energy on pa
 test('all eight languages update Mini Sport, access names and deferred settings without resetting its state',()=>{
   for(const platform of ['macos','windows'])for(const locale of ['en','zh-CN','zh-TW','ja','ko','fr','de','es']){
     const a=app(platform);a.window.receive(snapshot());
-    a.window.receiveView({compact:true,sport_enabled:true,sport_skin:'beat',locale,language_preference:locale});
+    a.window.receiveView({compact:true,sport_enabled:true,sport_visible:true,sport_skin:'beat',locale,language_preference:locale});
     a.window.receiveSport({keyboard:100,mouse:20,available:true});a.setTime(250);a.window.receiveSport({keyboard:102,mouse:20,available:true});
     assert.equal(a.root.lang,locale);
     assert.equal(a.get('mini-sport').attributes['aria-label'],messages[locale]['sport.disable']);
@@ -164,8 +165,8 @@ test('integrated headers drag from empty space without intercepting controls or 
 });
 test('Windows controls and close choices send distinct actions with optional persistence',()=>{
   const a=app('windows'),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
-  for(const id of ['window-minimize','window-maximize','window-close','quit'])a.get(id).fire();
-  assert.deepEqual(sent.map(message=>message.action),['minimize','maximize','close','quit']);
+  for(const id of ['window-minimize','window-maximize','window-close'])a.get(id).fire();
+  assert.deepEqual(sent.map(message=>message.action),['minimize','maximize','close']);
   sent.length=0;
   a.get('close-overlay').hidden=true;a.window.requestClose();
   assert.equal(a.get('close-overlay').hidden,false);assert.equal(a.get('main').inert,true);
@@ -283,7 +284,7 @@ test('both keyboard footers share visible used keys across hidden counts, live a
 });
 test('Windows settings report native capture without offering macOS permission controls',()=>{
   const a=app('windows');a.window.receive(snapshot());a.navigate('settings');
-  assert.equal(a.get('permission-row').hidden,true);
+  assert.equal(a.get('permission-row').hidden,true);assert.equal(a.get('capture-settings').hidden,true);
   assert.equal(a.get('permission-description').textContent,messages.en['settings.windows_capture']);
   assert.equal(a.get('autostart-row').hidden,false);
   a.window.receive({...snapshot(),capture:{listening:false,error:'failure'}});
@@ -588,4 +589,29 @@ test('hourly local times distinguish repeated DST hours and span the spring cloc
       }
     }
   }finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous;}
+});
+
+
+test('Sport is hidden and inactive by default until its control is explicitly enabled',()=>{
+  const a=app();a.window.receive(snapshot());
+  assert.equal(a.window.presentationView.sport_enabled,false);
+  assert.equal(a.window.presentationView.sport_visible,false);
+  assert.equal(a.get('sport-visible').checked,false);
+  a.window.receiveView({compact:true});assert.equal(a.get('mini-sport').hidden,true);assert.equal(a.intervals.size,0);
+  a.window.receiveView({sport_visible:true});assert.equal(a.get('mini-sport').hidden,false);assert.equal(a.intervals.size,0);
+  a.window.receiveView({sport_enabled:true});assert.equal(a.intervals.size,1);
+});
+
+test('the thirty-day trend range uses thirty dates and survives refresh and language changes',()=>{
+  const a=app(),s=snapshot();
+  s.days=Array.from({length:90},(_,index)=>({day:H.addDays('2026-07-10',index),counts:{keyboard:index+1,mouse:1}}));
+  a.window.receive(s);a.selectRange(30);
+  const bars=()=>a.get('trend-chart').children[0].children.filter(node=>node.attributes.fill);
+  assert.equal(bars().length,60);
+  assert.ok(bars()[0].children[0].textContent.includes('61'));
+  s.days[89].counts.keyboard=999;a.window.receive(s);assert.equal(bars().length,60);
+  a.window.receiveView({locale:'zh-CN',language_preference:'zh-CN'});assert.equal(bars().length,60);
+  assert.ok(bars()[59].children[0].textContent.includes('999'));
+  a.selectRange(14);assert.equal(bars().length,28);
+  a.selectRange(90);assert.equal(bars().length,180);
 });

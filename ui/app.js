@@ -104,11 +104,11 @@ document.querySelectorAll('nav button').forEach(button=>button.addEventListener(
 document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{
   range=Number(button.dataset.range);document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('selected',b===button));if(data)renderTrend($('trend-chart'),data.days.slice(-range));
 }));
-for(const id of ['pause','settings-pause'])$(id).addEventListener('click',()=>send('pause'));
+$('pause').addEventListener('click',()=>send('pause'));
 for(const id of ['permission','settings-permission'])$(id).addEventListener('click',()=>send('permission'));
 $('storage-directory').addEventListener('click',()=>send('storage_directory'));
 $('import-history').addEventListener('click',()=>send('import_history'));
-$('reveal').addEventListener('click',()=>send('reveal'));$('quit').addEventListener('click',()=>send('quit'));
+$('reveal').addEventListener('click',()=>send('reveal'));
 $('calendar-range-select').addEventListener('change',event=>{calendarRange=event.target.value;if(data)renderCalendar()});
 $('history-range-select').addEventListener('change',event=>{historyRange=event.target.value;historyPage=0;if(data)renderHistory()});
 $('history-prev').addEventListener('click',()=>{historyPage--;if(data)renderHistory()});
@@ -157,11 +157,9 @@ window.receive=snapshot=>{
   }
 };
 function renderSettings(){
-  $('settings-pause').textContent=t(data.source_mode?(data.paused?'action.resume_refresh':'action.pause_refresh'):(data.paused?'action.resume':'action.pause'));
-  $('recording-description').textContent=t(data.source_mode?'settings.source_description':'settings.capture_description');
   $('permission-description').textContent=t(onWindows?(data.capture.listening?'settings.windows_capture':'status.unavailable'):data.source_mode && !data.setup_pending?'settings.source_permission':data.capture.listening?'settings.authorized':'settings.permission_description');
   $('permission-row').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
-  $('capture-settings').hidden=!!data.source_mode && !data.setup_pending;
+  $('capture-settings').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
   $('handoff-settings').hidden=!data.setup_pending;
   $('takeover').disabled=dataOperationBusy || !data.capture.listening || data.capture.permission_needed;
   $('handoff-description').textContent=t(data.capture.listening?'settings.takeover_ready':'settings.takeover_wait');
