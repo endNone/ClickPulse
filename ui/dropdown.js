@@ -43,7 +43,7 @@ function createClickPulseDropdowns(document,window){
     function position(){
       const rect=trigger.getBoundingClientRect(),margin=8,width=Math.min(Math.max(rect.width,156),window.innerWidth-margin*2),height=Math.min(menu.scrollHeight,244),below=window.innerHeight-rect.bottom-6-margin,above=rect.top-6-margin;
       const flip=below<height&&above>below,available=Math.max(36,flip?above:below),shown=Math.min(height,available);
-      menu.style.width=width+'px';menu.style.maxHeight=available+'px';menu.style.left=Math.max(margin,Math.min(rect.left,window.innerWidth-width-margin))+'px';menu.style.top=(flip?rect.top-shown-6:rect.bottom+6)+'px';
+      menu.style.width=width+'px';menu.style.maxHeight=shown+'px';menu.style.left=Math.max(margin,Math.min(rect.left,window.innerWidth-width-margin))+'px';menu.style.top=(flip?rect.top-shown-6:rect.bottom+6)+'px';
     }
     function open(){
       if(trigger.disabled)return;closeAll();trigger.focus();sync();opened=controller;active=current();menu.hidden=false;trigger.setAttribute('aria-expanded','true');position();mark();

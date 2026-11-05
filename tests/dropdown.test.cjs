@@ -81,6 +81,22 @@ test('menus flip above controls near the bottom and stay inside the viewport',()
   assert.equal(h.menu.children[0].scrolled,true);
 });
 
+test('long timezone menus fit the height reserved by placement above or below the trigger',()=>{
+  for(const top of [50,465]){
+    const {h,history,document,dropdowns,window}=fixture();
+    history.replaceChildren(...Array.from({length:600},(_,i)=>{
+      const option=document.createElement('option');option.value=String(i);option.textContent='Zone '+i;return option;
+    }));
+    history.value='0';dropdowns.sync(history);
+    h.trigger.rect={left:30,top,bottom:top+32,width:108};h.open();
+    const menuTop=parseFloat(h.menu.style.top),height=Math.min(h.menu.scrollHeight,parseFloat(h.menu.style.maxHeight));
+    assert.ok(height<=244,'long menus retain the intended scrollable height');
+    assert.ok(menuTop>=8&&menuTop+height<=window.innerHeight-8,'all menu edges remain visible');
+    if(top===465)assert.ok(menuTop+height<=top-6,'flipped menu stays above its trigger');
+    else assert.ok(menuTop>=top+32+6,'downward menu stays below its trigger');
+  }
+});
+
 test('either arrow opens at the saved selection before previewing adjacent options',()=>{
   for(const key of ['ArrowUp','ArrowDown']){
     const {themes,t,dropdowns}=fixture();themes.value='violet';dropdowns.sync(themes);
