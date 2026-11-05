@@ -1,4 +1,4 @@
-"""Encode browser-captured mini desktop frames as looping WebP or GIF.
+"""Encode browser-captured Mini documentation frames as looping WebP or GIF.
 
 Requires Pillow. Captures must match mini-demo-manifest.json dimensions,
 with that manifest alongside them, without resizing.
@@ -12,14 +12,14 @@ import tempfile
 from PIL import Image
 
 
-def encode(directory, output):
-    manifest = json.loads((directory / "mini-demo-manifest.json").read_text(encoding='utf-8'))
+def encode(directory, output, manifest_name="mini-demo-manifest.json"):
+    manifest = json.loads((directory / manifest_name).read_text(encoding='utf-8'))
     frame_count, frame_ms = manifest["frame_count"], manifest["frame_ms"]
     dimensions = manifest["width"], manifest["height"]
     if not 1 <= frame_count <= 1000 or frame_ms < 20 or frame_ms % 10:
         raise ValueError("Invalid animation timing")
-    if dimensions not in {(1080, 680), (1350, 850)}:
-        raise ValueError("Invalid desktop capture dimensions")
+    if dimensions not in {(1080, 680), (1350, 850), (640, 416)}:
+        raise ValueError("Invalid Mini capture dimensions")
     if output.suffix.lower() not in {".gif", ".webp"}:
         raise ValueError("Output must be GIF or WebP")
     paths = [directory / f"frame-{index:03}.jpg" for index in range(frame_count)]
@@ -36,7 +36,7 @@ def encode(directory, output):
     else:
         encoded_frames = gif_palette(frames, dimensions)
         options = {"optimize": True, "disposal": 1,
-                   "comment": b"ClickPulse mini mode. Simulated desktop and synthetic demo data."}
+                   "comment": b"ClickPulse Mini mode. Synthetic demonstration."}
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=output.parent, suffix=output.suffix, delete=False) as staging:
         temporary = Path(staging.name)
@@ -81,8 +81,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("frames", type=Path)
     parser.add_argument("output", type=Path, nargs="?", default=Path("docs/images/mini-desktop-en.webp"))
+    parser.add_argument("--manifest", default="mini-demo-manifest.json", help="Manifest filename inside the frames directory")
     args = parser.parse_args()
-    encode(args.frames, args.output)
+    encode(args.frames, args.output, args.manifest)
 
 
 if __name__ == "__main__":

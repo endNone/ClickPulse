@@ -46,6 +46,10 @@ Four themes and eight interface languages are available in Settings: English, Si
 
 Turn a burst of typing and clicking into a light runway. Inside Mini, Sport's **Warp** effect responds to your combined keyboard and mouse speed with light gates, particles and a live rank: **C → B → A → S → SS**. Red **SS** keeps the particles without shaking the window. Your activity totals stay visible.
 
+<p align="center"><a href="docs/images/sport-c-to-ss-en.webp"><img src="docs/images/sport-c-to-ss-en.webp" width="480" alt="Mini Sport accelerating from C through B, A and S to red SS, with light gates and particles"></a></p>
+
+Simulated keyboard and mouse input, **C → B → A → S → SS**, using the App’s actual Mini renderer. [GIF version](docs/images/sport-c-to-ss-en.gif) · [Static SS preview](docs/images/sport-ss-en.jpg).
+
 Sport and its Mini switch are **off by default**. To try it:
 
 1. Open **Settings → Personalization** and enable **Sport mode** to show the Mini switch.

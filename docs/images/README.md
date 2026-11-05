@@ -1,6 +1,6 @@
 # Screenshot assets
 
-README.md uses four English-interface screenshots and one animated mini mode desktop demonstration. Public project images must use English, regardless of the surrounding documentation language. Every showcase uses the default deep blue theme; other color themes remain an App feature described in text.
+README.md uses English-interface screenshots, a Mini desktop demonstration and a Sport rank animation. Public project images must use English, regardless of the surrounding documentation language. Every showcase uses the default deep blue theme; other color themes remain an App feature described in text.
 
 | Mini mode asset | Format |
 | --- | --- |
@@ -55,6 +55,29 @@ python3 scripts/encode-mini-demo.py /path/to/frames docs/images/mini-desktop-en.
 The WebP encoder keeps full color at quality 90. The GIF alternative uses a shared 256-color palette. Both preserve the original captured dimensions. The manifest specifies 237 input frames at 80 ms each (18.96 seconds) and includes every simulated input event. The encoder checks the complete input sequence, total duration and infinite loop before atomically replacing either output. No live desktop, database, input listener or saved preferences are used.
 
 The fixed random seed generates 191 calendar days, ending on 2026-10-08. Daily, weekly and lifetime counts are consistent; physical key counts sum to the keyboard total. The dataset exists only under the ignored `dist/readme-preview` folder. No database is read, no input listener runs and no live preferences are changed.
+
+## Sport: C to SS
+
+The README embeds [sport-c-to-ss-en.webp](sport-c-to-ss-en.webp), a 9-second looping **C → B → A → S → SS** demonstration, with a [GIF alternative](sport-c-to-ss-en.gif) and [static SS frame](sport-ss-en.jpg). All use the actual production Mini HTML/CSS/fonts, speed meter and Warp renderer in English and the default blue theme. The red accent comes from SS. No skins, shaking, native OS recording or live input collection are added.
+
+The capture is 640 × 416 pixels: the unchanged 320 × 208 Mini layout at 2× density. `sport-demo-driver.js` supplies a deterministic clock and cumulative simulated inputs; it never substitutes rank labels or the canvas drawing. A 50 ms capture cadence produces 180 frames (20 fps). Rates increase through 1, 3, 6, 10 and 14 combined presses/second. Every fourth input is a mouse click; the others are keys. The production one-second meter supplies the transitions. Totals rise from 18,780 (14,862 keys / 3,918 clicks) to 18,851 (14,916 / 3,935). The loop resets this fictional session after SS; ordinary application totals never reset this way. Sport and its Mini switch remain off by default in the App; this preview opts in explicitly.
+
+To reproduce:
+
+```bash
+node scripts/prepare-sport-preview.cjs
+python3 -m http.server 8768 --bind 127.0.0.1 --directory dist/sport-preview
+```
+
+Open `http://127.0.0.1:8768/sport-demo.html?locale=en&page=mini&scale=2&sport=1` at a 640 × 416 viewport. Wait for both `data-preview-ready="true"` and `data-frame="0"` on `<html>`. Save the initial browser viewport JPEG as `frame-000.jpg`; press Arrow Right before capturing each remaining frame through `frame-179.jpg`. Home reloads the initial state. The page clock stays frozen between steps, so capture speed does not affect input, particles or camera phase. Copy `sport-demo-manifest.json` from the preview into the frames folder; reset the temporary viewport afterwards. Encode the captured frames without resizing:
+
+```bash
+python3 scripts/encode-mini-demo.py /path/to/frames docs/images/sport-c-to-ss-en.webp --manifest sport-demo-manifest.json
+python3 scripts/encode-mini-demo.py /path/to/frames docs/images/sport-c-to-ss-en.gif --manifest sport-demo-manifest.json
+cp /path/to/frames/frame-179.jpg docs/images/sport-ss-en.jpg
+```
+
+The encoder verifies dimensions, total duration and infinite looping. This is a synthetic browser documentation example, not native GUI or physical-input validation. `app.html?page=mini&locale=en&rank=SS` also provides the interactive fixed-rank preview; it explicitly shows and enables the Sport switch without changing saved preferences.
 
 ## Scenery provenance
 

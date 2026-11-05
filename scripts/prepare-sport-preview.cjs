@@ -30,6 +30,7 @@ const adapter=`<script>
   });
   if(options.get('page')==='mini'){
 
+    original(JSON.stringify({action:'sport_visible',visible:true}));
     original(JSON.stringify({action:'sport',enabled:true}));
   }
 })();
@@ -37,6 +38,10 @@ const adapter=`<script>
 const full=fs.readFileSync(path.join(output,'index.html'),'utf8');
 const mobile='<style>@media(max-width:700px){body:not(.compact)>.sidebar{display:none}body:not(.compact) .content{padding:20px 14px}body:not(.compact) header{padding:0 10px}body:not(.compact) .header-actions{gap:6px}body:not(.compact) .page-heading{align-items:flex-start;flex-direction:column;gap:10px}body:not(.compact) h1{font-size:23px}body:not(.compact) .heading-right{display:none}.setting-row{gap:12px}}</style>';
 fs.writeFileSync(path.join(output,'app.html'),full.replace('</head>',mobile+'</head>').replace('</body>',adapter+'</body>'));
+// The documentation animation steps the unmodified renderer with synthetic input.
+const driver=fs.readFileSync(path.join(__dirname,'sport-demo-driver.js'),'utf8');
+fs.writeFileSync(path.join(output,'sport-demo.html'),full.replace('<head>','<head><script>window.clickpulseSportDemoSnapshot='+fs.readFileSync(path.join(output,'synthetic-snapshot.json'),'utf8')+';'+driver+'</script>'));
+fs.writeFileSync(path.join(output,'sport-demo-manifest.json'),JSON.stringify({width:640,height:416,frame_count:180,frame_ms:50,duration_ms:9000,ranks:['C','B','A','S','SS'],synthetic:true},null,2)+'\n');
 const skins=[['warp','跃迁','越点越快，穿过层层光门。']];
 const cards=skins.map(([skin,name,caption])=>`<article class="preview-card"><div class="card-title"><h2>${name}</h2><span>MINI · 320 × 208</span></div><div class="mini-frame"><iframe title="${name} Mini Sport 演示" data-preview-skin="${skin}" src="about:blank"></iframe></div><p>${caption}</p></article>`).join('');
 const galleryCopy={
