@@ -30,6 +30,8 @@ Simulated desktop · Demo data.
 
 Mac previews are ad-hoc signed without notarization; Windows previews are unsigned.
 
+**Windows 11 launch blocked?** Smart App Control may reject this unsigned preview with “An application control policy has blocked this file” (error 4551), including a locally compiled EXE. If you trust the source and have verified the package, and choose to turn this protection off on your own test PC, open **Windows Security → App & browser control → Smart App Control settings → Off** (中文：**Windows 安全中心 → 应用和浏览器控制 → 智能应用控制设置 → 关闭**). This changes protection for the whole device, not only ClickPulse; it is not a required installation step. On a managed PC, contact your administrator. See [Windows security prompts](docs/install-windows.md#windows-security-prompts) for details and Microsoft's guidance.
+
 ## Features
 
 **Development preview:** the features below are in current source; the published v0.1.0 packages are an earlier preview. [Build from source](docs/development.md) to try them.

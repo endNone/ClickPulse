@@ -16,7 +16,11 @@ Settings → Data location shows the database actually in use and whether it is 
 
 ## Windows security prompts
 
-ZIP packaging does not sign the executable. On Windows 11, **Smart App Control** can block an unsigned app and offers no individual-app exception. Keep the protection enabled and report the exact dialog if this happens. See [Microsoft's Smart App Control guidance](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions).
+ZIP packaging does not sign the executable. On Windows 11, **Smart App Control** can block an unsigned app and offers no individual-app exception. This can affect local MSVC builds too: Windows may report “An application control policy has blocked this file” (error 4551) before ClickPulse starts. Re-extracting or rebuilding does not establish that Windows will trust it.
+
+If you trust the source, have verified the package checksum and choose to disable this protection on your own test PC, open **Windows Security → App & browser control → Smart App Control settings**, then select **Off** and review any confirmation Windows shows. On a Chinese system the path is **Windows 安全中心 → 应用和浏览器控制 → 智能应用控制设置 → 关闭**. This disables Smart App Control for the whole device, not just ClickPulse. It is optional, not a normal installation requirement; on a managed device, ask your administrator for an approved way to run the app.
+
+Check your Windows version and the options shown before changing the setting. Microsoft's current FAQ says recent Windows updates allow re-enabling Smart App Control in Windows Security without a clean installation when supported; older installations may differ. Do not assume it is a temporary per-app exception. See [Microsoft's Smart App Control FAQ](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions) and [App & browser control settings](https://support.microsoft.com/en-us/windows/security/windows-security/app-browser-control-in-the-windows-security-app). If you keep protection enabled, retain the exact block message and use an approved test environment.
 
 A **Microsoft Defender SmartScreen** reputation warning is a different prompt. Use an individual-app allow option only if it is offered and you have verified the package's source and integrity.
 
