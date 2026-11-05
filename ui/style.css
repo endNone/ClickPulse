@@ -112,6 +112,7 @@ td:first-child,th:first-child {text-align:left}tbody tr:hover {background:#f6f9f
 .empty-state {text-align:center;padding:45px 20px;color:#7186a3;font-size:12px}
 .empty-state strong {font-weight:600;display:block;margin-bottom:10px;color:#3d5f91}.empty-state p {font-size:11px;line-height:1.8}
 .footnote {font-size:10px;color:#7085a3;line-height:1.8;border-top:1px solid var(--line);margin:22px 0 0;padding-top:15px}
+.settings-card {--settings-control-width:160px;--settings-control-height:32px}
 .settings-card h2 {margin-bottom:9px}.setting-row {display:flex;justify-content:space-between;align-items:center;gap:18px;padding:19px 0}
 .setting-row + .setting-row {border-top:1px solid var(--line)}.setting-row:last-child {padding-bottom:2px}.setting-row strong {font-size:12px;font-weight:550;color:#365479}
 .setting-row p {font-size:11px;line-height:1.7;color:#7186a3;margin:6px 0 0}.path {font:10px var(--mono)!important;overflow-wrap:anywhere}.setting-row>div {min-width:0}
@@ -187,7 +188,8 @@ body.compact .close-dialog-actions {margin-top:12px}
 /* Keep data selectable while action controls and drag handles remain stable. */
 .content,.mini-total,.mini-counts {user-select:text;-webkit-user-select:text}
 button,select,.preference-switch {user-select:none;-webkit-user-select:none}
-.setting-actions {display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.setting-actions {display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:100%}
+.settings-card .setting-row>.button,.settings-card .setting-actions>.button {width:var(--settings-control-width);height:var(--settings-control-height);flex:none}
 
 .hourly-card .card-heading {align-items:center;margin-bottom:14px}
 .hourly-total {font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}

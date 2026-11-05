@@ -131,8 +131,8 @@ function keyCells(a){
 }
 
 test('Pause acknowledges immediately while statistics are pending and stale replies cannot undo it',()=>{
-  for(const compact of [false,true])for(const source_mode of [false,true]){
-    const a=app('windows'),s={...snapshot(),source_mode};
+  for(const platform of ['macos','windows'])for(const compact of [false,true])for(const source_mode of [false,true]){
+    const a=app(platform),s={...snapshot(),source_mode};
     a.window.receive(s);a.window.receiveView({compact,sport_enabled:true,sport_visible:true});
     a.window.receiveSport({keyboard:0,mouse:0,available:true});a.setTime(250);
     a.window.receiveSport({keyboard:10,mouse:0,available:true});
@@ -336,8 +336,8 @@ test('settings distinguish storage modes and only offer login startup for the de
 });
 
 test('selected main and Mini statistics keep updating without losing copy selection',()=>{
-  for(const id of ['today','mini-today'])for(const backwards of [false,true]){
-    const a=app('windows'),s={...snapshot(),today:{keyboard:8,mouse:1}};a.window.receive(s);
+  for(const platform of ['macos','windows'])for(const id of ['today','mini-today'])for(const backwards of [false,true]){
+    const a=app(platform),s={...snapshot(),today:{keyboard:8,mouse:1}};a.window.receive(s);
     const node=a.get(id);let value=node.textContent;
     const text={nodeType:3,get data(){return value;},set data(next){value=next;selection.anchorOffset=selection.focusOffset=0;}};
     Object.defineProperty(node,'textContent',{get(){return text.data;},set(next){text.data=next;}});

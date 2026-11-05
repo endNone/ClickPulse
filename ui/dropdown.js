@@ -20,7 +20,7 @@ function createClickPulseDropdowns(document,window){
       const selected=rows.find(option=>option.value===select.value)||rows[0];
       label.replaceChildren();
       if(selected?.dataset.swatch){const dot=document.createElement('i');dot.className='theme-swatch';dot.style.backgroundColor=selected.dataset.swatch;label.append(dot);}
-      const text=document.createElement('span');text.textContent=selected?.textContent||'';label.append(text);
+      const text=document.createElement('span');text.textContent=selected?.textContent||'';label.append(text);trigger.title=text.textContent;
       trigger.disabled=select.disabled||!rows.length;trigger.setAttribute('aria-label',select.getAttribute('aria-label')||text.textContent);menu.setAttribute('aria-label',select.getAttribute('aria-label')||text.textContent);
       const next=JSON.stringify(rows.map(option=>[option.value,option.textContent,option.dataset.swatch]));
       const changed=next!==signature;
