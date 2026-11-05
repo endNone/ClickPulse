@@ -1397,7 +1397,9 @@ mod tests {
                 reply.send((thread::current().id(), result)).unwrap();
             })
             .unwrap();
-        let (worker, result) = response.recv_timeout(Duration::from_secs(2)).unwrap();
+        // Assert delivery and counts, without a two-second performance budget
+        // on busy native CI hosts. Thread isolation is verified below.
+        let (worker, result) = response.recv_timeout(Duration::from_secs(10)).unwrap();
         assert_ne!(worker, caller);
         let value: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
         assert_eq!(value["lifetime"]["keyboard"], 10);
