@@ -12,6 +12,8 @@ The statistics app works offline, with no telemetry, account, cloud sync or uplo
 
 Today and the last seven days follow local calendar days. Rolling windows cover `(now − window, now]` and exclude future timestamps. Older minute-only records show `≈` until precise records cover the entire window.
 
+The overview’s hourly chart covers that same trailing 24-hour interval, with separate keyboard and mouse counts. Intervals align with the current local hour: 24 full hours or 25 columns with partial hours at the edges. Each full interval covers one elapsed hour, including across clock changes. Hover or keyboard-focus a column for its actual date, time range and counts. Repeated daylight-saving hours stay separate; empty hours remain visible. Minute-only records are grouped once and marked approximate.
+
 | Data | Retention |
 | --- | --- |
 | Minute details | Permanent |
@@ -23,7 +25,7 @@ History is not deleted by age. Only the temporary rolling cache is pruned; saved
 
 The status log is optional diagnostic output, separate from activity history. Identical consecutive status lines are skipped. Older log versions that exceed the limit are trimmed to their most recent bytes, and rotation replaces the oldest diagnostic copy. Log failures do not stop database recording.
 
-The calendar and CSV exports use all daily summaries, independently of the recent trend range. Storage paths and backup steps are listed in the [usage guide](usage.md#data-locations-and-backups).
+The desktop calendar groups all saved minute records into dates in the selected time zone, independently of the recent trend range. Time-zone changes affect the read-time view, not stored timestamps, original daily summaries or lifetime totals. Storage paths and backup steps are listed in the [usage guide](usage.md#data-locations-and-backups).
 
 ## Historical keys
 
@@ -37,7 +39,7 @@ Encoding metadata and cached historical eras preserve attribution across upgrade
 
 The activity calendar’s literary phrase uses only keyboard counts in the selected range. It does not include mouse clicks or read or infer written content. One press is treated approximately as one character for a playful comparison with the English text of *Pride and Prejudice*. Modifiers and deletion also count, so this is not a measure of writing output.
 
-The reference is [Project Gutenberg’s English edition, number 1342](https://www.gutenberg.org/ebooks/1342). The fixed baseline is 700,000 characters, rounded from roughly 685,000 after removing illustration captions and folding repeated whitespace between the first sentence and the ebook end marker. Results display one decimal place. Both interface languages use the same baseline; the app does not download the book. Small counts show a short starting phrase, and no keyboard activity hides the comparison.
+The reference is [Project Gutenberg’s English edition, number 1342](https://www.gutenberg.org/ebooks/1342). The fixed baseline is 700,000 characters, rounded from roughly 685,000 after removing illustration captions and folding repeated whitespace between the first sentence and the ebook end marker. Results display one decimal place. All interface languages use the same baseline; the app does not download the book. Small counts show a short starting phrase, and no keyboard activity hides the comparison.
 
 ## Saving, updates and migration
 
@@ -49,4 +51,4 @@ Database schema upgrades are transactional and refuse a newer unsupported format
 
 Explicit migration uses SQLite backup, including committed WAL records, and validates daily totals, lifetime totals and database integrity. It creates a new destination and preserves the source. It rejects an existing destination, does not merge overlapping history and does not stop other services.
 
-CSV contains daily activity history. Use demo or redacted evidence in public screenshots and reports; do not attach real databases, raw logs, preferences or personal paths.
+Use demo or redacted evidence in public screenshots and reports; do not attach real databases, raw logs, preferences or personal paths.

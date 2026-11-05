@@ -16,12 +16,13 @@ use std::{
 pub const PHYSICAL_CODE_BASE: i64 = 1 << 40;
 
 pub fn data_path() -> Result<PathBuf> {
-    Ok(crate::platform::data_dir()?.join("events.sqlite3"))
+    crate::storage::database_path()
 }
 
 pub struct CollectorDb {
-    conn: Connection,
+    pub(crate) conn: Connection,
     reader: LiveSource,
+    pub(crate) projection: crate::timezone::ProjectionCache,
 }
 
 impl CollectorDb {
@@ -46,7 +47,11 @@ impl CollectorDb {
         initialize(&mut conn)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;")?;
         let reader = LiveSource::open(path)?;
-        Ok(Self { conn, reader })
+        Ok(Self {
+            conn,
+            reader,
+            projection: Default::default(),
+        })
     }
 
     /// SQLite backup includes WAL commits. Publish only a complete validated copy,
@@ -74,10 +79,7 @@ impl CollectorDb {
             source_conn.busy_timeout(Duration::from_secs(5))?;
             source_conn.prepare("SELECT bucket,dev,code,cnt FROM events LIMIT 0")?;
             let mut dest = Connection::open(&staged)?;
-            {
-                let backup = rusqlite::backup::Backup::new(&source_conn, &mut dest)?;
-                backup.run_to_completion(1024, Duration::from_millis(5), None)?;
-            }
+            crate::storage::copy_snapshot(&source_conn, &mut dest)?;
             ensure!(
                 dest.query_row("PRAGMA quick_check", [], |r| r.get::<_, String>(0))? == "ok",
                 "原数据完整性检查失败"
@@ -120,8 +122,8 @@ impl CollectorDb {
                 .write(true)
                 .open(&staged)?
                 .sync_all()?;
-            // Same-directory hard link is atomic and fails if another destination exists.
-            std::fs::hard_link(&staged, output)?;
+            // Never replaces another destination, including on link-less volumes.
+            crate::storage::publish_new(&staged, output)?;
             Ok(after)
         })();
         let _ = std::fs::remove_file(&staged);
@@ -156,16 +158,26 @@ impl CollectorDb {
             }
         }
         tx.commit()?;
+        self.projection.record(events);
         Ok(())
     }
     pub fn snapshot(&self, now: DateTime<Local>) -> Result<Snapshot> {
         self.reader.snapshot(now)
     }
+
+    pub fn snapshot_in_timezone(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<Snapshot> {
+        self.reader
+            .snapshot_with_cache(now, zone, Some(&self.projection))
+    }
+    pub fn lifetime(&self) -> Result<crate::db::Counts> {
+        self.reader.lifetime()
+    }
     pub fn activity_counts(&self, now: DateTime<Local>) -> Result<crate::source::ActivityCounts> {
         self.reader.activity_counts(now)
-    }
-    pub fn export_daily(&self, path: &Path) -> Result<()> {
-        self.reader.export_daily(path)
     }
     pub fn heartbeat(&self, now: i64) -> Result<()> {
         self.conn.execute(
@@ -184,7 +196,7 @@ impl CollectorDb {
     }
 }
 
-fn initialize(conn: &mut Connection) -> Result<()> {
+pub(crate) fn initialize(conn: &mut Connection) -> Result<()> {
     conn.busy_timeout(Duration::from_secs(5))?;
     crate::storage_schema::require_supported(conn)?;
     crate::storage_schema::require_key_encoding(conn)?;

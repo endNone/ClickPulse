@@ -1,12 +1,12 @@
 # Windows installation and updates
 
-For **0.1.0 preview · Windows 10/11 x64**. Download the portable ZIP from the [0.1.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0). No Setup installer is offered.
+For **0.2.0 release · Windows 10/11 x64**. Download the portable ZIP from the [0.2.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.0). No Setup installer is offered.
 
-Ready-to-run packages need no Rust, Python, development tools or developer account. The Windows C runtime is included in the program; no separate Visual C++ package is needed. This preview is unsigned. Use a complete package from a trusted source and compare it with `SHA256SUMS.txt`.
+Ready-to-run packages need no Rust, Python, development tools or developer account. The Windows C runtime is included in the program; no separate Visual C++ package is needed. This package is unsigned. Use a complete package from a trusted source and compare it with `SHA256SUMS.txt`.
 
 ## Portable ZIP
 
-1. Extract the **entire folder** from `ClickPulse-0.1.0-windows-x64.zip`.
+1. Extract the **entire folder** from `ClickPulse-0.2.0-windows-x64.zip`.
 2. Place the complete contents in a fixed program directory such as `%LOCALAPPDATA%\Programs\ClickPulse` or `D:\Apps\ClickPulse`. Keep `WebView2Loader.dll`, `Licenses`, the README and manifest beside the EXE. Use a separate folder from your statistics.
 3. Open **ClickPulse.exe**. Do not run inside the ZIP or copy only the EXE.
 
@@ -16,7 +16,11 @@ Settings → Data location shows the database actually in use and whether it is 
 
 ## Windows security prompts
 
-ZIP packaging does not sign the executable. On Windows 11, **Smart App Control** can block an unsigned app and offers no individual-app exception. Keep the protection enabled and report the exact dialog if this happens. See [Microsoft's Smart App Control guidance](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions).
+ZIP packaging does not sign the executable. On Windows 11, **Smart App Control** can block an unsigned app and offers no individual-app exception. This can affect local MSVC builds too: Windows may report “An application control policy has blocked this file” (error 4551) before ClickPulse starts. Re-extracting or rebuilding does not establish that Windows will trust it.
+
+If you trust the source, have verified the package checksum and choose to disable this protection on your own test PC, open **Windows Security → App & browser control → Smart App Control settings**, then select **Off** and review any confirmation Windows shows. On a Chinese system the path is **Windows 安全中心 → 应用和浏览器控制 → 智能应用控制设置 → 关闭**. This disables Smart App Control for the whole device, not just ClickPulse. It is optional, not a normal installation requirement; on a managed device, ask your administrator for an approved way to run the app.
+
+Check your Windows version and the options shown before changing the setting. Microsoft's current FAQ says recent Windows updates allow re-enabling Smart App Control in Windows Security without a clean installation when supported; older installations may differ. Do not assume it is a temporary per-app exception. See [Microsoft's Smart App Control FAQ](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions) and [App & browser control settings](https://support.microsoft.com/en-us/windows/security/windows-security/app-browser-control-in-the-windows-security-app). If you keep protection enabled, retain the exact block message and use an approved test environment.
 
 A **Microsoft Defender SmartScreen** reputation warning is a different prompt. Use an individual-app allow option only if it is offered and you have verified the package's source and integrity.
 
@@ -30,7 +34,7 @@ After startup, check the recording status and tray icon. Use the physical keyboa
 
 ## Updates and directories
 
-Check the running build before testing a fix: expand mini mode, open **Settings → App**, and note the complete version, for example **ClickPulse 0.1.0 (55)**. The number in parentheses is the internal build; the sidebar and `ClickPulse.exe --version` show the same identity. Different preview builds can share the public version and ZIP filename.
+Check the running build before testing a fix: expand mini mode, open **Settings → Application**, and note the complete version, for example **ClickPulse 0.2.0 (69)**. The number in parentheses is the internal build; the sidebar and `ClickPulse.exe --version` show the same identity. Different preview builds can share the public version and ZIP filename.
 
 Older builds only show `0.1.0` in the app. For those builds, inspect **ClickPulse.exe → Properties → Details → File version** (for example `0.1.0.49`), or read `internal_build` and `source_revision` in the adjacent `build-manifest.json`. Confirm the executable belongs to the folder you just extracted; downloading a package or merging a source fix does not update an already running copy.
 

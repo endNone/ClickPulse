@@ -1,6 +1,10 @@
 # Windows validation
 
-The 0.1.0 preview's Windows x64 portable package passes automated Rust/interface tests, native MSVC builds and package-integrity checks on a hosted Windows runner. Native WebView2 tests cover mini-window startup and full/mini transitions. Preview desktop testing also verified clean mini-window edges on Windows 11, as recorded in [PR #2](https://github.com/endNone/ClickPulse/pull/2). The checklist below distinguishes that evidence from physical input, login startup, upgrades and display scaling. Windows downloads contain the portable ZIP only.
+The 0.2.0 Windows x64 portable package passes automated Rust/interface tests, native MSVC builds and package-integrity checks on a hosted Windows runner. Native WebView2 tests cover mini-window startup and full/mini transitions. Preview desktop testing also verified clean mini-window edges on Windows 11, as recorded in [PR #2](https://github.com/endNone/ClickPulse/pull/2). The checklist below distinguishes that evidence from physical input, login startup, upgrades and display scaling. Windows downloads contain the portable ZIP only.
+
+## Recent desktop checks
+
+A Windows 11 ThinkPad session at 200% scaling tested the shared dropdown, selected-counter and pause/resume fixes through source `154f3cd`, including a large synthetic history. These fixes are included in 0.2.0. The recorded physical-key sequence was not fully reconciled; special keys, other display scales, multi-display movement and actual login restart still need dedicated hardware checks. Current release CI validates its exact tagged source separately.
 
 ## Installation and data locations
 
@@ -9,7 +13,6 @@ The 0.1.0 preview's Windows x64 portable package passes automated Rust/interface
 | Program | `%LOCALAPPDATA%\Programs\ClickPulse` | Another fixed folder is allowed; keep the EXE, Loader DLL and licenses together |
 | Statistics and preferences | `%LOCALAPPDATA%\ClickPulse` | Belongs to the signed-in Windows user, independently of the program folder |
 | Log | `%LOCALAPPDATA%\ClickPulse\logs\clickpulse.log` | Recording status and startup/capture diagnostics |
-| Test exports | A folder chosen by the tester | CSV export must not overwrite an existing file |
 
 Install and run in the target user's interactive desktop session. Confirm the user and environment variables before choosing paths; an administrator account, SSH session or WSL shell may use a different profile. Use Windows-local history or synthetic test data.
 
@@ -30,19 +33,19 @@ Verify package SHA256 values and manifest file hashes. Extract the complete pack
 | Check | Pass criteria |
 | --- | --- |
 | First launch | Complete main window, correct fonts and tray icon; missing dependencies produce a clear error |
-| Language and theme | System language defaults; English/Chinese and all four themes switch correctly and survive restart |
+| Language and theme | Defaults follow the first supported system language; all eight interface languages and four themes switch correctly and survive restart |
 | Physical input | Real keyboard/button presses update counts; holding a key does not repeat the count |
 | Pause/resume | Input while paused adds no counts; recording continues after resuming |
 | Main window | Native title bar is absent; app minimize, maximize/restore, close and header dragging work while scrolling |
 | Mini mode | Fixed 320 × 208 logical size; rounded native corners have no white border; pin/hide/expand work |
 | Display scaling | Where hardware permits, moving between displays preserves mini logical size; otherwise mark **Not tested** |
-| Close choices | First close/page Quit offers minimize or save-and-quit; cancel, remembered choice, restart and resetting to Ask work in both app languages |
+| Close choices | First close offers minimize or save-and-quit; cancel, remembered choice, restart and resetting to Ask work in all app languages |
 | Background recording | Minimizing to tray or hiding mini mode still records physical input |
 | Actual exit | Save-and-quit or tray Quit saves records, stops capture and removes the process/tray icon; dedicated WebView2 children exit without affecting other apps |
 | Reopen/single instance | Tray double-click or running the EXE again opens full statistics with one collector process |
 | Keyboard views | Compact PC layout ends at the Space/modifier row, with no stretched navigation/numpad rows below it; both views report used visible keys consistently while preserving all stored counts |
 | Persistence | Totals survive normal exit/reopen and continue increasing |
-| CSV | Export agrees with displayed history and refuses to overwrite an existing path |
+| Removed CSV export | Current source has no toolbar/history export actions and rejects the former `export` command without creating files |
 | Data location | Default launch uses `%LOCALAPPDATA%\ClickPulse\events.sqlite3` independently of the working directory; Settings distinguishes custom/read-only/demo sessions |
 | Launch at login | Only default-database sessions expose and handle startup changes; custom `--db`, read-only and demo sessions cannot change the default startup entry. Record an actual sign-out/sign-in test separately |
 

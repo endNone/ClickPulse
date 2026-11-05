@@ -10,6 +10,9 @@ pub(super) enum Request {
     Language {
         language: LanguagePreference,
     },
+    Timezone {
+        timezone: clickpulse::timezone::TimeZonePreference,
+    },
     Theme {
         theme: Theme,
     },
@@ -20,11 +23,19 @@ pub(super) enum Request {
     Pin {},
     Hide {},
     Refresh {},
+    SportSample {},
+    Sport {
+        enabled: bool,
+    },
+    SportVisible {
+        visible: bool,
+    },
     Pause {},
     Permission {},
     Autostart {},
-    Export {},
     Reveal {},
+    StorageDirectory {},
+    ImportHistory {},
     Quit {},
     Close {},
     #[cfg(target_os = "macos")]
@@ -52,11 +63,20 @@ mod tests {
     fn invalid_actions_and_payloads_are_rejected() {
         for body in [
             r#"{"action":"unknown"}"#,
+            r#"{"action":"timezone","timezone":"not/a-zone"}"#,
+            r#"{"action":"timezone"}"#,
+            r#"{"action":"timezone","timezone":null}"#,
+            r#"{"action":"export"}"#,
             r#"{"action":"theme"}"#,
             r#"{"action":"theme","theme":"unknown"}"#,
             r#"{"action":"language","language":null}"#,
-            r#"{"action":"language","language":"fr"}"#,
+            r#"{"action":"language","language":"it"}"#,
             r#"{"action":"quit","theme":"blue"}"#,
+            r#"{"action":"sport","enabled":"true"}"#,
+            r#"{"action":"sport_skin","skin":"unknown"}"#,
+            // Warp is the only Sport effect; there is no skin choice to send.
+            r#"{"action":"sport_skin","skin":"warp"}"#,
+            r#"{"action":"sport_sample","mouse":99999}"#,
         ] {
             assert!(serde_json::from_str::<Request>(body).is_err(), "{body}");
         }
@@ -70,6 +90,17 @@ mod tests {
                 language: LanguagePreference::Chinese
             }
         ));
+    }
+
+    #[test]
+    fn timezone_payload_uses_validated_iana_names() {
+        for name in ["system", "Asia/Shanghai", "America/Los_Angeles"] {
+            let body = serde_json::json!({"action":"timezone","timezone":name}).to_string();
+            assert!(matches!(
+                serde_json::from_str::<Request>(&body).unwrap(),
+                Request::Timezone { .. }
+            ));
+        }
     }
 
     #[cfg(target_os = "windows")]

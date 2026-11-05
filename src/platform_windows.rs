@@ -146,7 +146,7 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn preferred_language() -> Option<String> {
+pub fn preferred_languages() -> Option<Vec<String>> {
     let mut count = 0;
     let mut len = 0;
     if unsafe { GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, null_mut(), &mut len) }
@@ -163,11 +163,17 @@ pub fn preferred_language() -> Option<String> {
     {
         return None;
     }
-    Some(String::from_utf16_lossy(buffer.split(|c| *c == 0).next()?))
+    Some(
+        buffer
+            .split(|c| *c == 0)
+            .filter(|part| !part.is_empty())
+            .map(String::from_utf16_lossy)
+            .collect(),
+    )
 }
 
 pub fn attach_parent_console() {
-    // Preserve redirected pipes for CLI stats/exports invoked from scripts.
+    // Preserve redirected pipes for CLI statistics invoked from scripts.
     let handles = [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE]
         .map(|kind| (kind, unsafe { GetStdHandle(kind) }));
     if unsafe { AttachConsole(ATTACH_PARENT_PROCESS) } != 0 {

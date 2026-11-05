@@ -1,6 +1,6 @@
 # Screenshot assets
 
-README.md uses four English-interface screenshots and one animated mini mode desktop demonstration. Public project images must use English, regardless of the surrounding documentation language. Every showcase uses the default deep blue theme; other color themes remain an App feature described in text.
+README.md uses English-interface screenshots, a Mini desktop demonstration and a Sport rank animation. Public project images must use English, regardless of the surrounding documentation language. Every showcase uses the default deep blue theme; other color themes remain an App feature described in text.
 
 | Mini mode asset | Format |
 | --- | --- |
@@ -55,6 +55,32 @@ python3 scripts/encode-mini-demo.py /path/to/frames docs/images/mini-desktop-en.
 The WebP encoder keeps full color at quality 90. The GIF alternative uses a shared 256-color palette. Both preserve the original captured dimensions. The manifest specifies 237 input frames at 80 ms each (18.96 seconds) and includes every simulated input event. The encoder checks the complete input sequence, total duration and infinite loop before atomically replacing either output. No live desktop, database, input listener or saved preferences are used.
 
 The fixed random seed generates 191 calendar days, ending on 2026-10-08. Daily, weekly and lifetime counts are consistent; physical key counts sum to the keyboard total. The dataset exists only under the ignored `dist/readme-preview` folder. No database is read, no input listener runs and no live preferences are changed.
+
+## Sport: C to SS on the desktop
+
+The README embeds [sport-desktop-en.webp](sport-desktop-en.webp), a 9-second **C → B → A → S → SS** loop, with a [static SS preview](sport-desktop-ss-en.jpg). It uses the same mountain-lake scenery and fictional notes window as the Mini demonstration above. The Mini iframe renders the production HTML/CSS/fonts, speed meter and Warp effect in English/default blue. SS adds the red accent and particles without shake. No live screen, database, listener or saved preferences are used.
+
+Capture at **2160 × 1360** pixels: a 1080 × 680 scene at 2× density. The original 320 × 208 Mini layout occupies 384 × 249.6 logical pixels in this scene, or about 768 × 499 captured pixels. Render the iframe at 3× density and reduce it within the scene so text and canvas remain crisp. This replaces the standalone 640 × 416 Sport showcase; the scenery source itself remains the original 1672 × 941 illustration, not a new high-resolution photograph.
+
+`sport-demo-driver.js` advances the actual meter and canvas through 180 deterministic 50 ms frames (20 fps). Rates rise through 1, 3, 6, 10 and 14 combined presses/second. Every fourth input is a click; the other 54 inputs type the visible draft. Counts rise from 18,780 (14,862 keys / 3,918 clicks) to 18,851 (14,916 / 3,935). The loop restarts this fictional session after SS; real application totals never reset this way. Sport remains off by default in the App; the preview opts in explicitly.
+
+To reproduce:
+
+```bash
+node scripts/prepare-sport-preview.cjs
+python3 -m http.server 8768 --bind 127.0.0.1 --directory dist/sport-preview
+```
+
+Open `http://127.0.0.1:8768/sport-desktop.html?scale=2` at a 2160 × 1360 viewport. Wait for `data-preview-ready="true"` and `data-frame="0"` on the outer `<html>`. Save the initial **full-page browser JPEG** as `frame-000.jpg`; press Arrow Right and wait for each outer `data-frame` before capturing through `frame-179.jpg`. Home resets the scene. The clock stays frozen between steps. Full-page capture is required because some browser viewport captures clip the right edge despite reporting the correct viewport. Verify every saved image is exactly 2160 × 1360 and contains the complete Mini panel. The capture driver controls are excluded from the scene. Reset the temporary viewport afterwards.
+
+Copy `sport-desktop-manifest.json` from the preview to the frames folder and encode without resizing:
+
+```bash
+python3 scripts/encode-mini-demo.py /path/to/frames docs/images/sport-desktop-en.webp --manifest sport-desktop-manifest.json
+cp /path/to/frames/frame-179.jpg docs/images/sport-desktop-ss-en.jpg
+```
+
+The encoder checks dimensions, total 9,000 ms duration and infinite looping, including when identical frames coalesce. This synthetic browser example is separate from native GUI or physical-input validation. The fixed-rank preview remains at `app.html?page=mini&locale=en&rank=SS`.
 
 ## Scenery provenance
 

@@ -1,6 +1,6 @@
 # Builds and releases
 
-GitHub Actions checks and packages ClickPulse on hosted Mac and Windows machines. The release workflow creates an **unpublished preview draft** for maintainer review. Publishing is a separate manual step. The [0.1.0 public preview](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0) uses internal build **55**. Source, binaries and checksums identify the same tagged revision. Check the running app's complete version and package manifest when testing a fix. Every candidate runs checks and packaging on hosted Apple Silicon, Intel Mac and Windows x64 runners. Hardware-specific validation is recorded separately in the Windows checklist and roadmap.
+GitHub Actions checks and packages ClickPulse on hosted Mac and Windows machines. The release workflow creates an **unpublished preview draft** for maintainer review. Publishing is a separate manual step. The [0.2.0 release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.0) uses internal build **69**. Source, binaries and checksums identify the same tagged revision. Check the running app's complete version and package manifest when testing a fix. Every candidate runs checks and packaging on hosted Apple Silicon, Intel Mac and Windows x64 runners. Hardware-specific validation is recorded separately in the Windows checklist and roadmap.
 
 ## Release download layout
 
@@ -29,7 +29,7 @@ Actions artifacts are retained for **14 days**; Release attachments are separate
 1. Push the reviewed source, including `.github/workflows/`, to `main` when ready. Select a new public version for each release before tagging.
 2. Confirm **Checks** succeeds. **Packages → Run workflow** rehearses packaging without creating a Release.
 3. Confirm `Cargo.toml`, `Cargo.lock`, `assets/Info.plist` and `assets/windows/app.rc` agree on the public version. Both internal build numbers must also match.
-4. Create and push a new `vX.Y.Z` tag at the reviewed commit, replacing `X.Y.Z` with the version in project metadata. `v0.1.0` already identifies the first public preview; never move or reuse a published tag.
+4. Create and push a new `vX.Y.Z` tag at the reviewed commit, replacing `X.Y.Z` with the version in project metadata. `v0.1.0` identifies the first public preview; never move or reuse a published tag.
 
 5. Follow **Actions → Release draft** through version resolution, checks, packaging, verification and draft creation. Manual runs also require an existing version tag.
 6. Review the draft under **Releases**, including downloads, release notes and limitations, then publish the preview manually when ready. Record the [Windows validation checklist](windows-testing.md), Intel Mac desktop coverage, signing status and the [security-reporting channel](../SECURITY.md) alongside the release. Do not describe unperformed hardware checks as passed.
@@ -38,22 +38,22 @@ A version tag starts the draft workflow. Use manual Packages for ordinary test b
 
 ## Download assets
 
-The 0.1.0 preview package set contains ten attachments. Windows releases contain the portable ZIP; the former Setup download has been withdrawn. Versions in filenames come from project metadata; the workflow verifies the complete set before creating a draft.
+The 0.2.0 release package set contains ten attachments. Windows releases contain the portable ZIP; the former Setup download has been withdrawn. Versions in filenames come from project metadata; the workflow verifies the complete set before creating a draft.
 
 | Asset | Purpose |
 | --- | --- |
-| `ClickPulse-0.1.0-macos-arm64.dmg` | Mac drag-to-install package |
-| `ClickPulse-0.1.0-macos-arm64.zip` | Complete Apple Silicon App ZIP |
-| `ClickPulse-0.1.0-macos-x64.dmg` | Intel Mac drag-to-install package |
-| `ClickPulse-0.1.0-macos-x64.zip` | Complete Intel App ZIP |
-| `ClickPulse-0.1.0-windows-x64.zip` | Windows portable folder |
-| `ClickPulse-0.1.0-source.zip` | Corresponding source, licenses, build scripts and documentation |
-| `ClickPulse-0.1.0-macos-arm64.manifest.json` | Apple Silicon package hashes and source revision |
-| `ClickPulse-0.1.0-macos-x64.manifest.json` | Intel package hashes and source revision |
-| `ClickPulse-0.1.0-windows-x64.manifest.json` | Windows package file hashes and source revision |
+| `ClickPulse-0.2.0-macos-arm64.dmg` | Mac drag-to-install package |
+| `ClickPulse-0.2.0-macos-arm64.zip` | Complete Apple Silicon App ZIP |
+| `ClickPulse-0.2.0-macos-x64.dmg` | Intel Mac drag-to-install package |
+| `ClickPulse-0.2.0-macos-x64.zip` | Complete Intel App ZIP |
+| `ClickPulse-0.2.0-windows-x64.zip` | Windows portable folder |
+| `ClickPulse-0.2.0-source.zip` | Corresponding source, licenses, build scripts and documentation |
+| `ClickPulse-0.2.0-macos-arm64.manifest.json` | Apple Silicon package hashes and source revision |
+| `ClickPulse-0.2.0-macos-x64.manifest.json` | Intel package hashes and source revision |
+| `ClickPulse-0.2.0-windows-x64.manifest.json` | Windows package file hashes and source revision |
 | `SHA256SUMS.txt` | SHA256 values for the nine other attachments |
 
-The current packages are available in the [0.1.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0). Installation is covered by the [Mac](install-macos.md) and [Windows](install-windows.md) guides.
+The current packages are available in the [0.2.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.0). Installation is covered by the [Mac](install-macos.md) and [Windows](install-windows.md) guides.
 
 ## Validation and failures
 

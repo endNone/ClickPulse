@@ -70,13 +70,13 @@ def main():
     environment.setdefault('MACOSX_DEPLOYMENT_TARGET', '12.0')
     if not args.skip_build:
         run(['cargo', 'build', '--release', '--locked', '--target', target], env=environment)
-    binary = ROOT/'target'/target/'release/clickpulse'
+    metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--locked', '--format-version', '1', '--filter-platform', target], cwd=ROOT, env=environment))
+    binary = Path(metadata['target_directory'])/target/'release/clickpulse'
     if not binary.is_file():
         parser.error(f'Missing release binary: {binary}')
     expected_arch = 'arm64' if arch == 'arm64' else 'x86_64'
     if subprocess.check_output(['lipo', '-archs', str(binary)], text=True).split() != [expected_arch]:
         parser.error('The release binary architecture does not match the selected Mac target.')
-    metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--locked', '--format-version', '1', '--filter-platform', target], cwd=ROOT))
     dist = ROOT/'dist'; dist.mkdir(exist_ok=True)
     name = f'ClickPulse-{version}-macos-{arch}'
     with tempfile.TemporaryDirectory(prefix='.macos-package-', dir=dist) as temporary:

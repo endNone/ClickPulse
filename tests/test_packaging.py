@@ -6,6 +6,8 @@ import sys
 import tempfile
 import subprocess
 import unittest
+import tomllib
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -17,6 +19,13 @@ from third_party import rust_notices
 from windows_imports import imported_libraries, verify_static_crt
 
 class PackagingTests(unittest.TestCase):
+
+    def test_windows_manifest_identity_matches_public_package_version(self):
+        version = tomllib.loads((ROOT/'Cargo.toml').read_text(encoding='utf-8'))['package']['version']
+        manifest = ET.parse(ROOT/'assets/windows/ClickPulse.manifest')
+        identity = manifest.find('{urn:schemas-microsoft-com:asm.v1}assemblyIdentity')
+        self.assertIsNotNone(identity)
+        self.assertEqual(identity.attrib['version'], version+'.0')
 
     def test_windows_package_rejects_external_crt_missing_on_a_clean_machine(self):
         def executable(library):
@@ -109,6 +118,32 @@ class PackagingTests(unittest.TestCase):
             self.assertIn('x86_64-apple-darwin', command)
             self.assertIn('--skip-build', command)
             self.assertNotIn('--installer', command)
+
+    def test_mac_package_uses_cargo_metadata_target_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)/'project'; (root/'assets').mkdir(parents=True)
+            for name in ['Cargo.toml', 'assets/Info.plist']:
+                (root/name).write_bytes((ROOT/name).read_bytes())
+            target = 'aarch64-apple-darwin'
+            output = Path(temporary)/'shared-build'
+            binary = output/target/'release/clickpulse'
+            binary.parent.mkdir(parents=True); binary.write_bytes(b'fixture')
+            def inspect(command, **kwargs):
+                if command[0] == 'cargo':
+                    self.assertEqual(kwargs['env']['CARGO_TARGET_DIR'], str(output))
+                    return json.dumps({'target_directory':str(output)})
+                self.assertEqual(command, ['lipo', '-archs', str(binary)])
+                return 'arm64\n'
+            with patch.object(package_macos, 'ROOT', root), \
+                 patch.object(package_macos.sys, 'platform', 'darwin'), \
+                 patch.object(sys, 'argv', ['package_macos.py', '--skip-build', '--target', target]), \
+                 patch.object(package_macos.shutil, 'which', return_value='/fixture/tool'), \
+                 patch.dict(package_macos.os.environ, {'CARGO_TARGET_DIR':str(output)}), \
+                 patch.object(package_macos.subprocess, 'check_output', side_effect=inspect), \
+                 patch.object(package_macos.shutil, 'copy2', side_effect=RuntimeError('reached package copy')) as copy:
+                with self.assertRaisesRegex(RuntimeError, 'reached package copy'):
+                    package_macos.main()
+                self.assertEqual(copy.call_args.args[0], binary)
 
     def bundle(self, path):
         for name in ['ClickPulse.exe', 'WebView2Loader.dll', 'README.txt', 'Licenses/Inter-OFL.txt']:

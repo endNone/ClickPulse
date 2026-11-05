@@ -23,7 +23,7 @@ class Element{
   contains(node){return this===node||this.children.some(child=>child.contains(node));}
   focus(){this.document.activeElement=this;this.document.fire('focusin',{target:this});}
   getBoundingClientRect(){return this.rect;}
-  scrollIntoView(){this.scrolled=true;}
+  scrollIntoView(){this.scrolled=true;this.scrolls=(this.scrolls||0)+1;}
   fire(type,values={}){const event={type,target:this,preventDefault(){this.defaultPrevented=true;},...values};this.dispatchEvent(event);return event;}
 }
 function fixture(){
@@ -75,10 +75,35 @@ test('typing selects matching options while IME composition is ignored',()=>{
   const {themes,t}=fixture();t.trigger.fire('keydown',{key:'v',isComposing:true});assert.equal(t.menu.hidden,true);
   t.trigger.fire('keydown',{key:'v'});t.trigger.fire('keydown',{key:'Enter'});assert.equal(themes.value,'violet');
 });
+
+test('unchanged background synchronization does not reset an open menu scroll position',()=>{
+  const {t,themes,dropdowns}=fixture();t.open();
+  const selected=t.menu.children[0],before=selected.scrolls;
+  for(let i=0;i<3;i++)dropdowns.sync(themes);
+  assert.equal(selected.scrolls,before,'periodic snapshots must not scroll the menu back to the active option');
+  t.trigger.fire('keydown',{key:'ArrowDown'});
+  assert.equal(t.menu.children[1].scrolled,true,'keyboard navigation still reveals its active option');
+});
 test('menus flip above controls near the bottom and stay inside the viewport',()=>{
   const {h,window}=fixture();h.trigger.rect={left:750,top:465,bottom:497,width:108};h.open();
   assert.ok(parseFloat(h.menu.style.top)<465);assert.ok(parseFloat(h.menu.style.left)+parseFloat(h.menu.style.width)<=window.innerWidth-8);
   assert.equal(h.menu.children[0].scrolled,true);
+});
+
+test('long timezone menus fit the height reserved by placement above or below the trigger',()=>{
+  for(const top of [50,465]){
+    const {h,history,document,dropdowns,window}=fixture();
+    history.replaceChildren(...Array.from({length:600},(_,i)=>{
+      const option=document.createElement('option');option.value=String(i);option.textContent='Zone '+i;return option;
+    }));
+    history.value='0';dropdowns.sync(history);
+    h.trigger.rect={left:30,top,bottom:top+32,width:108};h.open();
+    const menuTop=parseFloat(h.menu.style.top),height=Math.min(h.menu.scrollHeight,parseFloat(h.menu.style.maxHeight));
+    assert.ok(height<=244,'long menus retain the intended scrollable height');
+    assert.ok(menuTop>=8&&menuTop+height<=window.innerHeight-8,'all menu edges remain visible');
+    if(top===465)assert.ok(menuTop+height<=top-6,'flipped menu stays above its trigger');
+    else assert.ok(menuTop>=top+32+6,'downward menu stays below its trigger');
+  }
 });
 
 test('either arrow opens at the saved selection before previewing adjacent options',()=>{
@@ -98,4 +123,13 @@ test('either arrow opens at the saved selection before previewing adjacent optio
     t.trigger.fire('keydown',{key});t.trigger.fire('keydown',{key});t.trigger.fire('keydown',{key:'Enter'});
     assert.equal(themes.value,key==='ArrowUp'?'teal':'graphite');assert.equal(changes,1);
   }
+});
+
+
+test('typing a city finds an IANA time zone without its region prefix',()=>{
+  const {themes,t,document,dropdowns}=fixture();
+  themes.replaceChildren(...['system','America/New_York','Asia/Shanghai'].map(value=>{const o=document.createElement('option');o.value=value;o.textContent=value.replace(/_/g,' ');return o;}));
+  themes.value='system';dropdowns.sync(themes);
+  for(const key of 'shang')t.trigger.fire('keydown',{key});
+  t.trigger.fire('keydown',{key:'Enter'});assert.equal(themes.value,'Asia/Shanghai');
 });

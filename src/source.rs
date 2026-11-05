@@ -20,6 +20,19 @@ pub struct ActivityCounts {
 }
 
 impl LiveSource {
+    /// Lightweight cumulative counts for feedback; never materialize history or keys.
+    pub fn lifetime(&self) -> Result<Counts> {
+        if aggregates_ready(&self.conn)? {
+            counts(&self.conn, "SELECT dev,cnt FROM lifetime_totals", [])
+        } else {
+            counts(
+                &self.conn,
+                "SELECT dev,SUM(cnt) FROM events GROUP BY dev",
+                [],
+            )
+        }
+    }
+
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .with_context(|| format!("无法读取实时数据库 {}", path.display()))?;
@@ -34,31 +47,54 @@ impl LiveSource {
         // A short read transaction includes current WAL commits without freezing
         // the collector or mixing different versions across individual queries.
         let tx = self.conn.unchecked_transaction()?;
+        self.snapshot_from(&tx, now)
+    }
+
+    pub fn snapshot_in_timezone(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<Snapshot> {
+        self.snapshot_with_cache(now, zone, None)
+    }
+
+    pub(crate) fn snapshot_with_cache(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+        cache: Option<&crate::timezone::ProjectionCache>,
+    ) -> Result<Snapshot> {
+        let tx = self.conn.unchecked_transaction()?;
+        let mut snapshot = self.snapshot_from(&tx, now)?;
+        let precise = aggregates_ready(&tx)?
+            && metadata_int(&tx, "precise_since_ms")?
+                .is_some_and(|since| now.timestamp_millis() - 86_400_000 >= since);
+        crate::timezone::project(
+            &tx,
+            &mut snapshot,
+            zone,
+            now,
+            "SELECT bucket,dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY bucket,dev",
+            &[(
+                if precise { "recent_counts" } else { "events" },
+                if precise {
+                    crate::hourly::Resolution::Millisecond
+                } else {
+                    crate::hourly::Resolution::Minute
+                },
+            )],
+            cache,
+        )?;
+        Ok(snapshot)
+    }
+
+    fn snapshot_from(&self, tx: &Connection, now: DateTime<Local>) -> Result<Snapshot> {
         let today_s = now.date_naive().to_string();
         let week_s = (now.date_naive() - Days::new(6)).to_string();
-        let ready = aggregates_ready(&tx)?;
-        let activity = activity_counts(&tx, now.timestamp_millis(), ready)?;
+        let ready = aggregates_ready(tx)?;
+        let activity = activity_counts(tx, now.timestamp_millis(), ready)?;
         let lifetime = activity.lifetime;
-        let daily_sql = if ready {
-            "SELECT day,dev,cnt FROM daily_totals WHERE day<=?1 ORDER BY day"
-        } else {
-            "SELECT date(bucket*60,'unixepoch','localtime') AS day,dev,SUM(cnt) FROM events GROUP BY day,dev HAVING day<=?1 ORDER BY day"
-        };
-        let mut history = BTreeMap::new();
-        let mut stmt = tx.prepare(daily_sql)?;
-        for row in stmt.query_map([&today_s], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, i64>(1)?,
-                r.get::<_, i64>(2)?,
-            ))
-        })? {
-            let (day, dev, cnt) = row?;
-            history
-                .entry(day)
-                .or_insert_with(Counts::default)
-                .add(dev, cnt);
-        }
+        let history = daily_counts(tx, ready, &today_s)?;
         let today = history.get(&today_s).copied().unwrap_or_default();
         let mut week = Counts::default();
         for (day, c) in &history {
@@ -78,7 +114,7 @@ impl LiveSource {
             })
             .collect();
         let coverage = if ready {
-            metadata_int(&tx, "precise_since_ms")?
+            metadata_int(tx, "precise_since_ms")?
         } else {
             None
         };
@@ -103,7 +139,7 @@ impl LiveSource {
                 c.add(dev, cnt);
             }
         }
-        let physical = if table_exists(&tx, "native_key_totals")? {
+        let physical = if table_exists(tx, "native_key_totals")? {
             let mut stmt =
                 tx.prepare("SELECT code,cnt FROM native_key_totals ORDER BY cnt DESC,code")?;
             stmt.query_map([], |r| {
@@ -118,7 +154,7 @@ impl LiveSource {
         };
         let mut before = Vec::new();
         let mut since = Vec::new();
-        let persistent = table_exists(&tx, "historical_key_totals")?;
+        let persistent = table_exists(tx, "historical_key_totals")?;
         let rows: Vec<(bool, EncodedKeyCount)> = if persistent {
             // Persistent eras do not depend on the current machine's timezone.
             let mut stmt =
@@ -134,7 +170,7 @@ impl LiveSource {
             })?
             .collect::<rusqlite::Result<_>>()?
         } else {
-            let cutoff = crate::storage_schema::legacy_cutoff(&tx)?;
+            let cutoff = crate::storage_schema::legacy_cutoff(tx)?;
             let mut stmt = tx.prepare("SELECT CASE WHEN code>=?3 THEN 0 ELSE bucket<?1 END,code,SUM(cnt) FROM events WHERE dev=1 AND bucket<=?2 GROUP BY 1,code ORDER BY code")?;
             stmt.query_map(
                 params![
@@ -171,6 +207,18 @@ impl LiveSource {
                 .and_then(|ms| Local.timestamp_millis_opt(ms).single())
                 .map(|date| date.to_rfc3339()),
         };
+        let mut hourly = crate::hourly::empty(now);
+        let precise = coverage.is_some_and(|since| now_ms - 86_400_000 >= since);
+        crate::hourly::accumulate(
+            tx,
+            &mut hourly,
+            if precise { "recent_counts" } else { "events" },
+            if precise {
+                crate::hourly::Resolution::Millisecond
+            } else {
+                crate::hourly::Resolution::Minute
+            },
+        )?;
         Ok(Snapshot {
             now: now.to_rfc3339(),
             today,
@@ -183,6 +231,7 @@ impl LiveSource {
                 .map(|(day, counts)| DayCount { day, counts })
                 .collect(),
             hours,
+            hourly,
             top_keys,
             keyboard_stats,
             legacy_imported: ready
@@ -208,25 +257,30 @@ impl LiveSource {
         Ok(metadata_int(&self.conn, "heartbeat_ms")?
             .is_some_and(|heartbeat| (now_ms - heartbeat).abs() < 10000))
     }
+}
 
-    pub fn export_daily(&self, path: &Path) -> Result<()> {
-        use std::io::Write;
-        let snapshot = self.snapshot(Local::now())?;
-        let mut file = std::fs::File::create_new(path)?;
-        writeln!(file, "date,keyboard,mouse,total")?;
-        for day in snapshot.history_days {
-            writeln!(
-                file,
-                "{},{},{},{}",
-                day.day,
-                day.counts.keyboard,
-                day.counts.mouse,
-                day.counts.total()
-            )?;
-        }
-        file.sync_all()?;
-        Ok(())
+fn daily_counts(conn: &Connection, ready: bool, through: &str) -> Result<BTreeMap<String, Counts>> {
+    let sql = if ready {
+        "SELECT day,dev,cnt FROM daily_totals WHERE day<=?1 ORDER BY day"
+    } else {
+        "SELECT date(bucket*60,'unixepoch','localtime') AS day,dev,SUM(cnt) FROM events GROUP BY day,dev HAVING day<=?1 ORDER BY day"
+    };
+    let mut history = BTreeMap::new();
+    let mut stmt = conn.prepare(sql)?;
+    for row in stmt.query_map([through], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, i64>(2)?,
+        ))
+    })? {
+        let (day, dev, count) = row?;
+        history
+            .entry(day)
+            .or_insert_with(Counts::default)
+            .add(dev, count);
     }
+    Ok(history)
 }
 
 fn aggregates_ready(conn: &Connection) -> Result<bool> {
@@ -308,6 +362,170 @@ fn counts(conn: &Connection, sql: &str, values: impl rusqlite::Params) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hourly_matches_the_rolling_day_for_precise_and_minute_sources() {
+        use crate::input::{Device, InputEvent};
+        let now = DateTime::parse_from_rfc3339("2026-11-03T00:37:15-08:00")
+            .unwrap()
+            .with_timezone(&Local);
+        let end = now.timestamp_millis();
+        let start = end - 86_400_000;
+        let events: Vec<_> = [
+            (start - 1, Device::Keyboard, 0),
+            (start + 1, Device::Keyboard, 0),
+            (start + 2, Device::Keyboard, 1),
+            (end - 3_600_000, Device::Mouse, 1),
+            (end, Device::Mouse, 1),
+            (end + 60_000, Device::Keyboard, 2),
+        ]
+        .into_iter()
+        .map(|(ts_ms, device, code)| InputEvent {
+            ts_ms,
+            device,
+            code,
+        })
+        .collect();
+        for mode in ["precise", "warming", "legacy"] {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("hourly.sqlite3");
+            if mode == "legacy" {
+                let conn = Connection::open(&path).unwrap();
+                conn.execute_batch(
+                    "CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER);",
+                )
+                .unwrap();
+                for event in &events {
+                    conn.execute(
+                        "INSERT INTO events VALUES(?1,?2,?3,1)",
+                        params![
+                            event.ts_ms.div_euclid(60_000),
+                            event.device as i64,
+                            crate::collector::PHYSICAL_CODE_BASE + i64::from(event.code)
+                        ],
+                    )
+                    .unwrap();
+                }
+            } else {
+                let mut writer = crate::collector::CollectorDb::open(&path).unwrap();
+                writer.insert(&events).unwrap();
+                let conn = Connection::open(&path).unwrap();
+                conn.execute(
+                    "INSERT OR REPLACE INTO clickpulse_metadata VALUES('precise_since_ms',?1)",
+                    [(if mode == "precise" { start } else { start + 1 }).to_string()],
+                )
+                .unwrap();
+            }
+            let source = LiveSource::open(&path).unwrap();
+            let stats = source.snapshot(now).unwrap();
+            let day = stats.windows.iter().find(|w| w.seconds == 86_400).unwrap();
+            let sum = stats
+                .hourly
+                .iter()
+                .fold(Counts::default(), |mut sum, hour| {
+                    sum.keyboard += hour.counts.keyboard;
+                    sum.mouse += hour.counts.mouse;
+                    sum
+                });
+            assert_eq!(sum, day.counts, "{mode}");
+            assert_eq!(sum.keyboard, if mode == "precise" { 2 } else { 3 });
+            assert_eq!(sum.mouse, 2);
+            assert_eq!(
+                stats.hourly.iter().any(|h| h.approximate),
+                mode != "precise"
+            );
+            assert_eq!(stats.hourly.len(), 25);
+            assert!(stats.hourly.iter().any(|h| h.counts.total() == 0));
+            // Read-only source mode sees later WAL commits without a restart.
+            if mode != "legacy" {
+                let mut writer = crate::collector::CollectorDb::open(&path).unwrap();
+                writer
+                    .insert(&[InputEvent {
+                        ts_ms: end - 1,
+                        device: Device::Mouse,
+                        code: 1,
+                    }])
+                    .unwrap();
+                let updated = source.snapshot(now).unwrap();
+                assert_eq!(
+                    updated.hourly.iter().map(|h| h.counts.mouse).sum::<i64>(),
+                    3
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn snapshots_exclude_future_days_without_changing_saved_history() {
+        use crate::input::{Device, InputEvent};
+        for cached in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("source.sqlite3");
+            let now = Local::now();
+            let future = now + chrono::Duration::days(2);
+            if cached {
+                let mut db = crate::collector::CollectorDb::open(&path).unwrap();
+                db.insert(&[
+                    InputEvent {
+                        ts_ms: now.timestamp_millis(),
+                        device: Device::Keyboard,
+                        code: 0,
+                    },
+                    InputEvent {
+                        ts_ms: future.timestamp_millis(),
+                        device: Device::Mouse,
+                        code: 1,
+                    },
+                    InputEvent {
+                        ts_ms: future.timestamp_millis(),
+                        device: Device::Mouse,
+                        code: 1,
+                    },
+                ])
+                .unwrap();
+            } else {
+                let conn = Connection::open(&path).unwrap();
+                conn.execute_batch(
+                    "CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER);",
+                )
+                .unwrap();
+                conn.execute(
+                    "INSERT INTO events VALUES(?1,1,?2,1),(?3,0,1,2)",
+                    params![
+                        now.timestamp().div_euclid(60),
+                        crate::collector::PHYSICAL_CODE_BASE,
+                        future.timestamp().div_euclid(60)
+                    ],
+                )
+                .unwrap();
+            }
+            let before = std::fs::read(&path).unwrap();
+            let source = LiveSource::open(&path).unwrap();
+            let stats = source.snapshot(now).unwrap();
+            assert!(
+                !stats
+                    .history_days
+                    .iter()
+                    .any(|day| day.day == future.date_naive().to_string())
+            );
+            assert_eq!(
+                stats.today,
+                Counts {
+                    keyboard: 1,
+                    mouse: 0
+                }
+            );
+            assert_eq!(
+                stats.lifetime,
+                Counts {
+                    keyboard: 1,
+                    mouse: 2
+                }
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+        }
+    }
+
     #[test]
     fn read_only_encoding_metadata_overrides_date_heuristics() {
         let temp = tempfile::tempdir().unwrap();

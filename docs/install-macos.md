@@ -1,14 +1,14 @@
 # Manual installation on macOS
 
-For **0.1.0 initial preview · macOS 12 or later · Apple Silicon and Intel**. DMG and App ZIP packages for both architectures are available in the [0.1.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0). Both architectures pass builds and checks on their corresponding GitHub macOS runners. This guide covers first launch, Input Monitoring and updates.
+For **0.2.0 · macOS 12 or later · Apple Silicon and Intel**. DMG and App ZIP packages for both architectures are available in the [0.2.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.0). Both architectures pass builds and checks on their corresponding GitHub macOS runners. This guide covers first launch, Input Monitoring and updates.
 
 Check Apple menu → About This Mac: choose `macos-arm64` for an Apple M-series chip, or `macos-x64` for an Intel processor.
 
-Using a built App requires no Rust, Python or other developer tools, and no developer account or membership purchase. The preview is locally ad-hoc signed; it has not been signed with Apple Developer ID or notarized.
+Using a built App requires no Rust, Python or other developer tools, and no developer account or membership purchase. The App is locally ad-hoc signed; it has not been signed with Apple Developer ID or notarized.
 
 ## 1. Place the App in Applications
 
-1. Open the matching `ClickPulse-0.1.0-macos-arm64.dmg` or `ClickPulse-0.1.0-macos-x64.dmg`, or extract the matching App ZIP and locate `ClickPulse.app`. GitHub Source code downloads and `source-draft.zip` contain source rather than an installable App; see the [development guide](development.md) to build it.
+1. Open the matching `ClickPulse-0.2.0-macos-arm64.dmg` or `ClickPulse-0.2.0-macos-x64.dmg`, or extract the matching App ZIP and locate `ClickPulse.app`. GitHub Source code downloads and `source-draft.zip` contain source rather than an installable App; see the [development guide](development.md) to build it.
 2. In Finder, drag the entire `ClickPulse.app` into Applications (`/Applications`). For your user only, `~/Applications` is also suitable: press `⇧⌘G`, enter `~` to open your home folder, then create or open its `Applications` folder.
 3. Open the App from that location. Keep it there after granting access or enabling launch at login, and avoid opening another copy from Downloads.
 
@@ -48,7 +48,7 @@ The window's close button only hides it; recording continues. Use **Quit ClickPu
 2. Open it from that location. If macOS blocks it again, follow section 2. If it does not show Recording, check access as described in section 3.
 3. If Input Monitoring is enabled but the App still reports missing access, quit ClickPulse first. Select the old ClickPulse entry in Input Monitoring and remove it with **−**, then use **+** to add the **updated App from its current installed location**. Enable access and reopen it.
 
-Updating the preview changes its ad-hoc signature, so an old permission entry may not apply to the new App. Confirm both Recording status and increasing counts. Replacing the App retains history in `~/Library/Application Support/ClickPulse/`; deleting that directory is not needed to refresh permissions.
+Updating the App changes its ad-hoc signature, so an old permission entry may not apply to the new App. Confirm both Recording status and increasing counts. Replacing the App retains history in `~/Library/Application Support/ClickPulse/`; deleting that directory is not needed to refresh permissions.
 
 If you move the App, confirm recording works in its new location, then turn **Settings → Application → Launch at login** off and back on to update the startup location. Login startup runs in the menu bar with the window hidden.
 

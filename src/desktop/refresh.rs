@@ -7,6 +7,11 @@ pub(super) struct SnapshotGate {
 }
 
 impl SnapshotGate {
+    pub(super) fn invalidate(&mut self) {
+        self.pending = None;
+        self.rerun = false;
+        self.generation = self.generation.wrapping_add(1);
+    }
     pub(super) fn begin(&mut self) -> Option<u64> {
         if self.pending.is_some() {
             self.rerun = true;
@@ -29,6 +34,15 @@ impl SnapshotGate {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn storage_changes_reject_old_snapshot_and_speed_completions() {
+        let mut gate = SnapshotGate::default();
+        let old = gate.begin().unwrap();
+        gate.invalidate();
+        let new = gate.begin().unwrap();
+        assert_eq!(gate.complete(old), None);
+        assert_eq!(gate.complete(new), Some(false));
+    }
     #[test]
     fn slow_requests_coalesce_and_still_deliver_completed_results() {
         let mut gate = SnapshotGate::default();

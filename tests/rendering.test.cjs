@@ -8,11 +8,12 @@ const K=require('../ui/keyboard.js');
 const messages=require('../ui/locales.json');
 const Themes=require('../ui/themes.js');
 const Dropdowns=require('../ui/dropdown.js');
+const Sport=require('../ui/sport.js');
 
 // Small DOM adapter to exercise the actual App event handlers and render flow.
 class Element {
   constructor(id=''){
-    this.id=id;this.dataset={};this.children=[];this.listeners={};this.attributes={};this.value='all';this.replacements=0;
+    this.id=id;this.dataset={};this.children=[];this.listeners={};this.attributes={};this.value='all';this.checked=false;this.replacements=0;
     this.classList={toggle(){}};this.style={values:{},setProperty(key,value){this.values[key]=value;}};
   }
   append(...children){this.children.push(...children);}
@@ -23,36 +24,100 @@ class Element {
   setAttribute(name,value){this.attributes[name]=value;}
   addEventListener(event,handler){this.listeners[event]=handler;}
   fire(event='click'){this.listeners[event]?.({target:this,button:0,preventDefault(){}});}
+  scrollIntoView(options){this.scrolled=options;}
   focus(){if(this.ownerDocument)this.ownerDocument.activeElement=this;}
 }
-function app(platform='macos',legacyWebKit=false){
-  let document;
+function app(platform='macos',legacyWebKit=false,reducedMotion=false){
+  let document,now=0;
+  const intervals=new Map();let timerId=0;
   const nodes=new Map(),get=id=>{
     if(!nodes.has(id))nodes.set(id,new Element(id));
     const node=nodes.get(id);node.ownerDocument=document;return node;
   };
   const nav=['overview','history','keys','settings'].map(id=>{const button=new Element();button.dataset.page=id;return button;});
   const pages=nav.map(button=>get(button.dataset.page));
+  const settingsLinks=['personalization-settings','handoff-settings','capture-settings','storage-settings','app-settings'].map(id=>{const b=new Element();b.dataset.settingsSection=id;return b;});
+  for(const id of ['handoff-settings','capture-settings'])get(id).hidden=true;
+  const ranges=[14,30,90].map(days=>{const button=new Element();button.dataset.range=String(days);return button;});
   get('status').append(new Element());
   get('keyboard-layout').parentElement=new Element();
   get('keyboard-treemap').clientWidth=640;get('keyboard-treemap').clientHeight=279;
   const root=new Element('root');root.lang='en';
-  document={documentElement:root,body:new Element(),getElementById:get,
+  document={documentElement:root,body:new Element(),getElementById:id=>['export','history-export','settings-pause','recording-description','quit','sport-open-mini','refresh-time','calendar-description'].includes(id)?null:get(id),
     querySelector(selector){return get(selector==='header'?'header':selector==='.sidebar'?'sidebar':'main');},
-    querySelectorAll(selector){return selector==='nav button'?nav:selector==='.page'?pages:[];},
-    createElement(){return new Element();},createElementNS(){return new Element();}};
+    querySelectorAll(selector){return selector==='nav button[data-page]'?nav:selector==='[data-settings-section]'?settingsLinks:selector==='.page'?pages:selector==='[data-range]'?ranges:[];},
+    createElement(){const node=new Element();node.ownerDocument=document;return node;},createElementNS(){const node=new Element();node.ownerDocument=document;return node;}};
   const window={ipc:{postMessage(){}},presentationView:{compact:false},clickpulsePlatform:platform,clickpulseMessages:messages,clickpulseLocale:'en'};
-  const context=vm.createContext({document,window,setTimeout,clearTimeout,...(legacyWebKit?{}:{ClickPulseThemes:Themes,ClickPulseDropdowns:Dropdowns,ClickPulseI18n:createI18n(messages,'en',platform),ClickPulseHistory:H,ClickPulseKeyboard:K.create(platform)})});
+  Object.assign(window,{matchMedia:()=>({matches:reducedMotion,addEventListener(){}}),performance:{now:()=>now},setInterval(handler,ms){const id=++timerId;intervals.set(id,{handler,ms});return id;},clearInterval(id){intervals.delete(id);}});
+  const context=vm.createContext({document,window,setTimeout,clearTimeout,...(legacyWebKit?{}:{ClickPulseSport:Sport,ClickPulseThemes:Themes,ClickPulseDropdowns:Dropdowns,ClickPulseI18n:createI18n(messages,'en',platform),ClickPulseHistory:H,ClickPulseKeyboard:K.create(platform)})});
   if(legacyWebKit){
     // Load the real modules in this realm: injected Node functions would keep
     // Node's newer built-ins and conceal a minimum-WebKit startup failure.
     vm.runInContext('Object.hasOwn=undefined;Array.prototype.at=undefined;',context);
-    for(const module of ['themes','i18n','history','keyboard','dropdown'])vm.runInContext(readFileSync('ui/'+module+'.js','utf8'),context);
+    for(const module of ['themes','i18n','history','keyboard','dropdown','sport'])vm.runInContext(readFileSync('ui/'+module+'.js','utf8'),context);
   }
   vm.runInContext(readFileSync('ui/app.js','utf8'),context);
   vm.runInContext(readFileSync('ui/presentation.js','utf8'),context);
-  return {window,get,root,context,navigate(page){nav.find(button=>button.dataset.page===page).fire();}};
+  return {window,get,root,context,intervals,settingsLinks,jumpTo(id){settingsLinks.find(b=>b.dataset.settingsSection===id).fire();},setTime(value){now=value;},selectRange(days){ranges.find(button=>Number(button.dataset.range)===days).fire();},navigate(page){nav.find(button=>button.dataset.page===page).fire();}};
 }
+
+test('Sport polls only in enabled visible Mini windows and discards historical or resume bursts',()=>{
+  const a=app(),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
+  a.window.receive(snapshot());assert.equal(a.intervals.size,0);
+  a.window.receiveView({sport_enabled:true,sport_visible:true,compact:false});assert.equal(a.intervals.size,0);
+  a.window.receiveView({compact:true});assert.equal(a.intervals.size,1);assert.equal([...a.intervals.values()][0].ms,250);
+  assert.equal(sent[sent.length-1].action,'sport_sample');
+  a.window.receiveSport({keyboard:0,mouse:50000,available:true});
+  for(let i=1;i<=4;i++){a.setTime(i*250);a.window.receiveSport({keyboard:0,mouse:50000+i*3,available:true});}
+  assert.equal(a.get('mini-sport-grade').textContent,'SS');assert.equal(a.get('mini-status').hidden,true);
+  a.window.receiveView({compact:false});assert.equal(a.intervals.size,0);
+  a.setTime(6000);a.window.receiveView({compact:true});a.window.receiveSport({keyboard:0,mouse:90000,available:true});
+  assert.equal(a.get('mini-sport-cps').textContent,'0.0');
+  a.window.receiveView({visible:false});assert.equal(a.intervals.size,0);
+  a.window.receiveView({visible:true});assert.equal(a.intervals.size,1);
+  a.window.receiveView({sport_visible:false});assert.equal(a.intervals.size,0);
+  assert.equal(a.get('mini-sport').hidden,true);assert.equal(a.get('mini-status').hidden,false);
+});
+
+test('reduced-motion Mini still shows SS speed without enabling animation',()=>{
+  const a=app('macos',false,true);a.window.receiveView({compact:true,sport_enabled:true,sport_visible:true});
+  a.window.receiveSport({keyboard:0,mouse:100,available:true});
+  for(let i=1;i<=4;i++){a.setTime(i*250);a.window.receiveSport({keyboard:0,mouse:100+i*3,available:true});}
+  assert.equal(a.get('mini-sport-grade').textContent,'SS');
+  assert.equal(a.get('mini-widget').dataset.moving,'false');
+});
+
+test('Mini Sport controls retain Warp for old preferences and clear energy on pause or error',()=>{
+  const a=app(),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
+  a.get('mini-sport').fire();assert.deepEqual(sent.pop(),{action:'sport',enabled:true});
+  a.window.receiveView({compact:true,sport_enabled:true,sport_visible:true,sport_skin:'beat'});
+  assert.equal(a.get('mini-widget').dataset.sportSkin,'warp');
+  a.window.receiveSport({keyboard:0,mouse:0,available:true});a.setTime(250);a.window.receiveSport({keyboard:0,mouse:2,available:true});
+  a.window.receiveSport({keyboard:0,mouse:4,available:true,paused:true});assert.equal(a.get('mini-sport-cps').textContent,'0.0');
+  a.window.receiveView({locale:'zh-CN',language_preference:'zh-CN'});
+  assert.equal(a.get('mini-sport').attributes['aria-label'],messages['zh-CN']['sport.disable']);
+  a.get('sport-visible').checked=false;a.get('sport-visible').fire('change');
+  assert.deepEqual(sent.pop(),{action:'sport_visible',visible:false});
+  a.window.receiveView({sport_visible:false,sport_enabled:false});assert.equal(a.get('mini-sport-readout').hidden,true);
+  assert.equal(a.get('mini-widget').dataset.sportSkin,'warp');
+  a.window.failure('offline');assert.equal(a.get('mini-sport-cps').textContent,'0.0');
+});
+
+test('all eight languages update Mini Sport, access names and deferred settings without resetting its state',()=>{
+  for(const platform of ['macos','windows'])for(const locale of ['en','zh-CN','zh-TW','ja','ko','fr','de','es']){
+    const a=app(platform);a.window.receive(snapshot());
+    a.window.receiveView({compact:true,sport_enabled:true,sport_visible:true,sport_skin:'beat',locale,language_preference:locale});
+    a.window.receiveSport({keyboard:100,mouse:20,available:true});a.setTime(250);a.window.receiveSport({keyboard:102,mouse:20,available:true});
+    assert.equal(a.root.lang,locale);
+    assert.equal(a.get('mini-sport').attributes['aria-label'],messages[locale]['sport.disable']);
+    assert.equal(a.get('mini-sport-caption').textContent,'Sport · '+messages[locale]['sport.rank_b']);
+    assert.equal(a.get('mini-sport-readout').attributes['aria-label'],createI18n(messages,locale).t('sport.mini_readout',{rank:'B',speed:createI18n(messages,locale).decimal(2,1)}));
+    a.window.receiveView({compact:false});a.navigate('settings');
+    assert.equal(a.get('mini-widget').dataset.sportSkin,'warp');
+    assert.equal(a.get('mini-sport').attributes['aria-pressed'],'true');
+    assert.equal(a.get('page-title').textContent,messages[locale]['page.settings']);
+  }
+});
 function snapshot(){
   const counts={keyboard:100,mouse:20};
   const day={day:'2026-10-07',counts};
@@ -64,6 +129,31 @@ function keyCells(a){
   const visit=node=>node.dataset.key?[node]:node.children.flatMap(visit);
   return visit(a.get('keyboard-layout'));
 }
+
+test('Pause acknowledges immediately while statistics are pending and stale replies cannot undo it',()=>{
+  for(const platform of ['macos','windows'])for(const compact of [false,true])for(const source_mode of [false,true]){
+    const a=app(platform),s={...snapshot(),source_mode};
+    a.window.receive(s);a.window.receiveView({compact,sport_enabled:true,sport_visible:true});
+    a.window.receiveSport({keyboard:0,mouse:0,available:true});a.setTime(250);
+    a.window.receiveSport({keyboard:10,mouse:0,available:true});
+    a.window.receivePaused(true);
+    assert.equal(a.get('pause').textContent,messages.en[source_mode?'action.resume_refresh':'action.resume']);
+    assert.equal(a.get('mini-pause').attributes['aria-label'],messages.en[source_mode?'action.resume_refresh':'action.resume']);
+    assert.equal(a.get('status').lastElementChild.textContent,messages.en['status.paused']);
+    assert.equal(a.get('mini-sport-cps').textContent,'0.0');
+    a.window.receive(s);a.window.receiveSport({keyboard:20,mouse:0,available:true,paused:false});
+    assert.equal(a.get('mini-pause-label').textContent,messages.en['mini.resume']);
+    assert.equal(a.get('mini-sport-cps').textContent,'0.0');
+    a.window.receivePaused(false);a.window.receive({...s,paused:true});
+    assert.equal(a.get('mini-pause-label').textContent,messages.en['mini.pause']);
+    assert.equal(a.get('pause').textContent,messages.en[source_mode?'action.pause_refresh':'action.pause']);
+  }
+  const a=app('windows');a.window.receivePaused(true);
+  assert.equal(a.get('pause').textContent,messages.en['action.resume']);
+  assert.equal(a.get('mini-pause-label').textContent,messages.en['mini.resume']);
+  a.window.receive(snapshot());
+  assert.equal(a.get('pause').textContent,messages.en['action.resume']);
+});
 test('the app starts and renders history without Safari 15.4 built-ins',()=>{
   const a=app('macos',true),s=snapshot();
   s.history_days=[{day:'2025-12-31',counts:{keyboard:3,mouse:1}},...s.history_days];
@@ -103,8 +193,8 @@ test('integrated headers drag from empty space without intercepting controls or 
 });
 test('Windows controls and close choices send distinct actions with optional persistence',()=>{
   const a=app('windows'),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
-  for(const id of ['window-minimize','window-maximize','window-close','quit'])a.get(id).fire();
-  assert.deepEqual(sent.map(message=>message.action),['minimize','maximize','close','quit']);
+  for(const id of ['window-minimize','window-maximize','window-close'])a.get(id).fire();
+  assert.deepEqual(sent.map(message=>message.action),['minimize','maximize','close']);
   sent.length=0;
   a.get('close-overlay').hidden=true;a.window.requestClose();
   assert.equal(a.get('close-overlay').hidden,false);assert.equal(a.get('main').inert,true);
@@ -222,7 +312,7 @@ test('both keyboard footers share visible used keys across hidden counts, live a
 });
 test('Windows settings report native capture without offering macOS permission controls',()=>{
   const a=app('windows');a.window.receive(snapshot());a.navigate('settings');
-  assert.equal(a.get('settings-permission').hidden,true);
+  assert.equal(a.get('permission-row').hidden,true);assert.equal(a.get('capture-settings').hidden,true);
   assert.equal(a.get('permission-description').textContent,messages.en['settings.windows_capture']);
   assert.equal(a.get('autostart-row').hidden,false);
   a.window.receive({...snapshot(),capture:{listening:false,error:'failure'}});
@@ -236,11 +326,64 @@ test('settings distinguish storage modes and only offer login startup for the de
     a.window.receive(s);
     assert.equal(a.get('autostart-row').hidden,mode!=='default');
     assert.equal(a.get('db-path').textContent,mode==='demo'?messages.en['demo.storage']:s.database_path);
-    assert.equal(a.get('db-description').textContent,messages.en['settings.storage_'+mode]);
+    assert.equal(a.get('db-description').textContent,messages.en[mode==='default'?'storage.directory_description':'settings.storage_'+mode]);
+    assert.equal(a.get('storage-directory').hidden,mode!=='default');
+    assert.equal(a.get('import-history-row').hidden,mode!=='default');
     a.window.receiveView({locale:'zh-CN',language_preference:'system'});
-    assert.equal(a.get('db-description').textContent,messages['zh-CN']['settings.storage_'+mode]);
+    assert.equal(a.get('db-description').textContent,messages['zh-CN'][mode==='default'?'storage.directory_description':'settings.storage_'+mode]);
     a.window.receiveView({locale:'en',language_preference:'system'});
   }
+});
+
+test('selected main and Mini statistics keep updating without losing copy selection',()=>{
+  for(const platform of ['macos','windows'])for(const id of ['today','mini-today'])for(const backwards of [false,true]){
+    const a=app(platform),s={...snapshot(),today:{keyboard:8,mouse:1}};a.window.receive(s);
+    const node=a.get(id);let value=node.textContent;
+    const text={nodeType:3,get data(){return value;},set data(next){value=next;selection.anchorOffset=selection.focusOffset=0;}};
+    Object.defineProperty(node,'textContent',{get(){return text.data;},set(next){text.data=next;}});
+    node.firstChild=text;node.childNodes=[text];
+    const selection={isCollapsed:false,rangeCount:1,anchorNode:text,focusNode:text,anchorOffset:backwards?1:0,focusOffset:backwards?0:1,
+      getRangeAt:()=>({intersectsNode:target=>target===node}),
+      setBaseAndExtent(anchor,from,focus,to){this.anchorNode=anchor;this.anchorOffset=from;this.focusNode=focus;this.focusOffset=to;}};
+    a.window.getSelection=()=>selection;
+    for(const count of [10,12345,7]){
+      a.window.receive({...s,today:{keyboard:count-1,mouse:1}});
+      const expected=count.toLocaleString('en');
+      assert.equal(node.textContent,expected,'selected count must match the latest snapshot');
+      assert.equal(selection.anchorNode,text);assert.equal(selection.focusNode,text);
+      assert.equal(selection.anchorOffset,backwards?expected.length:0);
+      assert.equal(selection.focusOffset,backwards?0:expected.length);
+      assert.equal(text.data.slice(Math.min(selection.anchorOffset,selection.focusOffset),Math.max(selection.anchorOffset,selection.focusOffset)),expected,'copy selection covers the current count');
+    }
+  }
+});
+
+test('data processing prevents another mutation while page navigation remains available',()=>{
+  const a=app();a.window.receive(snapshot());a.window.receiveDataBusy(true);
+  assert.equal(a.get('data-operation-status').hidden,false);
+  for(const id of ['storage-directory','import-history','reveal'])assert.equal(a.get(id).disabled,true);
+  a.navigate('history');assert.equal(a.get('page-title').textContent,messages.en['page.history']);
+  a.navigate('settings');assert.equal(a.get('reveal').disabled,true);
+  a.window.receiveDataBusy(false);assert.equal(a.get('data-operation-status').hidden,true);
+  for(const id of ['storage-directory','import-history','reveal'])assert.equal(a.get(id).disabled,false);
+});
+
+test('history processing stays visible across language switches and blocks overlapping work',()=>{
+  const a=app(),s={...snapshot(),source_mode:true,setup_pending:true,database_mode:'source'};a.window.receive(s);
+  a.window.receiveDataBusy(true);
+  for(const locale of Object.keys(messages)){
+    a.window.setInterfaceLanguage(locale,locale);
+    assert.equal(a.get('data-operation-message').textContent,messages[locale]['storage.processing']);
+    a.navigate('settings');assert.equal(a.get('takeover').disabled,true);
+    a.navigate('history');assert.equal(a.get('import-history').disabled,true);
+    assert.equal(a.get('data-operation-status').hidden,false);
+  }
+  a.window.receiveDataBusy(false);
+  assert.equal(a.get('data-operation-status').hidden,true);
+  assert.equal(a.get('takeover').disabled,false);
+  a.window.receive({...s,capture:{listening:false,permission_needed:true,error:null}});
+  a.window.receiveDataBusy(true);a.window.receiveDataBusy(false);
+  assert.equal(a.get('takeover').disabled,true);
 });
 
 test('the Windows heatmap ends at the space row even after extended-key input arrives',()=>{
@@ -412,4 +555,152 @@ test('weekly dates begin at the first recorded day and multi-year axes retain th
   const months=a.get('history-chart').children[2].children;
   assert.equal(months[0].children[0].textContent,'Dec');assert.equal(months[0].children[1].textContent,'2024');
   assert.equal(months.at(-1).children[0].textContent,'Mar');assert.equal(months.at(-1).children[1].textContent,'2026');
+});
+
+function hourlyFixture(){
+  const start=Date.parse('2026-11-02T00:37:15-08:00'),end=start+86400000,hour=3600000;
+  const hours=[];
+  for(let boundary=Math.floor(start/hour)*hour;boundary<end;boundary+=hour){
+    hours.push({start_ms:Math.max(start,boundary),end_ms:Math.min(end,boundary+hour),counts:{keyboard:0,mouse:0},approximate:false});
+  }
+  hours[0].counts={keyboard:7,mouse:2};hours[24].counts={keyboard:3,mouse:1};
+  return {...snapshot(),now:new Date(end).toISOString(),hourly:hours};
+}
+
+test('hourly chart retains partial edges, zero hours and keyboard/mouse counts in all eight languages',()=>{
+  for(const locale of Object.keys(messages)){
+    const a=app(),s=hourlyFixture(),i=createI18n(messages,locale);
+    a.window.receiveView({locale,language_preference:locale});a.window.receive(s);
+    const chart=a.get('hourly-chart'),plot=chart.children[0];
+    assert.equal(plot.children.length,25);assert.equal(a.get('hourly-total').textContent,i.number(13));
+    assert.equal(plot.children[1].children[0].style.height,'0%');
+    assert.ok(parseFloat(plot.children[0].children[0].style.height)>parseFloat(plot.children[0].children[1].style.height));
+    assert.match(plot.children[0].attributes['aria-label'],new RegExp(messages[locale]['common.keyboard']));
+    plot.children[0].fire('mouseenter');
+    assert.equal(a.get('hourly-detail').textContent,plot.children[0].attributes['aria-label']);
+    assert.ok(a.get('hourly-detail').textContent.includes(i.number(7)));
+    assert.equal(a.get('hourly-detail').textContent.includes('chart.'),false);
+    const first=chart.children[2].children[0].children[0].textContent;
+    assert.equal(first,i.date(s.hourly[0].start_ms,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}));
+    assert.equal(chart.children[3].hidden,true);
+    s.hourly.forEach(h=>h.counts={keyboard:0,mouse:0});a.window.receive(s);
+    assert.equal(chart.children[3].hidden,false);assert.equal(chart.children[3].textContent,messages[locale]['common.empty']);
+  }
+});
+
+test('hourly live refresh preserves focused bars, updates details and marks approximate imported data',()=>{
+  const a=app(),s=hourlyFixture();a.window.receive(s);
+  const chart=a.get('hourly-chart'),plot=chart.children[0],bar=plot.children[24],replacements=chart.replacements;
+  bar.focus();bar.fire('focus');
+  s.hourly[24].counts.mouse=6;s.hourly[24].end_ms+=2000;s.hourly[0].start_ms+=2000;s.hourly[0].approximate=true;
+  a.window.receive(s);
+  assert.equal(chart.replacements,replacements);assert.equal(chart.children[0],plot);
+  assert.equal(a.context.document.activeElement,bar);
+  assert.equal(a.get('hourly-detail').textContent,bar.attributes['aria-label']);
+  assert.match(a.get('hourly-total').textContent,/^≈ /);
+  assert.match(plot.children[0].attributes['aria-label'],/≈ /);
+  bar.listeners.keydown({key:'ArrowLeft',preventDefault(){}});
+  assert.equal(a.context.document.activeElement,plot.children[23]);
+  bar.listeners.keydown({key:'Home',preventDefault(){}});
+  assert.equal(a.context.document.activeElement,plot.children[0]);
+  a.window.receiveView({compact:true});s.hourly[0].counts.keyboard=50;a.window.receive(s);
+  assert.equal(chart.replacements,replacements);
+  a.window.receiveView({compact:false});
+  assert.match(plot.children[0].attributes['aria-label'],/50/);
+});
+
+test('hourly local times distinguish repeated DST hours and span the spring clock jump',()=>{
+  const previous=process.env.TZ;
+  try{
+    process.env.TZ='America/Los_Angeles';
+    for(const [start,repeat] of [['2026-11-01T00:00:00-07:00',true],['2026-03-08T00:00:00-08:00',false]]){
+      const a=app(),s=snapshot(),base=Date.parse(start);
+      s.hourly=Array.from({length:24},(_,index)=>({start_ms:base+index*3600000,end_ms:base+(index+1)*3600000,counts:{keyboard:1,mouse:0},approximate:false}));
+      a.window.receive(s);
+      const bars=a.get('hourly-chart').children[0].children;
+      assert.equal(bars.length,24);
+      if(repeat){
+        assert.match(bars[1].attributes['aria-label'],/01:00/);assert.match(bars[2].attributes['aria-label'],/01:00/);
+        assert.notEqual(bars[1].attributes['aria-label'],bars[2].attributes['aria-label']);
+        assert.match(bars[1].attributes['aria-label'],/PDT/);assert.match(bars[2].attributes['aria-label'],/PST/);
+      }else{
+        assert.match(bars[1].attributes['aria-label'],/01:00.*03:00/);
+        assert.match(bars[2].attributes['aria-label'],/03:00.*04:00/);
+      }
+    }
+  }finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous;}
+});
+
+
+test('Sport is hidden and inactive by default until its control is explicitly enabled',()=>{
+  const a=app();a.window.receive(snapshot());
+  assert.equal(a.window.presentationView.sport_enabled,false);
+  assert.equal(a.window.presentationView.sport_visible,false);
+  assert.equal(a.get('sport-visible').checked,false);
+  a.window.receiveView({compact:true});assert.equal(a.get('mini-sport').hidden,true);assert.equal(a.intervals.size,0);
+  a.window.receiveView({sport_visible:true});assert.equal(a.get('mini-sport').hidden,false);assert.equal(a.intervals.size,0);
+  a.window.receiveView({sport_enabled:true});assert.equal(a.intervals.size,1);
+});
+
+test('the thirty-day trend range uses thirty dates and survives refresh and language changes',()=>{
+  const a=app(),s=snapshot();
+  s.days=Array.from({length:90},(_,index)=>({day:H.addDays('2026-07-10',index),counts:{keyboard:index+1,mouse:1}}));
+  a.window.receive(s);a.selectRange(30);
+  const bars=()=>a.get('trend-chart').children[0].children.filter(node=>node.attributes.fill);
+  assert.equal(bars().length,60);
+  assert.ok(bars()[0].children[0].textContent.includes('61'));
+  s.days[89].counts.keyboard=999;a.window.receive(s);assert.equal(bars().length,60);
+  a.window.receiveView({locale:'zh-CN',language_preference:'zh-CN'});assert.equal(bars().length,60);
+  assert.ok(bars()[59].children[0].textContent.includes('999'));
+  a.selectRange(14);assert.equal(bars().length,28);
+  a.selectRange(90);assert.equal(bars().length,180);
+});
+
+
+test('Settings section links expand only on Settings and jump without navigating away',()=>{
+  for(const platform of ['macos','windows']){
+    const a=app(platform);a.window.receive(snapshot());a.navigate('settings');
+    assert.equal(a.get('settings-subnav').hidden,false);
+    assert.equal(a.get('settings-nav').attributes['aria-expanded'],'true');
+    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='capture-settings').hidden,platform==='windows');
+    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='handoff-settings').hidden,true);
+    a.jumpTo('storage-settings');
+    assert.equal(a.get('page-title').textContent,messages.en['page.settings']);
+    assert.equal(a.get('storage-settings').scrolled.block,'start');
+    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='storage-settings').attributes['aria-current'],'location');
+    a.window.receiveView({locale:'ja',language_preference:'ja'});a.window.receive(snapshot());
+    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='storage-settings').attributes['aria-current'],'location');
+    a.navigate('overview');assert.equal(a.get('settings-subnav').hidden,true);
+    assert.equal(a.get('settings-nav').attributes['aria-expanded'],'false');
+  }
+});
+
+test('Settings links track conditional groups and respect reduced motion',()=>{
+  const a=app('macos',false,true);const s=snapshot();s.setup_pending=true;
+  a.window.receive(s);a.navigate('settings');
+  assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='handoff-settings').hidden,false);
+  a.jumpTo('handoff-settings');assert.equal(a.get('handoff-settings').scrolled.behavior,'auto');
+  s.setup_pending=false;s.source_mode=true;a.window.receive(s);
+  assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='handoff-settings').hidden,true);
+  assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='capture-settings').hidden,true);
+  assert.equal(a.settingsLinks[0].attributes['aria-current'],'location');
+});
+
+test('time zone choices persist across locale changes and stale-zone snapshots are ignored',()=>{
+  const a=app(),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+  const s=snapshot();s.timezone='system';s.now='2026-11-04T00:30:00Z';a.window.receive(s);
+  a.window.receiveView({timezone:'Asia/Shanghai',timezones:['UTC','Asia/Shanghai','not/a-zone']});
+  assert.deepEqual(a.get('timezone-select').children.map(o=>o.value),['system','UTC','Asia/Shanghai']);
+  const option=a.get('timezone-select').children[1];
+  a.window.receiveView({pinned:false,timezones:['UTC','Asia/Shanghai','not/a-zone']});
+  assert.equal(a.get('timezone-select').children[1],option);
+  const zoned={...s,timezone:'Asia/Shanghai',now:'2026-11-04T08:30:00+08:00',today:{keyboard:17,mouse:3}};
+  a.window.receive(zoned);assert.equal(a.get('today').textContent,'20');
+  a.window.receive({...s,today:{keyboard:9999,mouse:0}});assert.equal(a.get('today').textContent,'20');
+  a.window.receiveView({locale:'fr',language_preference:'fr'});
+  assert.equal(a.get('timezone-select').value,'Asia/Shanghai');
+  a.get('timezone-select').value='system';a.get('timezone-select').fire('change');
+  assert.deepEqual(sent.pop(),{action:'timezone',timezone:'system'});
+  a.window.receiveView({timezone:'system'});a.window.receive(s);
+  assert.equal(a.get('timezone-select').value,'system');
 });

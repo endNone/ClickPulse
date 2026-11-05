@@ -11,19 +11,20 @@ function createClickPulseDropdowns(document,window){
     select.parentNode.insertBefore(wrapper,select);select.hidden=true;document.body.append(menu);
     let options=[],items=[],signature='',active=-1,buffer='',typedAt=0;
     const current=()=>Math.max(0,options.findIndex(option=>option.value===select.value));
-    function mark(){
+    function mark(scroll=true){
       items.forEach((item,i)=>{item.classList.toggle('active',i===active);item.classList.toggle('selected',options[i].value===select.value);item.setAttribute('aria-selected',String(i===active));});
-      if(opened===controller&&items[active]){trigger.setAttribute('aria-activedescendant',items[active].id);items[active].scrollIntoView({block:'nearest'});}
+      if(opened===controller&&items[active]){trigger.setAttribute('aria-activedescendant',items[active].id);if(scroll)items[active].scrollIntoView({block:'nearest'});}
     }
     function sync(){
       const rows=Array.from(select.options).filter(option=>!option.disabled&&!option.hidden);
       const selected=rows.find(option=>option.value===select.value)||rows[0];
       label.replaceChildren();
       if(selected?.dataset.swatch){const dot=document.createElement('i');dot.className='theme-swatch';dot.style.backgroundColor=selected.dataset.swatch;label.append(dot);}
-      const text=document.createElement('span');text.textContent=selected?.textContent||'';label.append(text);
+      const text=document.createElement('span');text.textContent=selected?.textContent||'';label.append(text);trigger.title=text.textContent;
       trigger.disabled=select.disabled||!rows.length;trigger.setAttribute('aria-label',select.getAttribute('aria-label')||text.textContent);menu.setAttribute('aria-label',select.getAttribute('aria-label')||text.textContent);
       const next=JSON.stringify(rows.map(option=>[option.value,option.textContent,option.dataset.swatch]));
-      if(next!==signature){
+      const changed=next!==signature;
+      if(changed){
         const activeValue=options[active]?.value;signature=next;options=rows;
         items=options.map((option,i)=>{
           const item=document.createElement('div'),caption=document.createElement('span'),check=document.createElementNS('http://www.w3.org/2000/svg','svg'),stroke=document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -38,12 +39,12 @@ function createClickPulseDropdowns(document,window){
         if(!options.some(option=>option.value===activeValue))active=current();
       }
       if(opened===controller&&!rows.length)close();
-      mark();
+      mark(changed);
     }
     function position(){
       const rect=trigger.getBoundingClientRect(),margin=8,width=Math.min(Math.max(rect.width,156),window.innerWidth-margin*2),height=Math.min(menu.scrollHeight,244),below=window.innerHeight-rect.bottom-6-margin,above=rect.top-6-margin;
       const flip=below<height&&above>below,available=Math.max(36,flip?above:below),shown=Math.min(height,available);
-      menu.style.width=width+'px';menu.style.maxHeight=available+'px';menu.style.left=Math.max(margin,Math.min(rect.left,window.innerWidth-width-margin))+'px';menu.style.top=(flip?rect.top-shown-6:rect.bottom+6)+'px';
+      menu.style.width=width+'px';menu.style.maxHeight=shown+'px';menu.style.left=Math.max(margin,Math.min(rect.left,window.innerWidth-width-margin))+'px';menu.style.top=(flip?rect.top-shown-6:rect.bottom+6)+'px';
     }
     function open(){
       if(trigger.disabled)return;closeAll();trigger.focus();sync();opened=controller;active=current();menu.hidden=false;trigger.setAttribute('aria-expanded','true');position();mark();
@@ -69,7 +70,12 @@ function createClickPulseDropdowns(document,window){
       if(key.length===1&&!event.ctrlKey&&!event.metaKey&&!event.altKey){
         event.preventDefault();if(!wasOpen)open();const now=Date.now();buffer=now-typedAt<700?buffer+key:key;typedAt=now;
         const repeated=[...buffer].every(c=>c===buffer[0]),query=(repeated?key:buffer).toLocaleLowerCase(),start=repeated?active+1:active;
-        for(let n=0;n<options.length;n++){const i=(start+n)%options.length;if(options[i].textContent.toLocaleLowerCase().startsWith(query)){active=i;mark();break;}}
+        let match=-1;
+        for(const mode of ['startsWith','includes']){
+          for(let n=0;n<options.length;n++){const i=(start+n)%options.length;if(options[i].textContent.toLocaleLowerCase()[mode](query)){match=i;break;}}
+          if(match>=0)break;
+        }
+        if(match>=0){active=match;mark();}
       }
     }
     const controller={select,wrapper,trigger,menu,sync,open,close};controllers.set(select.id,controller);

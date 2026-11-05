@@ -25,6 +25,20 @@ impl Theme {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum SportSkin {
+    #[default]
+    #[serde(
+        alias = "halo",
+        alias = "velocity",
+        alias = "neon",
+        alias = "stardust",
+        alias = "beat"
+    )]
+    Warp,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum CloseAction {
     #[default]
     Ask,
@@ -38,8 +52,12 @@ pub struct Preferences {
     pub compact: bool,
     pub pinned: bool,
     pub language: crate::localization::LanguagePreference,
+    pub timezone: crate::timezone::TimeZonePreference,
     pub theme: Theme,
     pub close_action: CloseAction,
+    pub sport_enabled: bool,
+    pub sport_visible: bool,
+    pub sport_skin: SportSkin,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -47,8 +65,12 @@ impl Default for Preferences {
             compact: false,
             pinned: true,
             language: Default::default(),
+            timezone: Default::default(),
             theme: Default::default(),
             close_action: Default::default(),
+            sport_enabled: false,
+            sport_visible: false,
+            sport_skin: Default::default(),
         }
     }
 }
@@ -123,7 +145,7 @@ impl Preferences {
 
     fn save_to(&self, path: &Path) -> Result<()> {
         use std::io::Write;
-        std::fs::create_dir_all(path.parent().unwrap())?;
+        std::fs::create_dir_all(path.parent().context("Invalid preferences directory")?)?;
         let temp = path.with_extension(format!("{}.tmp", std::process::id()));
         let result = (|| {
             let mut file = std::fs::OpenOptions::new()
@@ -182,6 +204,9 @@ mod tests {
             serde_json::from_str(r#"{"compact":true,"pinned":false,"language":"zh-CN"}"#).unwrap();
         assert_eq!(prefs.theme, Theme::Blue);
         assert_eq!(prefs.close_action, CloseAction::Ask);
+        assert!(!prefs.sport_enabled);
+        assert!(!prefs.sport_visible);
+        assert_eq!(prefs.sport_skin, SportSkin::Warp);
         assert!(prefs.compact);
         assert!(!prefs.pinned);
         assert_eq!(
@@ -214,6 +239,7 @@ mod tests {
                 pinned: false,
                 theme: Theme::Violet,
                 language: crate::localization::LanguagePreference::English,
+                ..Default::default()
             };
             let loaded: Preferences =
                 serde_json::from_slice(&serde_json::to_vec(&prefs).unwrap()).unwrap();
@@ -225,6 +251,66 @@ mod tests {
                 loaded.language,
                 crate::localization::LanguagePreference::English
             );
+        }
+    }
+
+    #[test]
+    fn sport_defaults_off_and_retains_an_explicit_saved_choice() {
+        let defaults = Preferences::default();
+        assert!(!defaults.sport_enabled && !defaults.sport_visible);
+        let old: Preferences = serde_json::from_str(r#"{"compact":true}"#).unwrap();
+        assert!(!old.sport_enabled && !old.sport_visible);
+        let opted_in: Preferences =
+            serde_json::from_str(r#"{"sport_enabled":true,"sport_visible":true}"#).unwrap();
+        assert!(opted_in.sport_enabled && opted_in.sport_visible);
+    }
+
+    #[test]
+    fn sport_visibility_and_warp_round_trip_without_changing_other_preferences() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("presentation.json");
+        let prefs = Preferences {
+            sport_skin: SportSkin::Warp,
+            sport_enabled: true,
+            sport_visible: false,
+            theme: Theme::Teal,
+            pinned: false,
+            ..Default::default()
+        };
+        prefs.save_to(&path).unwrap();
+        let decoded = Preferences::load_from(&path).unwrap().preferences;
+        assert_eq!(decoded.sport_skin, SportSkin::Warp);
+        assert!(decoded.sport_enabled);
+        assert!(!decoded.sport_visible);
+        assert_eq!(decoded.theme, Theme::Teal);
+        assert!(!decoded.pinned);
+        assert!(serde_json::from_str::<SportSkin>(r#""unknown""#).is_err());
+    }
+
+    #[test]
+    fn former_sport_skins_load_without_recovering_or_resetting_other_choices() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("presentation.json");
+        for old in ["halo", "velocity", "neon", "stardust", "beat"] {
+            let original = serde_json::json!({
+                "sport_skin": old, "language": "ja", "pinned": false,
+                "theme": "teal", "sport_enabled": true
+            });
+            std::fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
+            let loaded = Preferences::load_from(&path).unwrap();
+            assert!(loaded.recovered_from.is_none());
+            assert_eq!(loaded.preferences.sport_skin, SportSkin::Warp);
+            assert_eq!(
+                loaded.preferences.language,
+                crate::localization::LanguagePreference::Japanese
+            );
+            assert_eq!(loaded.preferences.theme, Theme::Teal);
+            assert!(!loaded.preferences.pinned);
+            assert!(loaded.preferences.sport_enabled);
+            loaded.preferences.save_to(&path).unwrap();
+            let saved: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            assert_eq!(saved["sport_skin"], "warp");
         }
     }
 }

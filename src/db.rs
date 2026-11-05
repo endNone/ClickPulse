@@ -72,6 +72,7 @@ pub struct Snapshot {
     pub days: Vec<DayCount>,
     pub history_days: Vec<DayCount>,
     pub hours: Vec<Counts>,
+    pub hourly: Vec<crate::hourly::HourCount>,
     pub top_keys: Vec<KeyCount>,
     pub keyboard_stats: KeyboardStats,
     pub legacy_imported: bool,
@@ -79,6 +80,7 @@ pub struct Snapshot {
 
 pub struct EventDb {
     conn: Connection,
+    projection: crate::timezone::ProjectionCache,
 }
 
 impl EventDb {
@@ -121,7 +123,10 @@ impl EventDb {
         tx.pragma_update(None, "user_version", crate::storage_schema::VERSION)?;
         tx.commit()?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            projection: Default::default(),
+        })
     }
 
     /// Import the original Python database once, in a single destination transaction.
@@ -189,6 +194,7 @@ impl EventDb {
             [path.to_string_lossy().as_ref()],
         )?;
         tx.commit()?;
+        self.projection.clear();
         Ok(totals.total())
     }
 
@@ -231,6 +237,7 @@ impl EventDb {
             }
         }
         tx.commit()?;
+        self.projection.record(events);
         Ok(())
     }
 
@@ -247,27 +254,6 @@ impl EventDb {
 
     pub fn lifetime(&self) -> Result<Counts> {
         self.query_counts("SELECT dev,cnt FROM totals", [])
-    }
-
-    pub fn export_daily(&self, path: &Path) -> Result<()> {
-        use std::io::Write;
-        let mut output = std::fs::File::create_new(path)
-            .with_context(|| format!("无法创建导出文件 {}（不会覆盖已有文件）", path.display()))?;
-        writeln!(output, "date,keyboard,mouse,total")?;
-        let mut stmt = self.conn.prepare("SELECT day,SUM(CASE WHEN dev=1 THEN cnt ELSE 0 END),SUM(CASE WHEN dev=0 THEN cnt ELSE 0 END) FROM daily GROUP BY day ORDER BY day")?;
-        let rows = stmt.query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, i64>(1)?,
-                r.get::<_, i64>(2)?,
-            ))
-        })?;
-        for row in rows {
-            let (day, keyboard, mouse) = row?;
-            writeln!(output, "{day},{keyboard},{mouse},{}", keyboard + mouse)?;
-        }
-        output.sync_all()?;
-        Ok(())
     }
 
     pub fn rolling(&self, seconds: i64, now_ms: i64) -> Result<WindowCount> {
@@ -309,6 +295,28 @@ impl EventDb {
             [now_ms.saturating_sub(86_400_000)],
         )?;
         Ok(())
+    }
+
+    pub fn snapshot_in_timezone(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<Snapshot> {
+        let _tx = self.conn.unchecked_transaction()?;
+        let mut snapshot = self.snapshot(now)?;
+        crate::timezone::project(
+            &self.conn,
+            &mut snapshot,
+            zone,
+            now,
+            "SELECT bucket,dev,SUM(cnt) FROM (SELECT bucket,dev,cnt FROM minutes WHERE bucket>=?1 AND bucket<=?2 UNION ALL SELECT bucket,dev,cnt FROM legacy_minutes WHERE bucket>=?1 AND bucket<=?2) GROUP BY bucket,dev",
+            &[
+                ("recent", crate::hourly::Resolution::Millisecond),
+                ("legacy_minutes", crate::hourly::Resolution::Minute),
+            ],
+            Some(&self.projection),
+        )?;
+        Ok(snapshot)
     }
 
     pub fn snapshot(&self, now: DateTime<Local>) -> Result<Snapshot> {
@@ -401,6 +409,19 @@ impl EventDb {
                 .or_insert_with(Counts::default)
                 .add(dev, cnt);
         }
+        let mut hourly = crate::hourly::empty(now);
+        crate::hourly::accumulate(
+            &self.conn,
+            &mut hourly,
+            "recent",
+            crate::hourly::Resolution::Millisecond,
+        )?;
+        crate::hourly::accumulate(
+            &self.conn,
+            &mut hourly,
+            "legacy_minutes",
+            crate::hourly::Resolution::Minute,
+        )?;
         Ok(Snapshot {
             now: now.to_rfc3339(),
             today,
@@ -419,6 +440,7 @@ impl EventDb {
                 .map(|(day, counts)| DayCount { day, counts })
                 .collect(),
             hours,
+            hourly,
             top_keys,
             keyboard_stats: KeyboardStats {
                 physical: physical_keys,
@@ -541,6 +563,57 @@ mod tests {
     fn db() -> EventDb {
         EventDb::from_connection(Connection::open_in_memory().unwrap()).unwrap()
     }
+
+    #[test]
+    fn hourly_combines_native_and_legacy_once_and_matches_the_rolling_day() {
+        let mut db = db();
+        let now = DateTime::parse_from_rfc3339("2026-11-03T00:37:15-08:00")
+            .unwrap()
+            .with_timezone(&Local);
+        let end = now.timestamp_millis();
+        let start = end - 86_400_000;
+        for (stamp, device) in [
+            (start, Device::Keyboard),
+            (start + 1, Device::Keyboard),
+            (end, Device::Mouse),
+            (end + 1, Device::Mouse),
+        ] {
+            db.insert(&[InputEvent {
+                ts_ms: stamp,
+                device,
+                code: 0,
+            }])
+            .unwrap();
+        }
+        db.conn
+            .execute(
+                "INSERT INTO legacy_minutes VALUES(?1,1,7),(?2,0,3),(?3,1,99)",
+                params![
+                    start.div_euclid(60_000),
+                    (end - 3_600_000).div_euclid(60_000),
+                    end.div_euclid(60_000) + 1
+                ],
+            )
+            .unwrap();
+        let stats = db.snapshot(now).unwrap();
+        let counts = stats
+            .hourly
+            .iter()
+            .fold(Counts::default(), |mut sum, hour| {
+                sum.keyboard += hour.counts.keyboard;
+                sum.mouse += hour.counts.mouse;
+                sum
+            });
+        assert_eq!(
+            counts,
+            Counts {
+                keyboard: 8,
+                mouse: 4
+            }
+        );
+        assert_eq!(counts, db.rolling(86_400, end).unwrap().counts);
+        assert_eq!(stats.hourly.iter().filter(|h| h.approximate).count(), 2);
+    }
     fn event(ts_ms: i64) -> InputEvent {
         InputEvent {
             ts_ms,
@@ -654,28 +727,6 @@ mod tests {
                 0
             );
         }
-    }
-
-    #[test]
-    fn csv_exports_all_history_and_refuses_to_overwrite() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("activity.csv");
-        let mut db = db();
-        db.insert(&[
-            event(1_000),
-            InputEvent {
-                ts_ms: 1_000,
-                device: Device::Mouse,
-                code: 1,
-            },
-        ])
-        .unwrap();
-        db.export_daily(&path).unwrap();
-        let before = std::fs::read_to_string(&path).unwrap();
-        assert!(before.starts_with("date,keyboard,mouse,total\n"));
-        assert!(before.ends_with(",1,1,2\n"));
-        assert!(db.export_daily(&path).is_err());
-        assert_eq!(std::fs::read_to_string(path).unwrap(), before);
     }
 
     #[test]

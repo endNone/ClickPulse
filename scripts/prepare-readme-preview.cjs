@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
-const output = path.join(root, 'dist', 'readme-preview');
+const output = path.resolve(process.argv[2] || path.join(root, 'dist', 'readme-preview'));
 const K = require('../ui/keyboard.js');
 let seed = 0xC11C2026;
 const random = () => {
@@ -41,10 +41,26 @@ const snapshot = {
   demo:true,paused:false,source_mode:false,setup_pending:false,auto_start:false,legacy_imported:false,
   database_path:'Demo data — no database connection'
 };
+const end=Date.parse(snapshot.now),start=end-86400000,hour=3600000;
+snapshot.hourly=[];
+for(let boundary=Math.floor(start/hour)*hour;boundary<end;boundary+=hour){
+  const hourStart=Math.max(start,boundary),hourEnd=Math.min(end,boundary+hour),localHour=new Date(boundary).getHours();
+  const weight=(localHour>=8&&localHour<=20?1+Math.sin(localHour*1.7)*.5:.04)*(hourEnd-hourStart)/hour;
+  snapshot.hourly.push({start_ms:hourStart,end_ms:hourEnd,counts:{keyboard:0,mouse:0},approximate:false,weight});
+}
+const hourlyWeight=snapshot.hourly.reduce((n,h)=>n+h.weight,0),remaining={...snapshot.windows[3].counts};
+snapshot.hourly.forEach((h,i)=>{
+  for(const dev of ['keyboard','mouse']){
+    h.counts[dev]=i===snapshot.hourly.length-1?remaining[dev]:Math.floor(snapshot.windows[3].counts[dev]*h.weight/hourlyWeight);
+    remaining[dev]-=h.counts[dev];
+  }
+  delete h.weight;
+});
+assert.deepEqual(sum(snapshot.hourly),snapshot.windows[3].counts);
 assert.equal(physical.reduce((n,k)=>n+k.count,0), lifetime.keyboard);
 assert.deepEqual(sum(history), lifetime);
-const scripts = ['i18n.js','themes.js','dropdown.js','history.js','keyboard.js','app.js','presentation.js'];
-const styles = ['style.css','history.css','compact.css','themes.css','dropdown.css'];
+const scripts = ['i18n.js','themes.js','dropdown.js','history.js','keyboard.js','sport.js','app.js','presentation.js'];
+const styles = ['style.css','history.css','compact.css','themes.css','dropdown.css','sport.css'];
 const fonts = [['ClickPulse UI','Inter.ttf'],['ClickPulse Sans','NotoSansSC.ttf'],['ClickPulse Mono','NotoSansMono.ttf']];
 fs.mkdirSync(path.join(output,'fonts'),{recursive:true});
 for (const [,name] of fonts) fs.copyFileSync(path.join(root,'assets','fonts',name),path.join(output,'fonts',name));
@@ -58,19 +74,50 @@ body:not(.compact)[data-capture-scale]{min-height:calc(100vh / var(--capture-sca
 body.compact[data-capture-scale]{width:320px;height:208px}`;
 const boot = `(() => {
   const options = new URLSearchParams(location.search);
-  const locale = options.get('locale') === 'zh-CN' ? 'zh-CN' : 'en';
+  const locale = createClickPulseI18n(window.clickpulseMessages,options.get('locale')||'en').locale;
   const scale = Number(options.get('scale'));
   if([2,3].includes(scale)){
     document.body.dataset.captureScale=String(scale);
     document.body.style.setProperty('--capture-scale',String(scale));
     document.body.style.setProperty('--capture-width','1280px');
   }
-  const view = {compact:options.get('page') === 'mini',pinned:true,visible:true,locale,language_preference:locale,theme:'blue'};
+  const view = {timezone:options.get('timezone')||'system',timezones:[...new Set(['UTC',...(Intl.supportedValuesOf?.('timeZone')||['America/Los_Angeles','America/New_York','Europe/London','Asia/Shanghai','Asia/Tokyo','Asia/Kathmandu','Australia/Sydney'])])],compact:options.get('page') === 'mini',pinned:true,visible:true,locale,language_preference:locale,theme:'blue',sport_enabled:options.get('sport')==='1',sport_visible:options.get('sport')==='1'};
   const snapshot = ${JSON.stringify(snapshot)};
+  const baseline=JSON.parse(JSON.stringify(snapshot));
+  function projectTimeZone(){
+    const timeZone=view.timezone==='system'?Intl.DateTimeFormat().resolvedOptions().timeZone:view.timezone;
+    const end=Date.parse(baseline.now),hour=3600000;
+    const formatter=new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+    const parts=Object.fromEntries(formatter.formatToParts(new Date(end)).map(p=>[p.type,p.value]));
+    const day=parts.year+'-'+parts.month+'-'+parts.day;
+    const offset=Math.round((Date.UTC(+parts.year,+parts.month-1,+parts.day,+parts.hour,+parts.minute,+parts.second)-end)/60000);
+    const digits=n=>String(Math.abs(n)).padStart(2,'0');
+    snapshot.now=day+'T'+parts.hour+':'+parts.minute+':'+parts.second+(offset<0?'-':'+')+digits(Math.trunc(offset/60))+':'+digits(offset%60);
+    snapshot.timezone=view.timezone;
+    const shift=Math.round((Date.parse(day+'T00:00:00Z')-Date.parse(baseline.now.slice(0,10)+'T00:00:00Z'))/86400000);
+    for(const key of ['days','history_days'])snapshot[key]=baseline[key].map(row=>({...row,day:ClickPulseHistory.addDays(row.day,shift)}));
+    const start=end-86400000,offsetMs=offset*60000;
+    snapshot.hourly=[];
+    for(let boundary=Math.floor((start+offsetMs)/hour)*hour-offsetMs;boundary<end;boundary+=hour){
+      const start_ms=Math.max(start,boundary),end_ms=Math.min(end,boundary+hour);
+      const clockHour=Number(new Intl.DateTimeFormat('en',{timeZone,hour:'2-digit',hourCycle:'h23'}).format(new Date(boundary)));
+      const weight=(clockHour>=8&&clockHour<=20?1+Math.sin(clockHour*1.7)*.5:.04)*(end_ms-start_ms)/hour;
+      snapshot.hourly.push({start_ms,end_ms,counts:{keyboard:0,mouse:0},approximate:false,weight});
+    }
+    let weights=snapshot.hourly.reduce((n,h)=>n+h.weight,0);const remaining={...baseline.windows[3].counts};
+    snapshot.hourly.forEach((h,index)=>{
+      for(const device of ['keyboard','mouse']){h.counts[device]=index===snapshot.hourly.length-1?remaining[device]:Math.floor(baseline.windows[3].counts[device]*h.weight/weights);remaining[device]-=h.counts[device];}
+      delete h.weight;
+    });
+  }
+  projectTimeZone();
   window.ipc = {postMessage(message){
     const request = JSON.parse(message);
-    if(request.action === 'language'){view.locale = request.language === 'zh-CN' ? 'zh-CN' : 'en';view.language_preference=request.language;}
+    if(request.action === 'language'){view.locale = createClickPulseI18n(window.clickpulseMessages,request.language==='system'?locale:request.language).locale;view.language_preference=request.language;}
     if(request.action === 'theme')view.theme=request.theme;
+    if(request.action === 'timezone'){view.timezone=request.timezone;projectTimeZone();}
+    if(request.action === 'sport')view.sport_enabled=request.enabled&&view.sport_visible;
+    if(request.action === 'sport_visible'){view.sport_visible=request.visible;if(!request.visible)view.sport_enabled=false;}
     if(request.action === 'compact')view.compact=true;
     if(request.action === 'expand')view.compact=false;
     if(request.action === 'pin')view.pinned=!view.pinned;

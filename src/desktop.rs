@@ -11,6 +11,9 @@ use clickpulse::{
     localization::Locale,
     runtime::{AppSnapshot, CaptureStatus, DatabaseMode, Runtime},
 };
+mod data_settings;
+#[cfg(target_os = "macos")]
+mod edit_menu;
 mod ipc;
 mod refresh;
 mod window;
@@ -41,8 +44,27 @@ enum UiEvent {
         id: u64,
         result: std::result::Result<String, String>,
     },
+    SportSample {
+        id: u64,
+        result: std::result::Result<String, String>,
+    },
+    DataFinished {
+        id: u64,
+        result: std::result::Result<DataOutcome, String>,
+    },
     #[cfg(target_os = "windows")]
     Activate,
+}
+
+#[derive(Debug)]
+enum DataOutcome {
+    Imported(clickpulse::history_import::ImportReport),
+    Relocated(clickpulse::runtime::Relocation),
+}
+
+enum DataNotice {
+    Imported(clickpulse::history_import::ImportReport),
+    Failed(String),
 }
 
 pub struct Options {
@@ -70,10 +92,33 @@ pub fn run(
     let mut activation = if demo {
         None
     } else {
-        match clickpulse::platform::windows::SingleInstance::begin(path)? {
+        let identity = if options.owned {
+            clickpulse::platform::data_dir()?.join("profile")
+        } else {
+            path.to_owned()
+        };
+        match clickpulse::platform::windows::SingleInstance::begin(&identity)? {
             Some(instance) => Some(instance),
             None => return Ok(()),
         }
+    };
+    let profile_lock = if options.owned && !demo {
+        let profile = clickpulse::platform::data_dir()?;
+        std::fs::create_dir_all(&profile)?;
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(profile.join("profile.lock"))?;
+        lock.try_lock().map_err(|_| {
+            anyhow::anyhow!(
+                "ClickPulse is already running. Open its existing menu-bar or tray window."
+            )
+        })?;
+        Some(lock)
+    } else {
+        None
     };
     let (mut preferences, mut preferences_recovery) = if demo {
         (clickpulse::presentation::Preferences::default(), None)
@@ -170,24 +215,26 @@ pub fn run(
         .replace(
             "/*__STYLE__*/",
             &format!(
-                "{}\n{}\n{}\n{}\n{}\n{}",
+                "{}\n{}\n{}\n{}\n{}\n{}\n{}",
                 clickpulse::branding::font_css(),
                 include_str!("../ui/style.css"),
                 include_str!("../ui/history.css"),
                 include_str!("../ui/compact.css"),
                 include_str!("../ui/themes.css"),
-                include_str!("../ui/dropdown.css")
+                include_str!("../ui/dropdown.css"),
+                include_str!("../ui/sport.css")
             ),
         )
         .replace(
             "/*__SCRIPT__*/",
             &format!(
-                "{}\n{}\n{}\n{}\n{}\n{}\n{}",
+                "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
                 include_str!("../ui/i18n.js"),
                 include_str!("../ui/themes.js"),
                 include_str!("../ui/dropdown.js"),
                 include_str!("../ui/history.js"),
                 include_str!("../ui/keyboard.js"),
+                include_str!("../ui/sport.js"),
                 include_str!("../ui/app.js"),
                 include_str!("../ui/presentation.js")
             ),
@@ -254,7 +301,20 @@ pub fn run(
     let mini = MenuItem::new(locale.text("action.mini"), true, None);
     let hide = MenuItem::new(locale.text("native.hide"), true, None);
     let pause = MenuItem::new(pause_label(locale, source_mode, paused), !demo, None);
-    let quit = MenuItem::new(locale.text("native.quit"), true, None);
+    let quit_accelerator = {
+        #[cfg(target_os = "macos")]
+        {
+            use tray_icon::menu::accelerator::{Accelerator, Code, Modifiers};
+            Some(Accelerator::new(Some(Modifiers::SUPER), Code::KeyQ))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
+    };
+    let quit = MenuItem::new(locale.text("native.quit"), true, quit_accelerator);
+    #[cfg(target_os = "macos")]
+    let edit_menu = edit_menu::EditMenu::new(locale, &quit)?;
     menu.append_items(&[
         &show,
         &mini,
@@ -301,15 +361,71 @@ pub fn run(
     let mut visible = !options.background;
     let snapshot_proxy = event_loop.create_proxy();
     let mut snapshots = SnapshotGate::default();
+    let mut sport_samples = SnapshotGate::default();
+    let mut last_sport_sample = Instant::now() - Duration::from_secs(1);
+    let mut data_job: Option<u64> = None;
+    let mut next_data_job = 0u64;
+    let mut quit_after_data = false;
+    let mut data_notice: Option<DataNotice> = None;
     let handle_event = move |event: Event<'_, UiEvent>,
                              target: &EventLoopWindowTarget<UiEvent>,
                              flow: &mut ControlFlow| {
+        let _ = &profile_lock;
         if !matches!(*flow, ControlFlow::ExitWithCode(_)) {
             *flow = ControlFlow::WaitUntil(next_refresh);
         }
         let mut refresh = false;
         let mut view_changed = false;
         match event {
+            Event::UserEvent(UiEvent::DataFinished { id, result }) => {
+                if let Some(current) = data_job
+                    && current == id
+                {
+                    data_job = None;
+                    snapshots.invalidate();
+                    sport_samples.invalidate();
+                    let _ = webview.evaluate_script(
+                        "window.receiveDataBusy?.(false);window.receiveSport?.({available:false});",
+                    );
+                    match result {
+                        Ok(DataOutcome::Imported(report)) if !quit_after_data => {
+                            data_notice = Some(DataNotice::Imported(report))
+                        }
+                        Ok(DataOutcome::Relocated(relocation)) => {
+                            if let Some(rt) = &mut runtime {
+                                rt.finish_relocation(relocation);
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(error) => {
+                            if quit_after_data && (!visible || preferences.compact) {
+                                eprintln!("Data operation failed before quit: {error}");
+                            } else {
+                                data_notice = Some(DataNotice::Failed(error));
+                            }
+                        }
+                    }
+                    refresh = true;
+                    if quit_after_data {
+                        *flow = ControlFlow::Exit;
+                    }
+                }
+            }
+            Event::UserEvent(UiEvent::SportSample { id, result }) => {
+                if sport_samples.complete(id).is_some()
+                    && ready
+                    && visible
+                    && preferences.compact
+                    && preferences.sport_enabled
+                    && preferences.sport_visible
+                {
+                    let script = match result {
+                        Ok(json) => format!("window.receiveSport?.({json});"),
+                        Err(_) => "window.receiveSport?.({available:false});".to_owned(),
+                    };
+                    let _ = webview.evaluate_script(&script);
+                }
+            }
             Event::UserEvent(UiEvent::Snapshot { id, result }) => {
                 if let Some(rerun) = snapshots.complete(id) {
                     refresh = rerun;
@@ -432,6 +548,13 @@ pub fn run(
                         Request::Language { language } => {
                             preferences.language = language;
                             locale = language.resolve();
+                            #[cfg(target_os = "macos")]
+                            edit_menu.set_locale(locale);
+                            view_changed = true;
+                            refresh = true;
+                        }
+                        Request::Timezone { timezone } => {
+                            preferences.timezone = timezone;
                             view_changed = true;
                             refresh = true;
                         }
@@ -513,6 +636,53 @@ pub fn run(
                             view_changed = true;
                         }
                         Request::Refresh {} => refresh = true,
+                        Request::Sport { enabled } => {
+                            preferences.sport_enabled = enabled && preferences.sport_visible;
+                            view_changed = true;
+                        }
+                        Request::SportVisible { visible } => {
+                            preferences.sport_visible = visible;
+                            if !visible {
+                                preferences.sport_enabled = false;
+                            }
+                            view_changed = true;
+                        }
+                        Request::SportSample {} => {
+                            if ready
+                                && data_job.is_none()
+                                && visible
+                                && preferences.compact
+                                && preferences.sport_enabled
+                                && preferences.sport_visible
+                                && last_sport_sample.elapsed() >= Duration::from_millis(180)
+                            {
+                                last_sport_sample = Instant::now();
+                                if let Some(rt) = &runtime {
+                                    if let Some(id) = sport_samples.begin() {
+                                        let proxy = snapshot_proxy.clone();
+                                        if rt
+                                            .request_sport_sample(move |result| {
+                                                let _ = proxy.send_event(UiEvent::SportSample {
+                                                    id,
+                                                    result: result
+                                                        .map_err(|error| format!("{error:#}")),
+                                                });
+                                            })
+                                            .is_err()
+                                        {
+                                            sport_samples.complete(id);
+                                            let _ = webview.evaluate_script(
+                                                "window.receiveSport?.({available:false});",
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    let _ = webview.evaluate_script(
+                                        "window.receiveSport?.({available:false});",
+                                    );
+                                }
+                            }
+                        }
                         Request::Pause {} => {
                             if let Some(rt) = &runtime {
                                 rt.set_paused(!rt.is_paused());
@@ -532,6 +702,7 @@ pub fn run(
                         #[cfg(target_os = "macos")]
                         Request::Takeover {} => {
                             if setup_pending
+                                && data_job.is_none()
                                 && let Some(rt) = &runtime
                                 && let Ok(s) = rt.snapshot()
                             {
@@ -603,44 +774,69 @@ pub fn run(
                                 }
                             }
                         }
-                        Request::Export {} => {
-                            if let Some(rt) = &runtime {
-                                let name = format!(
-                                    "ClickPulse-{}.csv",
-                                    Local::now().format("%Y%m%d-%H%M%S")
-                                );
-                                if let Some(path) = rfd::FileDialog::new()
-                                    .set_title(locale.text("native.export_title"))
-                                    .set_file_name(name)
-                                    .add_filter("CSV", &["csv"])
-                                    .save_file()
-                                {
-                                    match rt.export(path.clone()) {
-                                        Ok(()) => toast(
-                                            &webview,
-                                            &locale
-                                                .text("message.exported")
-                                                .replace("{path}", &path.display().to_string()),
-                                        ),
-                                        Err(error) => report_error(
-                                            &webview,
-                                            locale,
-                                            "message.export_failed",
-                                            &error,
-                                        ),
-                                    }
-                                }
-                            } else {
-                                toast(&webview, &locale.text("message.demo_export"));
-                            }
-                        }
                         Request::Reveal {} => {
                             if let Some(rt) = &runtime
-                                && let Ok(snapshot) = rt.snapshot()
-                                && let Err(error) =
-                                    clickpulse::platform::reveal(Path::new(&snapshot.database_path))
+                                && let Err(error) = clickpulse::platform::reveal(rt.database_path())
                             {
                                 report_error(&webview, locale, "message.reveal_failed", &error);
+                            }
+                        }
+                        action @ (Request::StorageDirectory {} | Request::ImportHistory {}) => {
+                            if data_job.is_none()
+                                && let Some(rt) = &runtime
+                                && rt.can_manage_auto_start()
+                            {
+                                next_data_job = next_data_job.wrapping_add(1);
+                                let id = next_data_job;
+                                data_job = Some(id);
+                                let proxy = snapshot_proxy.clone();
+                                let reply = move |result: anyhow::Result<DataOutcome>| {
+                                    let _ = proxy.send_event(UiEvent::DataFinished {
+                                        id,
+                                        result: result.map_err(|error| format!("{error:#}")),
+                                    });
+                                };
+                                let result = if matches!(action, Request::StorageDirectory {}) {
+                                    data_settings::select_directory(
+                                        &window,
+                                        rt.database_path(),
+                                        locale,
+                                    )
+                                    .and_then(|path| {
+                                        if let Some(path) = path {
+                                            rt.request_directory_change(&path, move |result| {
+                                                reply(result.map(DataOutcome::Relocated))
+                                            })
+                                        } else {
+                                            Ok(false)
+                                        }
+                                    })
+                                } else if let Some(path) =
+                                    data_settings::select_import(&window, locale)
+                                {
+                                    rt.request_import_history(path, move |result| {
+                                        reply(result.map(DataOutcome::Imported))
+                                    })
+                                    .map(|()| true)
+                                } else {
+                                    Ok(false)
+                                };
+                                match result {
+                                    Ok(true) => {}
+                                    Ok(false) => data_job = None,
+                                    Err(error) => {
+                                        data_job = None;
+                                        data_settings::show_error(
+                                            &window,
+                                            locale,
+                                            &format!("{error:#}"),
+                                        );
+                                    }
+                                }
+                                let _ = webview.evaluate_script(&format!("window.receiveDataBusy?.({});window.receiveSport?.({{available:false}});",data_job.is_some()));
+                                snapshots.invalidate();
+                                sport_samples.invalidate();
+                                refresh = true;
                             }
                         }
                         Request::Quit {} | Request::Close {} => {
@@ -668,7 +864,7 @@ pub fn run(
             }
             Event::MainEventsCleared if Instant::now() >= next_refresh => {
                 refresh = true;
-                next_refresh = Instant::now() + Duration::from_secs(2);
+                next_refresh = Instant::now() + Duration::from_millis(500);
             }
             Event::LoopDestroyed => {
                 #[cfg(target_os = "windows")]
@@ -690,6 +886,27 @@ pub fn run(
             }
             _ => {}
         }
+        // A requested Quit waits for a definite commit/rollback without blocking
+        // the event loop or dropping the operation's destination lock.
+        if data_job.is_some() && matches!(*flow, ControlFlow::ExitWithCode(_)) {
+            quit_after_data = true;
+            *flow = ControlFlow::WaitUntil(next_refresh);
+        }
+        // A sheet attached to a hidden or Mini window can be inaccessible.
+        // Keep the result until the full window is visible again.
+        if data_job.is_none()
+            && ready
+            && visible
+            && !preferences.compact
+            && let Some(notice) = data_notice.take()
+        {
+            match notice {
+                DataNotice::Imported(report) => {
+                    data_settings::show_import_report(&window, locale, report)
+                }
+                DataNotice::Failed(error) => data_settings::show_error(&window, locale, &error),
+            }
+        }
         if view_changed {
             if !demo && let Err(e) = preferences.save() {
                 report_error(&webview, locale, "message.preferences_failed", &e);
@@ -703,7 +920,7 @@ pub fn run(
             mini.set_text(locale.text("action.mini"));
             hide.set_text(locale.text("native.hide"));
             quit.set_text(locale.text("native.quit"));
-            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action});
+            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible});
             if ready {
                 let _ = webview.evaluate_script(&format!("window.receiveView({view});"));
                 // Launch-at-login can finish loading while hidden. Keep the
@@ -719,16 +936,19 @@ pub fn run(
             }
         }
         if refresh && ready {
+            // A history query must not delay acknowledgement of Pause/Resume.
+            let paused = runtime.as_ref().map_or(demo_paused, Runtime::is_paused);
+            let _ = webview.evaluate_script(&format!("window.receivePaused({paused});"));
             if let Some(rt) = &runtime
                 && let Ok(capture) = rt.capture_status()
             {
                 update_status(&tray, &pause, locale, source_mode, rt.is_paused(), &capture);
             }
-            if visible {
+            if visible && data_job.is_none() {
                 if let Some(rt) = &runtime {
                     if let Some(id) = snapshots.begin() {
                         let proxy = snapshot_proxy.clone();
-                        match rt.request_snapshot(move |result| {
+                        match rt.request_snapshot_in_timezone(preferences.timezone, move |result| {
                             let _ = proxy.send_event(UiEvent::Snapshot {
                                 id,
                                 result: result.map_err(|error| format!("{error:#}")),
@@ -742,7 +962,7 @@ pub fn run(
                         }
                     }
                 } else {
-                    let snapshot = demo_snapshot(demo_paused);
+                    let snapshot = demo_snapshot_in_timezone(demo_paused, preferences.timezone);
                     update_status(
                         &tray,
                         &pause,
@@ -827,8 +1047,16 @@ fn tray_icon() -> Result<Icon> {
     Ok(Icon::from_rgba(tray_rgba()?, TRAY_SIZE, TRAY_SIZE)?)
 }
 
+#[cfg(test)]
 fn demo_snapshot(paused: bool) -> AppSnapshot {
-    let now = Local::now();
+    demo_snapshot_in_timezone(paused, Default::default())
+}
+
+fn demo_snapshot_in_timezone(
+    paused: bool,
+    timezone: clickpulse::timezone::TimeZonePreference,
+) -> AppSnapshot {
+    let now = timezone.at(Local::now());
     let days: Vec<_> = (0..90)
         .rev()
         .map(|offset| {
@@ -903,7 +1131,37 @@ fn demo_snapshot(paused: bool) -> AppSnapshot {
         remaining.mouse -= counts.mouse;
         hours[*hour as usize] = counts;
     }
+    let mut hourly = clickpulse::hourly::empty(now);
+    let mut remainder = today;
+    let weights: Vec<_> = hourly
+        .iter()
+        .map(|hour| {
+            use chrono::{TimeZone, Timelike};
+            let local_hour = timezone
+                .at(Local.timestamp_millis_opt(hour.start_ms).unwrap())
+                .hour();
+            let activity = match local_hour {
+                8..=11 => 5,
+                12..=13 => 2,
+                14..=18 => 7,
+                19..=22 => 3,
+                _ => 1,
+            };
+            activity * (hour.end_ms - hour.start_ms)
+        })
+        .collect();
+    let mut weight_left: i64 = weights.iter().sum();
+    for (hour, weight) in hourly.iter_mut().zip(weights) {
+        hour.counts = Counts {
+            keyboard: remainder.keyboard * weight / weight_left,
+            mouse: remainder.mouse * weight / weight_left,
+        };
+        weight_left -= weight;
+        remainder.keyboard -= hour.counts.keyboard;
+        remainder.mouse -= hour.counts.mouse;
+    }
     AppSnapshot {
+        timezone,
         setup_pending: false,
         auto_start_available: false,
         auto_start: false,
@@ -927,6 +1185,7 @@ fn demo_snapshot(paused: bool) -> AppSnapshot {
             days,
             history_days,
             hours,
+            hourly,
             top_keys,
             legacy_imported: false,
             keyboard_stats: KeyboardStats {
@@ -951,6 +1210,37 @@ fn demo_snapshot(paused: bool) -> AppSnapshot {
 mod window_tests {
     use super::*;
     use tao::dpi::{PhysicalPosition, PhysicalSize};
+
+    #[test]
+    fn demo_timezone_keeps_dates_and_hourly_totals_consistent() {
+        for name in [
+            "UTC",
+            "Asia/Shanghai",
+            "Asia/Kathmandu",
+            "America/Los_Angeles",
+        ] {
+            let timezone = clickpulse::timezone::TimeZonePreference::Named(name.parse().unwrap());
+            let demo = demo_snapshot_in_timezone(false, timezone);
+            assert_eq!(demo.timezone, timezone);
+            assert_eq!(demo.stats.days.last().unwrap().day, demo.stats.now[..10]);
+            let count = demo
+                .stats
+                .hourly
+                .iter()
+                .map(|h| h.counts.total())
+                .sum::<i64>();
+            assert_eq!(
+                count,
+                demo.stats
+                    .windows
+                    .iter()
+                    .find(|w| w.seconds == 86400)
+                    .unwrap()
+                    .counts
+                    .total()
+            );
+        }
+    }
 
     #[test]
     fn demo_counts_agree_across_metrics_history_hours_and_keyboard() {
@@ -978,6 +1268,25 @@ mod window_tests {
                 sum
             });
         assert_eq!(hours, demo.stats.today);
+        let hourly = demo
+            .stats
+            .hourly
+            .iter()
+            .fold(Counts::default(), |mut sum, hour| {
+                sum.keyboard += hour.counts.keyboard;
+                sum.mouse += hour.counts.mouse;
+                sum
+            });
+        assert_eq!(
+            hourly,
+            demo.stats
+                .windows
+                .iter()
+                .find(|w| w.seconds == 86_400)
+                .unwrap()
+                .counts
+        );
+
         assert_eq!(
             demo.stats
                 .keyboard_stats

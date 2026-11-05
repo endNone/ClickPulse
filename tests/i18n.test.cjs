@@ -13,25 +13,46 @@ test('Windows copy follows locale while using PC and system tray terminology',()
   assert.equal(create(messages,'en','macos').t('native.hide'),'Hide to menu bar');
 });
 
-test('both catalogs cover the same keys and preserve every template parameter',()=>{
-  assert.deepEqual(Object.keys(messages.en).sort(),Object.keys(messages['zh-CN']).sort());
+test('all eight catalogs cover the same keys and preserve every template parameter',()=>{
+  assert.deepEqual(Object.keys(messages).sort(),['de','en','es','fr','ja','ko','zh-CN','zh-TW']);
   const parameters=value=>[...value.matchAll(/\{([a-zA-Z_]+)\}/g)].map(match=>match[1]).sort();
-  for(const key of Object.keys(messages.en)){
-    assert.ok(messages.en[key].trim(),key);
-    assert.deepEqual(parameters(messages.en[key]),parameters(messages['zh-CN'][key]),key);
-    assert.doesNotMatch(messages.en[key],/[\p{Script=Han}]/u,key);
+  for(const [locale,catalog] of Object.entries(messages)){
+    assert.deepEqual(Object.keys(messages.en).sort(),Object.keys(catalog).sort(),locale);
+    for(const key of Object.keys(messages.en)){
+      assert.ok(catalog[key].trim(),locale+': '+key);
+      assert.deepEqual(parameters(messages.en[key]),parameters(catalog[key]),locale+': '+key);
+    }
   }
+  for(const [key,message] of Object.entries(messages.en))assert.doesNotMatch(message,/[\p{Script=Han}]/u,key);
 });
 
-test('all static UI and native message keys resolve in both languages',()=>{
+test('all static UI and native message keys resolve in every language',()=>{
   const html=readFileSync('ui/index.html','utf8');
-  const files=['src/desktop.rs','src/capture.rs','src/runtime.rs','ui/app.js','ui/presentation.js'];
+  const files=['src/desktop.rs','src/capture.rs','src/runtime.rs','ui/app.js','ui/presentation.js','ui/sport.js'];
   const keys=new Set([...html.matchAll(/data-i18n(?:-aria|-title)?="([^"]+)"/g)].map(match=>match[1]));
   for(const file of files){
     const source=readFileSync(file,'utf8');
-    for(const match of source.matchAll(/["']((?:page|metric|common|chart|calendar|history|keys|settings|status|mini|native|action|message|error|demo|window|close)\.[a-zA-Z_.]+)["']/g))keys.add(match[1]);
+    for(const match of source.matchAll(/["']((?:page|metric|common|chart|calendar|history|keys|settings|status|mini|native|action|message|error|demo|window|close|sport)\.[a-zA-Z_.]+)["']/g))if(!match[1].endsWith('_'))keys.add(match[1]);
   }
-  for(const key of keys)for(const language of ['en','zh-CN'])assert.equal(typeof messages[language][key],'string',`${language}: ${key}`);
+  for(const key of keys)for(const language of Object.keys(messages))assert.equal(typeof messages[language][key],'string',`${language}: ${key}`);
+});
+
+test('regional aliases and Chinese scripts select the intended complete catalog',()=>{
+  for(const [tag,locale] of [['zh_CN.UTF-8','zh-CN'],['zh-Hans-TW','zh-CN'],['zh-SG','zh-CN'],['zh-Hant-HK','zh-TW'],['ZH_hk','zh-TW'],['zh-MO','zh-TW'],['ja-JP','ja'],['ko_KR.UTF-8','ko'],[' en-GB ','en'],['pt-BR','en'],['fr-CA','fr'],['de_DE.UTF-8','de'],['es-MX','es']]){
+    const i=create(messages,tag);assert.equal(i.locale,locale,tag);
+    assert.equal(i.t('settings.personalization'),messages[locale]['settings.personalization'],tag);
+    i.setLocale('zh-Hant');assert.equal(i.locale,'zh-TW');
+  }
+});
+
+test('missing translations use the English platform variant and decimal formatting survives language switches',()=>{
+  const partial={'zh-CN':{},en:{'native.hide.windows':'Hide to system tray','native.hide':'Hide to menu bar'}};
+  assert.equal(create(partial,'zh-CN','windows').t('native.hide'),'Hide to system tray');
+  const i=create(messages,'ja-JP');assert.equal(i.decimal(12.75,1),'12.8');
+  i.setLocale('ko-KR');assert.equal(i.decimal(0,1),'0.0');
+  assert.equal(i.t('sport.skin_warp'),messages.ko['sport.skin_warp']);
+  for(const locale of ['fr','de','es']){i.setLocale(locale);assert.equal(i.decimal(12.75,1),'12,8');}
+  i.setLocale('unsupported');assert.equal(i.locale,'en');assert.equal(i.decimal(12.75,1),'12.8');
 });
 
 test('switching language updates formatting without changing statistics values',()=>{
@@ -77,8 +98,8 @@ test('display dates are localized without moving a saved calendar day across tim
 
 test('template values are inserted literally and never interpreted as other parameters',()=>{
   const i=create(messages,'en');
-  const path='/tmp/<file>{count}.csv';
-  assert.equal(i.t('message.exported',{path}),`Exported: ${path}`);
+  const path='/tmp/<file>{count}.sqlite3';
+  assert.ok(i.t('storage.imported',{count:3,overlap:1,path}).includes(path));
   assert.equal(i.t('keys.tooltip',{key:'A',count:'12',percent:'1.00%'}),'A · 12 key presses · 1.00%');
 });
 
@@ -92,4 +113,29 @@ test('static translation changes labels and access names while preserving icon c
   assert.equal(icon.attributes['aria-label'],'Pin window');
   assert.equal(icon.attributes.title,'Pin window');
   assert.deepEqual(icon.children,['svg']);
+});
+
+test('named time zones apply to instants while calendar date keys remain unchanged',()=>{
+  const i=create(messages,'en');i.setTimeZone('Asia/Shanghai');
+  const stamp='2026-11-04T00:30:00Z';
+  assert.equal(i.date(stamp,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),'08:30');
+  assert.equal(i.day('2026-11-04',{day:'numeric'}),'4');
+  i.setLocale('ja');assert.equal(i.timezone,'Asia/Shanghai');
+  assert.equal(i.date(stamp,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),'08:30');
+  i.setTimeZone('America/Los_Angeles');
+  assert.equal(i.date(stamp,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),'16:30');
+  assert.throws(()=>i.setTimeZone('not/a-zone'),RangeError);
+  assert.equal(i.timezone,'America/Los_Angeles');
+});
+
+test('system time zone is refreshed after an operating-system zone change',()=>{
+  const previous=process.env.TZ;
+  try{
+    process.env.TZ='Asia/Tokyo';const i=create(messages,'en');i.setTimeZone('system');
+    const stamp='2026-11-04T00:30:00Z';
+    assert.equal(i.date(stamp,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),'09:30');
+    process.env.TZ='UTC';assert.equal(i.setTimeZone('system'),true);
+    assert.equal(i.date(stamp,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),'00:30');
+    assert.equal(i.timezone,'system');
+  }finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous;}
 });

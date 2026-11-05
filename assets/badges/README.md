@@ -1,6 +1,6 @@
 # README badges
 
-The preview version, project license, platform targets and Rust core badges are stored locally, so the README does not depend on a third-party badge service. Keep version and platform labels consistent with the actual packages.
+The release version, project license, platform targets and Rust core badges are stored locally, so the README does not depend on a third-party badge service. Keep version and platform labels consistent with the actual packages.
 
 ## Rust logo
 
