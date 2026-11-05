@@ -74,10 +74,7 @@ impl CollectorDb {
             source_conn.busy_timeout(Duration::from_secs(5))?;
             source_conn.prepare("SELECT bucket,dev,code,cnt FROM events LIMIT 0")?;
             let mut dest = Connection::open(&staged)?;
-            {
-                let backup = rusqlite::backup::Backup::new(&source_conn, &mut dest)?;
-                backup.run_to_completion(1024, Duration::from_millis(5), None)?;
-            }
+            crate::storage::copy_snapshot(&source_conn, &mut dest)?;
             ensure!(
                 dest.query_row("PRAGMA quick_check", [], |r| r.get::<_, String>(0))? == "ok",
                 "原数据完整性检查失败"
@@ -160,6 +157,14 @@ impl CollectorDb {
     }
     pub fn snapshot(&self, now: DateTime<Local>) -> Result<Snapshot> {
         self.reader.snapshot(now)
+    }
+
+    pub fn snapshot_in_timezone(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<Snapshot> {
+        self.reader.snapshot_in_timezone(now, zone)
     }
     pub fn lifetime(&self) -> Result<crate::db::Counts> {
         self.reader.lifetime()

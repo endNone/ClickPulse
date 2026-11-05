@@ -24,6 +24,13 @@ fn confirm(
     result == MessageDialogResult::Ok || result == MessageDialogResult::Custom(label)
 }
 
+fn same_database(candidate: &Path, current: &Path) -> bool {
+    match (candidate.canonicalize(), current.canonicalize()) {
+        (Ok(candidate), Ok(current)) => candidate == current,
+        _ => false,
+    }
+}
+
 pub(super) fn select_directory(
     window: &tao::window::Window,
     current: &Path,
@@ -41,7 +48,7 @@ pub(super) fn select_directory(
     let Some(directory) = dialog.pick_folder() else {
         return Ok(None);
     };
-    if directory.join("events.sqlite3").canonicalize().ok() == current.canonicalize().ok() {
+    if same_database(&directory.join("events.sqlite3"), current) {
         return Ok(None);
     }
     if directory.join("events.sqlite3").exists() {
@@ -118,4 +125,22 @@ pub(super) fn show_error(window: &tao::window::Window, locale: Locale, error: &s
         .set_description(format!("{}\n\n{error}", locale.text("storage.failed")))
         .set_level(MessageLevel::Error)
         .show();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn missing_paths_are_not_the_same_database() {
+        let temp = tempfile::tempdir().unwrap();
+        let a = temp.path().join("a.sqlite3");
+        let b = temp.path().join("b.sqlite3");
+        assert!(!same_database(&a, &b));
+        assert!(!same_database(&a, &a));
+        std::fs::write(&a, b"fixture").unwrap();
+        assert!(same_database(&temp.path().join("./a.sqlite3"), &a));
+        assert!(!same_database(&a, &b));
+        std::fs::write(&b, b"other").unwrap();
+        assert!(!same_database(&a, &b));
+    }
 }

@@ -69,7 +69,12 @@ function createClickPulseDropdowns(document,window){
       if(key.length===1&&!event.ctrlKey&&!event.metaKey&&!event.altKey){
         event.preventDefault();if(!wasOpen)open();const now=Date.now();buffer=now-typedAt<700?buffer+key:key;typedAt=now;
         const repeated=[...buffer].every(c=>c===buffer[0]),query=(repeated?key:buffer).toLocaleLowerCase(),start=repeated?active+1:active;
-        for(let n=0;n<options.length;n++){const i=(start+n)%options.length;if(options[i].textContent.toLocaleLowerCase().startsWith(query)){active=i;mark();break;}}
+        let match=-1;
+        for(const mode of ['startsWith','includes']){
+          for(let n=0;n<options.length;n++){const i=(start+n)%options.length;if(options[i].textContent.toLocaleLowerCase()[mode](query)){match=i;break;}}
+          if(match>=0)break;
+        }
+        if(match>=0){active=match;mark();}
       }
     }
     const controller={select,wrapper,trigger,menu,sync,open,close};controllers.set(select.id,controller);

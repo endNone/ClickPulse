@@ -93,6 +93,7 @@ impl DatabaseMode {
 pub struct AppSnapshot {
     #[serde(flatten)]
     pub stats: Snapshot,
+    pub timezone: crate::timezone::TimeZonePreference,
     pub capture: CaptureStatus,
     pub paused: bool,
     pub database_path: String,
@@ -145,6 +146,7 @@ impl Drop for SportDelivery {
 }
 
 pub(crate) struct SnapshotDelivery {
+    timezone: crate::timezone::TimeZonePreference,
     capture: Arc<Mutex<CaptureStatus>>,
     paused: Arc<AtomicBool>,
     path: PathBuf,
@@ -159,6 +161,7 @@ impl SnapshotDelivery {
         let result = (|| {
             let snapshot = AppSnapshot {
                 stats: stats?,
+                timezone: self.timezone,
                 capture: self
                     .capture
                     .lock()
@@ -277,7 +280,7 @@ impl Runtime {
         let capture = {
             status.lock().unwrap().error_code = Some("error.platform");
             status.lock().unwrap().error =
-                Some("全局监听目前支持 macOS；统计与导出可在此平台使用".into());
+                Some("Global input monitoring requires macOS or Windows; statistics and migration are available on this platform.".into());
             None
         };
         Ok(Self {
@@ -368,6 +371,7 @@ impl Runtime {
             .context("统计读取超时")??;
         Ok(AppSnapshot {
             stats,
+            timezone: Default::default(),
             capture: self.capture_status()?,
             paused: self.paused.load(Ordering::Relaxed),
             database_path: self.path.display().to_string(),
@@ -386,8 +390,17 @@ impl Runtime {
         &self,
         reply: impl FnOnce(Result<String>) + Send + 'static,
     ) -> Result<()> {
+        self.request_snapshot_in_timezone(Default::default(), reply)
+    }
+
+    pub fn request_snapshot_in_timezone(
+        &self,
+        timezone: crate::timezone::TimeZonePreference,
+        reply: impl FnOnce(Result<String>) + Send + 'static,
+    ) -> Result<()> {
         self.tx
             .try_send(Command::SnapshotAsync(SnapshotDelivery {
+                timezone,
                 capture: self.status.clone(),
                 paused: self.paused.clone(),
                 path: self.path.clone(),
@@ -586,21 +599,27 @@ fn source_loop_inner(
     status: Arc<Mutex<CaptureStatus>>,
     probe: bool,
 ) -> Result<()> {
-    let mut cached: Option<Snapshot> = None;
+    let mut cached: Option<(String, Snapshot)> = None;
     while let Ok(command) = rx.recv() {
         match command {
             Command::SportSample(delivery) => delivery.complete(source.lifetime()),
             Command::Snapshot(_) | Command::SnapshotAsync(_) => {
                 let now = Local::now();
+                let timezone = match &command {
+                    Command::SnapshotAsync(delivery) => delivery.timezone,
+                    _ => Default::default(),
+                };
+                let cache_key = timezone.cache_key();
                 let result = if paused.load(Ordering::Relaxed)
-                    && let Some(stats) = &cached
+                    && let Some((cached_zone, stats)) = &cached
+                    && *cached_zone == cache_key
                 {
                     Ok(stats.clone())
                 } else {
-                    source.snapshot(now)
+                    source.snapshot_in_timezone(now, timezone)
                 };
                 if let Ok(stats) = &result {
-                    cached = Some(stats.clone());
+                    cached = Some((cache_key, stats.clone()));
                 }
                 let mut current = status.lock().map_err(|_| anyhow!("同步状态不可用"))?;
                 if !probe {
@@ -663,6 +682,16 @@ impl Storage {
         match self {
             Self::Independent(db) => db.snapshot(now),
             Self::App(db) => db.snapshot(now),
+        }
+    }
+    fn snapshot_in_timezone(
+        &self,
+        now: chrono::DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<Snapshot> {
+        match self {
+            Self::Independent(db) => db.snapshot_in_timezone(now, zone),
+            Self::App(db) => db.snapshot_in_timezone(now, zone),
         }
     }
     fn prune_rolling_cache(&mut self, now: i64) -> Result<()> {
@@ -869,7 +898,12 @@ impl StorageWorker {
             Command::Snapshot(reply) => {
                 let _ = reply.send(db.snapshot(Local::now()));
             }
-            Command::SnapshotAsync(delivery) => delivery.complete(db.snapshot(Local::now())),
+            // Calendar regrouping may scan old minute buckets. Keep draining
+            // accepted input while this read owns the database on a helper.
+            Command::SnapshotAsync(delivery) => self.spawn_job(move |db| {
+                let result = db.snapshot_in_timezone(Local::now(), delivery.timezone);
+                Box::new(move || delivery.complete(result))
+            })?,
             Command::SportSample(delivery) => delivery.complete(db.lifetime()),
             Command::Import(source, current, reply) => self.spawn_job(move |db| {
                 let result = match db {
@@ -1824,5 +1858,50 @@ mod tests {
         tx.send(Command::Stop).unwrap();
         writer.join().unwrap().unwrap();
         assert_eq!(EventDb::open(&path).unwrap().lifetime().unwrap().mouse, 257);
+    }
+
+    #[test]
+    fn zoned_async_snapshot_is_tagged_and_shutdown_keeps_queued_input() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("zone.sqlite3");
+        let mut runtime = Runtime::start_owned(&path, false).unwrap();
+        let event = InputEvent {
+            ts_ms: Local::now().timestamp_millis(),
+            device: Device::Keyboard,
+            code: 1,
+        };
+        for _ in 0..5 {
+            runtime.tx.send(Command::Input(event.clone())).unwrap();
+        }
+        let (tx, rx) = bounded(1);
+        let timezone = crate::timezone::TimeZonePreference::Named("Asia/Shanghai".parse().unwrap());
+        runtime
+            .request_snapshot_in_timezone(timezone, move |r| {
+                tx.send(r).unwrap();
+            })
+            .unwrap();
+        for _ in 0..20000 {
+            runtime.tx.send(Command::Input(event.clone())).unwrap();
+        }
+        let result = rx.recv_timeout(Duration::from_secs(10)).unwrap().unwrap();
+        let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(value["timezone"], "Asia/Shanghai");
+        assert_eq!(value["lifetime"]["keyboard"], 5);
+        assert_eq!(
+            chrono::DateTime::parse_from_rfc3339(value["now"].as_str().unwrap())
+                .unwrap()
+                .offset()
+                .local_minus_utc(),
+            8 * 3600
+        );
+        runtime.shutdown().unwrap();
+        assert_eq!(
+            CollectorDb::open(&path)
+                .unwrap()
+                .lifetime()
+                .unwrap()
+                .keyboard,
+            20005
+        );
     }
 }

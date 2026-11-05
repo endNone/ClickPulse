@@ -49,11 +49,32 @@ window.setInterfaceLanguage=(locale,preference)=>{
   Dropdowns.sync('language-select');
   if(I.locale===locale)return;
   I.setLocale(locale);I.apply(document);updateHeading();renderDataOperation();
-  Dropdowns.syncAll();
+  renderTimeZoneOptions();Dropdowns.syncAll();
   calendarLayout='';historySignature='';
   sportView?.render();
   for(const id of ['calendar-range-select','history-range-select'])delete $(id).dataset.options;
 };
+let timezoneNames=[],timezoneChoicesSignature='';
+function renderTimeZoneOptions(){
+  const select=$('timezone-select'),value=window.presentationView?.timezone||'system';
+  const options=['system',...timezoneNames].map(value=>{
+    const option=document.createElement('option');option.value=value;
+    option.textContent=value==='system'?t('language.system'):value.replace(/_/g,' ');return option;
+  });
+  select.replaceChildren(...options);select.value=value;Dropdowns.sync('timezone-select');
+}
+window.setTimeZoneChoices=names=>{
+  const signature=JSON.stringify(names);if(signature===timezoneChoicesSignature)return;timezoneChoicesSignature=signature;
+  timezoneNames=names.filter(name=>{try{new Intl.DateTimeFormat('en',{timeZone:name});return true;}catch{return false;}});
+  renderTimeZoneOptions();
+};
+window.setInterfaceTimeZone=value=>{
+  try{
+    if(I.setTimeZone(value)){renderSignatures.clear();calendarLayout='';historySignature='';}
+    $('timezone-select').value=value;Dropdowns.sync('timezone-select');return true;
+  }catch{window.toast(t('settings.timezone_unavailable'));return false;}
+};
+$('timezone-select').addEventListener('change',event=>send('timezone',{timezone:event.target.value}));
 $('language-select').addEventListener('change',event=>send('language',{language:event.target.value}));
 $('theme-select').addEventListener('change',event=>send('theme',{theme:event.target.value}));
 const K=ClickPulseKeyboard;
@@ -146,6 +167,8 @@ window.failure=message=>{
   }
 };
 window.receive=snapshot=>{
+  if(snapshot.timezone && snapshot.timezone!==(window.presentationView?.timezone||'system'))return;
+  if(!window.setInterfaceTimeZone(snapshot.timezone||window.presentationView?.timezone||'system'))return;
   data=snapshot;
   window.presentationStats?.(data);
   if(window.presentationView?.compact)return;

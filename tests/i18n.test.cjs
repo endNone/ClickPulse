@@ -114,3 +114,28 @@ test('static translation changes labels and access names while preserving icon c
   assert.equal(icon.attributes.title,'Pin window');
   assert.deepEqual(icon.children,['svg']);
 });
+
+test('named time zones apply to instants while calendar date keys remain unchanged',()=>{
+  const i=create(messages,'en');i.setTimeZone('Asia/Shanghai');
+  const stamp='2026-11-04T00:30:00Z';
+  assert.equal(i.date(stamp,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),'08:30');
+  assert.equal(i.day('2026-11-04',{day:'numeric'}),'4');
+  i.setLocale('ja');assert.equal(i.timezone,'Asia/Shanghai');
+  assert.equal(i.date(stamp,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),'08:30');
+  i.setTimeZone('America/Los_Angeles');
+  assert.equal(i.date(stamp,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),'16:30');
+  assert.throws(()=>i.setTimeZone('not/a-zone'),RangeError);
+  assert.equal(i.timezone,'America/Los_Angeles');
+});
+
+test('system time zone is refreshed after an operating-system zone change',()=>{
+  const previous=process.env.TZ;
+  try{
+    process.env.TZ='Asia/Tokyo';const i=create(messages,'en');i.setTimeZone('system');
+    const stamp='2026-11-04T00:30:00Z';
+    assert.equal(i.date(stamp,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),'09:30');
+    process.env.TZ='UTC';assert.equal(i.setTimeZone('system'),true);
+    assert.equal(i.date(stamp,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'}),'00:30');
+    assert.equal(i.timezone,'system');
+  }finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous;}
+});

@@ -553,6 +553,11 @@ pub fn run(
                             view_changed = true;
                             refresh = true;
                         }
+                        Request::Timezone { timezone } => {
+                            preferences.timezone = timezone;
+                            view_changed = true;
+                            refresh = true;
+                        }
                         Request::Theme { theme } => {
                             preferences.theme = theme;
                             view_changed = true;
@@ -915,7 +920,7 @@ pub fn run(
             mini.set_text(locale.text("action.mini"));
             hide.set_text(locale.text("native.hide"));
             quit.set_text(locale.text("native.quit"));
-            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible});
+            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible});
             if ready {
                 let _ = webview.evaluate_script(&format!("window.receiveView({view});"));
                 // Launch-at-login can finish loading while hidden. Keep the
@@ -940,7 +945,7 @@ pub fn run(
                 if let Some(rt) = &runtime {
                     if let Some(id) = snapshots.begin() {
                         let proxy = snapshot_proxy.clone();
-                        match rt.request_snapshot(move |result| {
+                        match rt.request_snapshot_in_timezone(preferences.timezone, move |result| {
                             let _ = proxy.send_event(UiEvent::Snapshot {
                                 id,
                                 result: result.map_err(|error| format!("{error:#}")),
@@ -954,7 +959,7 @@ pub fn run(
                         }
                     }
                 } else {
-                    let snapshot = demo_snapshot(demo_paused);
+                    let snapshot = demo_snapshot_in_timezone(demo_paused, preferences.timezone);
                     update_status(
                         &tray,
                         &pause,
@@ -1039,8 +1044,16 @@ fn tray_icon() -> Result<Icon> {
     Ok(Icon::from_rgba(tray_rgba()?, TRAY_SIZE, TRAY_SIZE)?)
 }
 
+#[cfg(test)]
 fn demo_snapshot(paused: bool) -> AppSnapshot {
-    let now = Local::now();
+    demo_snapshot_in_timezone(paused, Default::default())
+}
+
+fn demo_snapshot_in_timezone(
+    paused: bool,
+    timezone: clickpulse::timezone::TimeZonePreference,
+) -> AppSnapshot {
+    let now = timezone.at(Local::now());
     let days: Vec<_> = (0..90)
         .rev()
         .map(|offset| {
@@ -1121,7 +1134,9 @@ fn demo_snapshot(paused: bool) -> AppSnapshot {
         .iter()
         .map(|hour| {
             use chrono::{TimeZone, Timelike};
-            let local_hour = Local.timestamp_millis_opt(hour.start_ms).unwrap().hour();
+            let local_hour = timezone
+                .at(Local.timestamp_millis_opt(hour.start_ms).unwrap())
+                .hour();
             let activity = match local_hour {
                 8..=11 => 5,
                 12..=13 => 2,
@@ -1143,6 +1158,7 @@ fn demo_snapshot(paused: bool) -> AppSnapshot {
         remainder.mouse -= hour.counts.mouse;
     }
     AppSnapshot {
+        timezone,
         setup_pending: false,
         auto_start_available: false,
         auto_start: false,
@@ -1191,6 +1207,37 @@ fn demo_snapshot(paused: bool) -> AppSnapshot {
 mod window_tests {
     use super::*;
     use tao::dpi::{PhysicalPosition, PhysicalSize};
+
+    #[test]
+    fn demo_timezone_keeps_dates_and_hourly_totals_consistent() {
+        for name in [
+            "UTC",
+            "Asia/Shanghai",
+            "Asia/Kathmandu",
+            "America/Los_Angeles",
+        ] {
+            let timezone = clickpulse::timezone::TimeZonePreference::Named(name.parse().unwrap());
+            let demo = demo_snapshot_in_timezone(false, timezone);
+            assert_eq!(demo.timezone, timezone);
+            assert_eq!(demo.stats.days.last().unwrap().day, demo.stats.now[..10]);
+            let count = demo
+                .stats
+                .hourly
+                .iter()
+                .map(|h| h.counts.total())
+                .sum::<i64>();
+            assert_eq!(
+                count,
+                demo.stats
+                    .windows
+                    .iter()
+                    .find(|w| w.seconds == 86400)
+                    .unwrap()
+                    .counts
+                    .total()
+            );
+        }
+    }
 
     #[test]
     fn demo_counts_agree_across_metrics_history_hours_and_keyboard() {

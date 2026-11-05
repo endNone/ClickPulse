@@ -52,6 +52,7 @@ pub struct Preferences {
     pub compact: bool,
     pub pinned: bool,
     pub language: crate::localization::LanguagePreference,
+    pub timezone: crate::timezone::TimeZonePreference,
     pub theme: Theme,
     pub close_action: CloseAction,
     pub sport_enabled: bool,
@@ -64,6 +65,7 @@ impl Default for Preferences {
             compact: false,
             pinned: true,
             language: Default::default(),
+            timezone: Default::default(),
             theme: Default::default(),
             close_action: Default::default(),
             sport_enabled: false,
@@ -143,7 +145,7 @@ impl Preferences {
 
     fn save_to(&self, path: &Path) -> Result<()> {
         use std::io::Write;
-        std::fs::create_dir_all(path.parent().unwrap())?;
+        std::fs::create_dir_all(path.parent().context("Invalid preferences directory")?)?;
         let temp = path.with_extension(format!("{}.tmp", std::process::id()));
         let result = (|| {
             let mut file = std::fs::OpenOptions::new()

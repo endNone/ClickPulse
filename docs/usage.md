@@ -1,6 +1,6 @@
 # Usage
 
-This guide describes current development source. Public preview build 55 does not yet include Mini Sport, the expanded language options or the new data-management controls. Current source removes CSV export, including the toolbar, history-page action and command-line command.
+This guide describes current development source. Public preview build 55 does not yet include Mini Sport, the expanded language options, manual time-zone selection or the new data-management controls. Current source removes CSV export, including the toolbar, history-page action and command-line command.
 
 ## First launch
 
@@ -41,6 +41,12 @@ Choose **Blue**, **Teal**, **Violet** or **Graphite** in Settings. The preferenc
 Language follows the system by default, unless you have saved a manual choice. English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German and Spanish are available in Settings. Regional tags such as zh-Hant-HK, ja-JP and ko-KR map to their supported language. The first supported language in your system preference list is used; unsupported language lists fall back to English. Changing the language updates labels, menus, dates, number formatting and Mini Sport controls without resetting your statistics or skin.
 
 Dropdown menus are rendered inside the app: use arrow keys to browse, Enter or Space to confirm, Escape to cancel, or Tab to confirm and move to the next control.
+
+## Time zone
+
+In **Settings → Application → Time zone**, **Follow system** is the default. Choose an IANA zone such as **Asia/Shanghai** or **America/Los_Angeles** to use it throughout the desktop statistics. Type a city name while the menu is open to find a zone quickly. The choice is saved independently of language and theme. Choosing a different zone explicitly refreshes a read-only view once, even if its automatic updates are paused.
+
+Today, the seven-day summary, daily trends, history, the calendar and hourly labels use the same selected zone. A zone change can move activity across a date boundary. It does not rewrite timestamps, saved summaries or lifetime counts. System mode follows operating-system time-zone changes. Repeated daylight-saving hours remain separate, and rolling counters still cover the same elapsed intervals. Legacy minute records retain their minute precision.
 
 ## Mini mode and background recording
 

@@ -99,3 +99,12 @@ test('either arrow opens at the saved selection before previewing adjacent optio
     assert.equal(themes.value,key==='ArrowUp'?'teal':'graphite');assert.equal(changes,1);
   }
 });
+
+
+test('typing a city finds an IANA time zone without its region prefix',()=>{
+  const {themes,t,document,dropdowns}=fixture();
+  themes.replaceChildren(...['system','America/New_York','Asia/Shanghai'].map(value=>{const o=document.createElement('option');o.value=value;o.textContent=value.replace(/_/g,' ');return o;}));
+  themes.value='system';dropdowns.sync(themes);
+  for(const key of 'shang')t.trigger.fire('keydown',{key});
+  t.trigger.fire('keydown',{key:'Enter'});assert.equal(themes.value,'Asia/Shanghai');
+});

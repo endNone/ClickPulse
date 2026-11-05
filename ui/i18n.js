@@ -12,11 +12,20 @@ function createClickPulseI18n(messages, initialLocale='en',platform='macos') {
     if(['fr','de','es'].includes(parts[0]))return parts[0];
     return 'en';
   }
-  let locale=resolveLocale(initialLocale);
+  let locale=resolveLocale(initialLocale),timezone='system',zoneId=Intl.DateTimeFormat().resolvedOptions().timeZone;
   let numbers=new Intl.NumberFormat(locale);
   const percents=new Map(),dates=new Map(),decimals=new Map();
   const api={
     get locale(){return locale;},
+    get timezone(){return timezone;},
+    get effectiveTimeZone(){return zoneId;},
+    setTimeZone(value='system'){
+      if(value===timezone&&value!=='system')return false;
+      const next=value==='system'?Intl.DateTimeFormat().resolvedOptions().timeZone:value;
+      new Intl.DateTimeFormat('en',{timeZone:next});
+      const changed=timezone!==value||zoneId!==next;
+      timezone=value;zoneId=next;if(changed)dates.clear();return changed;
+    },
     setLocale(value){locale=resolveLocale(value);numbers=new Intl.NumberFormat(locale);percents.clear();dates.clear();decimals.clear();},
     t(key,values={}) {
       const variant=key+'.windows';
@@ -34,6 +43,7 @@ function createClickPulseI18n(messages, initialLocale='en',platform='macos') {
       return percents.get(digits).format(value||0);
     },
     date(value,options={}){
+      if(!options.timeZone)options={...options,timeZone:zoneId};
       const key=JSON.stringify(Object.entries(options).sort(([a],[b])=>a.localeCompare(b)));
       if(!dates.has(key))dates.set(key,new Intl.DateTimeFormat(locale,options));
       return dates.get(key).format(new Date(value));

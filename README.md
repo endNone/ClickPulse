@@ -32,7 +32,7 @@ Confirm **Recording**, then press a few keys and click in another app to check t
 
 ## Features
 
-The download links above still point to public preview build 55. Sport mode, the rolling 24-hour chart, 30-day trends, expanded language options and data management below are in development source and are not included in that published preview. Current development source also removes CSV export; the published preview retains its original features.
+The download links above still point to public preview build 55. Sport mode, the rolling 24-hour chart, 30-day trends, manual time-zone selection, expanded language options and data management below are in development source and are not included in that published preview. Current development source also removes CSV export; the published preview retains its original features.
 
 - **Activity overview:** 14/30/90-day trends, an hourly breakdown of the last 24 hours, seven-day and all-time totals, and an activity calendar.
 - **Keyboard views:** physical-key heatmap and a treemap sized by usage.
@@ -40,7 +40,7 @@ The download links above still point to public preview build 55. Sport mode, the
 - **Mini mode:** floating counts with pin, pause and expand controls, plus optional Sport feedback. Launch at login is available in Settings.
 - **Data management:** choose a save folder and merge compatible SQLite history with automatic backups.
 
-Four themes and eight interface languages are available in Settings: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German and Spanish. The language follows the system by default. Closing a window can keep recording; use **Quit ClickPulse** from the menu bar or tray to stop. See [Usage](docs/usage.md).
+Four themes and eight interface languages are available in Settings: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German and Spanish. The language follows the system by default. Statistics also follow the system time zone by default, with a saved override in **Settings → Application → Time zone**. Closing a window can keep recording; use **Quit ClickPulse** from the menu bar or tray to stop. See [Usage](docs/usage.md).
 
 ## Sport mode
 

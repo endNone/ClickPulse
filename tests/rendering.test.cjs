@@ -648,3 +648,22 @@ test('Settings links track conditional groups and respect reduced motion',()=>{
   assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='capture-settings').hidden,true);
   assert.equal(a.settingsLinks[0].attributes['aria-current'],'location');
 });
+
+test('time zone choices persist across locale changes and stale-zone snapshots are ignored',()=>{
+  const a=app(),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+  const s=snapshot();s.timezone='system';s.now='2026-11-04T00:30:00Z';a.window.receive(s);
+  a.window.receiveView({timezone:'Asia/Shanghai',timezones:['UTC','Asia/Shanghai','not/a-zone']});
+  assert.deepEqual(a.get('timezone-select').children.map(o=>o.value),['system','UTC','Asia/Shanghai']);
+  const option=a.get('timezone-select').children[1];
+  a.window.receiveView({pinned:false,timezones:['UTC','Asia/Shanghai','not/a-zone']});
+  assert.equal(a.get('timezone-select').children[1],option);
+  const zoned={...s,timezone:'Asia/Shanghai',now:'2026-11-04T08:30:00+08:00',today:{keyboard:17,mouse:3}};
+  a.window.receive(zoned);assert.equal(a.get('today').textContent,'20');
+  a.window.receive({...s,today:{keyboard:9999,mouse:0}});assert.equal(a.get('today').textContent,'20');
+  a.window.receiveView({locale:'fr',language_preference:'fr'});
+  assert.equal(a.get('timezone-select').value,'Asia/Shanghai');
+  a.get('timezone-select').value='system';a.get('timezone-select').fire('change');
+  assert.deepEqual(sent.pop(),{action:'timezone',timezone:'system'});
+  a.window.receiveView({timezone:'system'});a.window.receive(s);
+  assert.equal(a.get('timezone-select').value,'system');
+});

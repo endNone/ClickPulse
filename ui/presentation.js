@@ -1,5 +1,5 @@
 (() => {
-  const view={compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:false};
+  const view={timezone:'system',compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:false};
   window.presentationView=view;
   const put=(id,value)=>window.setSelectableText($(id),value);
   const onWindows=window.clickpulsePlatform==='windows';
@@ -46,6 +46,8 @@
     });
   }
   window.receiveView=next=>{
+    if(next.timezones)window.setTimeZoneChoices(next.timezones);
+    if(next.timezone)window.setInterfaceTimeZone(next.timezone);
     if(next.locale)window.setInterfaceLanguage(next.locale,next.language_preference);
     if(next.theme)window.setInterfaceTheme(next.theme);
     Object.assign(view,next);

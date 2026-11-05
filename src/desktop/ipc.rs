@@ -10,6 +10,9 @@ pub(super) enum Request {
     Language {
         language: LanguagePreference,
     },
+    Timezone {
+        timezone: clickpulse::timezone::TimeZonePreference,
+    },
     Theme {
         theme: Theme,
     },
@@ -60,6 +63,9 @@ mod tests {
     fn invalid_actions_and_payloads_are_rejected() {
         for body in [
             r#"{"action":"unknown"}"#,
+            r#"{"action":"timezone","timezone":"not/a-zone"}"#,
+            r#"{"action":"timezone"}"#,
+            r#"{"action":"timezone","timezone":null}"#,
             r#"{"action":"export"}"#,
             r#"{"action":"theme"}"#,
             r#"{"action":"theme","theme":"unknown"}"#,
@@ -84,6 +90,17 @@ mod tests {
                 language: LanguagePreference::Chinese
             }
         ));
+    }
+
+    #[test]
+    fn timezone_payload_uses_validated_iana_names() {
+        for name in ["system", "Asia/Shanghai", "America/Los_Angeles"] {
+            let body = serde_json::json!({"action":"timezone","timezone":name}).to_string();
+            assert!(matches!(
+                serde_json::from_str::<Request>(&body).unwrap(),
+                Request::Timezone { .. }
+            ));
+        }
     }
 
     #[cfg(target_os = "windows")]

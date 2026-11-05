@@ -291,6 +291,27 @@ impl EventDb {
         Ok(())
     }
 
+    pub fn snapshot_in_timezone(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<Snapshot> {
+        let _tx = self.conn.unchecked_transaction()?;
+        let mut snapshot = self.snapshot(now)?;
+        crate::timezone::project(
+            &self.conn,
+            &mut snapshot,
+            zone,
+            now,
+            "SELECT bucket,dev,SUM(cnt) FROM (SELECT bucket,dev,cnt FROM minutes UNION ALL SELECT bucket,dev,cnt FROM legacy_minutes) GROUP BY bucket,dev",
+            &[
+                ("recent", crate::hourly::Resolution::Millisecond),
+                ("legacy_minutes", crate::hourly::Resolution::Minute),
+            ],
+        )?;
+        Ok(snapshot)
+    }
+
     pub fn snapshot(&self, now: DateTime<Local>) -> Result<Snapshot> {
         let today_date = now.date_naive();
         let today_s = today_date.format("%Y-%m-%d").to_string();

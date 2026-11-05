@@ -47,12 +47,44 @@ impl LiveSource {
         // A short read transaction includes current WAL commits without freezing
         // the collector or mixing different versions across individual queries.
         let tx = self.conn.unchecked_transaction()?;
+        self.snapshot_from(&tx, now)
+    }
+
+    pub fn snapshot_in_timezone(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<Snapshot> {
+        let tx = self.conn.unchecked_transaction()?;
+        let mut snapshot = self.snapshot_from(&tx, now)?;
+        let precise = aggregates_ready(&tx)?
+            && metadata_int(&tx, "precise_since_ms")?
+                .is_some_and(|since| now.timestamp_millis() - 86_400_000 >= since);
+        crate::timezone::project(
+            &tx,
+            &mut snapshot,
+            zone,
+            now,
+            "SELECT bucket,dev,SUM(cnt) FROM events GROUP BY bucket,dev",
+            &[(
+                if precise { "recent_counts" } else { "events" },
+                if precise {
+                    crate::hourly::Resolution::Millisecond
+                } else {
+                    crate::hourly::Resolution::Minute
+                },
+            )],
+        )?;
+        Ok(snapshot)
+    }
+
+    fn snapshot_from(&self, tx: &Connection, now: DateTime<Local>) -> Result<Snapshot> {
         let today_s = now.date_naive().to_string();
         let week_s = (now.date_naive() - Days::new(6)).to_string();
-        let ready = aggregates_ready(&tx)?;
-        let activity = activity_counts(&tx, now.timestamp_millis(), ready)?;
+        let ready = aggregates_ready(tx)?;
+        let activity = activity_counts(tx, now.timestamp_millis(), ready)?;
         let lifetime = activity.lifetime;
-        let history = daily_counts(&tx, ready, &today_s)?;
+        let history = daily_counts(tx, ready, &today_s)?;
         let today = history.get(&today_s).copied().unwrap_or_default();
         let mut week = Counts::default();
         for (day, c) in &history {
@@ -72,7 +104,7 @@ impl LiveSource {
             })
             .collect();
         let coverage = if ready {
-            metadata_int(&tx, "precise_since_ms")?
+            metadata_int(tx, "precise_since_ms")?
         } else {
             None
         };
@@ -97,7 +129,7 @@ impl LiveSource {
                 c.add(dev, cnt);
             }
         }
-        let physical = if table_exists(&tx, "native_key_totals")? {
+        let physical = if table_exists(tx, "native_key_totals")? {
             let mut stmt =
                 tx.prepare("SELECT code,cnt FROM native_key_totals ORDER BY cnt DESC,code")?;
             stmt.query_map([], |r| {
@@ -112,7 +144,7 @@ impl LiveSource {
         };
         let mut before = Vec::new();
         let mut since = Vec::new();
-        let persistent = table_exists(&tx, "historical_key_totals")?;
+        let persistent = table_exists(tx, "historical_key_totals")?;
         let rows: Vec<(bool, EncodedKeyCount)> = if persistent {
             // Persistent eras do not depend on the current machine's timezone.
             let mut stmt =
@@ -128,7 +160,7 @@ impl LiveSource {
             })?
             .collect::<rusqlite::Result<_>>()?
         } else {
-            let cutoff = crate::storage_schema::legacy_cutoff(&tx)?;
+            let cutoff = crate::storage_schema::legacy_cutoff(tx)?;
             let mut stmt = tx.prepare("SELECT CASE WHEN code>=?3 THEN 0 ELSE bucket<?1 END,code,SUM(cnt) FROM events WHERE dev=1 AND bucket<=?2 GROUP BY 1,code ORDER BY code")?;
             stmt.query_map(
                 params![
@@ -168,7 +200,7 @@ impl LiveSource {
         let mut hourly = crate::hourly::empty(now);
         let precise = coverage.is_some_and(|since| now_ms - 86_400_000 >= since);
         crate::hourly::accumulate(
-            &tx,
+            tx,
             &mut hourly,
             if precise { "recent_counts" } else { "events" },
             if precise {
