@@ -18,7 +18,7 @@ def encode(directory, output, manifest_name="mini-demo-manifest.json"):
     dimensions = manifest["width"], manifest["height"]
     if not 1 <= frame_count <= 1000 or frame_ms < 20 or frame_ms % 10:
         raise ValueError("Invalid animation timing")
-    if dimensions not in {(1080, 680), (1350, 850), (640, 416)}:
+    if dimensions not in {(1080, 680), (1350, 850), (640, 416), (2160, 1360)}:
         raise ValueError("Invalid Mini capture dimensions")
     if output.suffix.lower() not in {".gif", ".webp"}:
         raise ValueError("Output must be GIF or WebP")

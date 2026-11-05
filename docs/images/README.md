@@ -56,11 +56,13 @@ The WebP encoder keeps full color at quality 90. The GIF alternative uses a shar
 
 The fixed random seed generates 191 calendar days, ending on 2026-10-08. Daily, weekly and lifetime counts are consistent; physical key counts sum to the keyboard total. The dataset exists only under the ignored `dist/readme-preview` folder. No database is read, no input listener runs and no live preferences are changed.
 
-## Sport: C to SS
+## Sport: C to SS on the desktop
 
-The README embeds [sport-c-to-ss-en.webp](sport-c-to-ss-en.webp), a 9-second looping **C → B → A → S → SS** demonstration, with a [GIF alternative](sport-c-to-ss-en.gif) and [static SS frame](sport-ss-en.jpg). All use the actual production Mini HTML/CSS/fonts, speed meter and Warp renderer in English and the default blue theme. The red accent comes from SS. No skins, shaking, native OS recording or live input collection are added.
+The README embeds [sport-desktop-en.webp](sport-desktop-en.webp), a 9-second **C → B → A → S → SS** loop, with a [static SS preview](sport-desktop-ss-en.jpg). It uses the same mountain-lake scenery and fictional notes window as the Mini demonstration above. The Mini iframe renders the production HTML/CSS/fonts, speed meter and Warp effect in English/default blue. SS adds the red accent and particles without shake. No live screen, database, listener or saved preferences are used.
 
-The capture is 640 × 416 pixels: the unchanged 320 × 208 Mini layout at 2× density. `sport-demo-driver.js` supplies a deterministic clock and cumulative simulated inputs; it never substitutes rank labels or the canvas drawing. A 50 ms capture cadence produces 180 frames (20 fps). Rates increase through 1, 3, 6, 10 and 14 combined presses/second. Every fourth input is a mouse click; the others are keys. The production one-second meter supplies the transitions. Totals rise from 18,780 (14,862 keys / 3,918 clicks) to 18,851 (14,916 / 3,935). The loop resets this fictional session after SS; ordinary application totals never reset this way. Sport and its Mini switch remain off by default in the App; this preview opts in explicitly.
+Capture at **2160 × 1360** pixels: a 1080 × 680 scene at 2× density. The original 320 × 208 Mini layout occupies 384 × 249.6 logical pixels in this scene, or about 768 × 499 captured pixels. Render the iframe at 3× density and reduce it within the scene so text and canvas remain crisp. This replaces the standalone 640 × 416 Sport showcase; the scenery source itself remains the original 1672 × 941 illustration, not a new high-resolution photograph.
+
+`sport-demo-driver.js` advances the actual meter and canvas through 180 deterministic 50 ms frames (20 fps). Rates rise through 1, 3, 6, 10 and 14 combined presses/second. Every fourth input is a click; the other 54 inputs type the visible draft. Counts rise from 18,780 (14,862 keys / 3,918 clicks) to 18,851 (14,916 / 3,935). The loop restarts this fictional session after SS; real application totals never reset this way. Sport remains off by default in the App; the preview opts in explicitly.
 
 To reproduce:
 
@@ -69,15 +71,16 @@ node scripts/prepare-sport-preview.cjs
 python3 -m http.server 8768 --bind 127.0.0.1 --directory dist/sport-preview
 ```
 
-Open `http://127.0.0.1:8768/sport-demo.html?locale=en&page=mini&scale=2&sport=1` at a 640 × 416 viewport. Wait for both `data-preview-ready="true"` and `data-frame="0"` on `<html>`. Save the initial browser viewport JPEG as `frame-000.jpg`; press Arrow Right before capturing each remaining frame through `frame-179.jpg`. Home reloads the initial state. The page clock stays frozen between steps, so capture speed does not affect input, particles or camera phase. Copy `sport-demo-manifest.json` from the preview into the frames folder; reset the temporary viewport afterwards. Encode the captured frames without resizing:
+Open `http://127.0.0.1:8768/sport-desktop.html?scale=2` at a 2160 × 1360 viewport. Wait for `data-preview-ready="true"` and `data-frame="0"` on the outer `<html>`. Save the initial **full-page browser JPEG** as `frame-000.jpg`; press Arrow Right and wait for each outer `data-frame` before capturing through `frame-179.jpg`. Home resets the scene. The clock stays frozen between steps. Full-page capture is required because some browser viewport captures clip the right edge despite reporting the correct viewport. Verify every saved image is exactly 2160 × 1360 and contains the complete Mini panel. The capture driver controls are excluded from the scene. Reset the temporary viewport afterwards.
+
+Copy `sport-desktop-manifest.json` from the preview to the frames folder and encode without resizing:
 
 ```bash
-python3 scripts/encode-mini-demo.py /path/to/frames docs/images/sport-c-to-ss-en.webp --manifest sport-demo-manifest.json
-python3 scripts/encode-mini-demo.py /path/to/frames docs/images/sport-c-to-ss-en.gif --manifest sport-demo-manifest.json
-cp /path/to/frames/frame-179.jpg docs/images/sport-ss-en.jpg
+python3 scripts/encode-mini-demo.py /path/to/frames docs/images/sport-desktop-en.webp --manifest sport-desktop-manifest.json
+cp /path/to/frames/frame-179.jpg docs/images/sport-desktop-ss-en.jpg
 ```
 
-The encoder verifies dimensions, total duration and infinite looping. This is a synthetic browser documentation example, not native GUI or physical-input validation. `app.html?page=mini&locale=en&rank=SS` also provides the interactive fixed-rank preview; it explicitly shows and enables the Sport switch without changing saved preferences.
+The encoder checks dimensions, total 9,000 ms duration and infinite looping, including when identical frames coalesce. This synthetic browser example is separate from native GUI or physical-input validation. The fixed-rank preview remains at `app.html?page=mini&locale=en&rank=SS`.
 
 ## Scenery provenance
 

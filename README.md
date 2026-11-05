@@ -6,7 +6,7 @@
 
 <p align="center"><a href="#installation"><img src="assets/badges/preview.svg" alt="preview: v0.1.0"></a> <a href="docs/development.md"><img src="assets/badges/rust.svg" alt="Core: Rust"></a> <a href="LICENSE"><img src="assets/badges/license.svg" alt="license: GPL-3.0-or-later"></a> <a href="docs/install-macos.md"><img src="assets/badges/macos.svg" alt="macOS: 12+ · arm64/x64"></a> <a href="docs/install-windows.md"><img src="assets/badges/windows.svg" alt="Windows: 10/11 · x64"></a></p>
 
-ClickPulse is an offline keyboard and mouse activity tracker for macOS and Windows. Explore daily trends, see your most-used keys, and keep today’s counts in a compact floating window.
+An offline keyboard and mouse activity tracker for macOS and Windows. See your daily patterns, most-used keys and live counts.
 
 [![ClickPulse overview](docs/images/overview-en.jpg)](docs/images/overview-en.jpg)
 
@@ -14,7 +14,7 @@ ClickPulse is an offline keyboard and mouse activity tracker for macOS and Windo
 
 [![Mini mode alongside everyday desktop work](docs/images/mini-desktop-en.webp)](docs/images/mini-desktop-en.webp)
 
-Simulated desktop work with live demo counts.
+Simulated desktop · Demo data.
 
 ## Installation
 
@@ -26,37 +26,31 @@ Simulated desktop work with live demo counts.
 | macOS 12+ · Intel | **x64** DMG or App ZIP | [macOS installation](docs/install-macos.md) |
 | Windows 10/11 · x64 | Portable ZIP | [Windows installation](docs/install-windows.md) |
 
-On macOS, move the complete **ClickPulse.app** to Applications, allow the [first launch](docs/install-macos.md#2-allow-the-first-launch), and enable **Input Monitoring**. On Windows, extract the complete portable ZIP and open **ClickPulse.exe**. Ready-built packages need no developer tools.
+**macOS:** move the App to Applications, allow the [first launch](docs/install-macos.md#2-allow-the-first-launch), then enable Input Monitoring. **Windows:** extract the ZIP and open ClickPulse.exe. Check **Recording** before use.
 
-Confirm **Recording**, then press a few keys and click in another app to check that counts increase. Mac previews are ad-hoc signed without notarization; Windows previews are unsigned.
+Mac previews are ad-hoc signed without notarization; Windows previews are unsigned.
 
 ## Features
 
-The download links above still point to public preview build 55. Sport mode, the rolling 24-hour chart, 30-day trends, manual time-zone selection, expanded language options and data management below are in development source and are not included in that published preview. Current development source also removes CSV export; the published preview retains its original features.
+**Development preview:** the features below are in current source; the published v0.1.0 packages are an earlier preview. [Build from source](docs/development.md) to try them.
 
-- **Activity overview:** 14/30/90-day trends, an hourly breakdown of the last 24 hours, seven-day and all-time totals, and an activity calendar.
-- **Keyboard views:** physical-key heatmap and a treemap sized by usage.
-- **History:** year filtering and complete daily records.
-- **Mini mode:** floating counts with pin, pause and expand controls, plus optional Sport feedback. Launch at login is available in Settings.
-- **Data management:** choose a save folder and merge compatible SQLite history with automatic backups.
+- **Overview:** 24-hour activity, 14/30/90-day trends and an activity calendar.
+- **Keyboard:** physical-key heatmap and usage treemap.
+- **History:** complete daily records and yearly filters.
+- **Mini:** floating counts, pin/pause controls and optional Sport effects.
+- **Data:** custom save folders and SQLite history imports with backups.
 
-Four themes and eight interface languages are available in Settings: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German and Spanish. The language follows the system by default. Statistics also follow the system time zone by default, with a saved override in **Settings → Application → Time zone**. Closing a window can keep recording; use **Quit ClickPulse** from the menu bar or tray to stop. See [Usage](docs/usage.md).
+Four themes, eight languages and a time-zone override are available in Settings. Language and time zone follow your system by default. [Usage guide](docs/usage.md).
 
 ## Sport mode
 
-Turn a burst of typing and clicking into a light runway. Inside Mini, Sport's **Warp** effect responds to your combined keyboard and mouse speed with light gates, particles and a live rank: **C → B → A → S → SS**. Red **SS** keeps the particles without shaking the window. Your activity totals stay visible.
+Type and click your way from **C → B → A → S → SS**. Mini’s Warp effect adds light gates and particles as your speed rises. Red **SS** keeps the motion without shaking the window.
 
-<p align="center"><a href="docs/images/sport-c-to-ss-en.webp"><img src="docs/images/sport-c-to-ss-en.webp" width="480" alt="Mini Sport accelerating from C through B, A and S to red SS, with light gates and particles"></a></p>
+[![Sport mode progressing from C to red SS during a simulated desktop writing session](docs/images/sport-desktop-en.webp)](docs/images/sport-desktop-en.webp)
 
-Simulated keyboard and mouse input, **C → B → A → S → SS**, using the App’s actual Mini renderer. [GIF version](docs/images/sport-c-to-ss-en.gif) · [Static SS preview](docs/images/sport-ss-en.jpg).
+Simulated desktop · Demo data. [Static SS preview](docs/images/sport-desktop-ss-en.jpg).
 
-Sport and its Mini switch are **off by default**. To try it:
-
-1. Open **Settings → Personalization** and enable **Sport mode** to show the Mini switch.
-2. Enter **Mini mode** using the top-right button, then click the lightning button to enable Sport.
-3. Type or click in any app. Use the lightning button to turn Sport off; hiding its switch in Settings also disables it.
-
-Ranks use combined presses per second (CPS): **C < 2 · B ≥ 2 · A ≥ 5 · S ≥ 8 · SS ≥ 12**. Holding a key counts once until released; moving or scrolling the mouse does not increase the rank. Animation stops when you leave Mini, and follows the system's reduced-motion preference. See [Sport in Mini mode](docs/usage.md#sport-in-mini-mode) for details.
+**Off by default.** Show Sport in **Settings → Personalization**, then enable it with Mini’s lightning button. Ranks combine keyboard and mouse input. [How it works](docs/usage.md#sport-in-mini-mode).
 
 ## Screenshots
 
@@ -76,9 +70,7 @@ Demo data, English interface, default deep blue theme. Click an image to view th
 
 ## Privacy
 
-Statistics stay on your device, with no account, telemetry or cloud sync. ClickPulse records key/button identities, counts and timestamps; it does not record typed text, pointer positions or screen contents.
-
-History is kept permanently. Updating or uninstalling the program retains your data. Use a complete SQLite backup to preserve history. See [Data and privacy](docs/data-and-privacy.md).
+No account, telemetry or cloud sync. Only key/button identities, counts and timestamps are stored locally—never typed text, pointer positions or screen contents. History is retained when you update or uninstall. [Data and privacy](docs/data-and-privacy.md).
 
 ## Documentation
 

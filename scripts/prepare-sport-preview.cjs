@@ -42,6 +42,17 @@ fs.writeFileSync(path.join(output,'app.html'),full.replace('</head>',mobile+'</h
 const driver=fs.readFileSync(path.join(__dirname,'sport-demo-driver.js'),'utf8');
 fs.writeFileSync(path.join(output,'sport-demo.html'),full.replace('<head>','<head><script>window.clickpulseSportDemoSnapshot='+fs.readFileSync(path.join(output,'synthetic-snapshot.json'),'utf8')+';'+driver+'</script>'));
 fs.writeFileSync(path.join(output,'sport-demo-manifest.json'),JSON.stringify({width:640,height:416,frame_count:180,frame_ms:50,duration_ms:9000,ranks:['C','B','A','S','SS'],synthetic:true},null,2)+'\n');
+// Reuse the existing scenery/notes scene; keep the Mini UI inside its own iframe.
+const desktop=fs.readFileSync(path.join(__dirname,'mini-desktop-demo.html'),'utf8').split('<script src="mini-demo-timeline.js">')[0];
+const sceneryStyle='<style>.mini-wrap{left:650px;top:250px;width:384px;height:249.6px}iframe{width:960px;height:624px;transform:scale(.4)}.cursor,.click-ring,.driver{display:none}</style>';
+fs.writeFileSync(path.join(output,'sport-desktop.html'),desktop
+  .replace('</head>',sceneryStyle+'</head>')
+  .replace('index.html?locale=en&amp;page=mini','sport-demo.html?locale=en&amp;page=mini&amp;scale=3&amp;sport=1')
+  .replace('ClickPulse · Mini mode desktop demo','ClickPulse · Sport desktop demo')
+  .replace('Simulated desktop · Demo data','Simulated desktop · Demo data · C → SS')
+  +'<script src="sport-desktop-demo.js"></script></body></html>');
+fs.copyFileSync(path.join(__dirname,'sport-desktop-demo.js'),path.join(output,'sport-desktop-demo.js'));
+fs.writeFileSync(path.join(output,'sport-desktop-manifest.json'),JSON.stringify({width:2160,height:1360,frame_count:180,frame_ms:50,duration_ms:9000,ranks:['C','B','A','S','SS'],synthetic:true},null,2)+'\n');
 const skins=[['warp','跃迁','越点越快，穿过层层光门。']];
 const cards=skins.map(([skin,name,caption])=>`<article class="preview-card"><div class="card-title"><h2>${name}</h2><span>MINI · 320 × 208</span></div><div class="mini-frame"><iframe title="${name} Mini Sport 演示" data-preview-skin="${skin}" src="about:blank"></iframe></div><p>${caption}</p></article>`).join('');
 const galleryCopy={

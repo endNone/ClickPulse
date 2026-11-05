@@ -32,6 +32,7 @@
     document.documentElement.dataset.frame=String(frame);
     document.documentElement.dataset.rank=document.getElementById('mini-sport-grade').textContent;
     document.documentElement.dataset.keys=String(keys);document.documentElement.dataset.clicks=String(clicks);
+    if(window.parent!==window)window.parent.postMessage({type:'sport-demo-state',frame,keys,clicks,rank:document.documentElement.dataset.rank},location.origin);
   }
   window.addEventListener('DOMContentLoaded',async()=>{
     await document.fonts.ready;
@@ -45,6 +46,11 @@
     window.receiveSport({keyboard,mouse,paused:true,available:true});
     window.receiveSport({keyboard,mouse,paused:false,available:true});
     renderCounters();document.documentElement.dataset.previewReady='true';
+    window.addEventListener('message',event=>{
+      if(event.origin!==location.origin||event.source!==window.parent)return;
+      if(event.data?.type==='sport-demo-step'&&frame<179)advance();
+      if(event.data?.type==='sport-demo-request-state')renderCounters();
+    });
     document.addEventListener('keydown',event=>{
       if(event.key==='ArrowRight'){event.preventDefault();if(frame<179)advance();}
       if(event.key==='Home'){event.preventDefault();location.reload();}
