@@ -23,7 +23,7 @@ class Element{
   contains(node){return this===node||this.children.some(child=>child.contains(node));}
   focus(){this.document.activeElement=this;this.document.fire('focusin',{target:this});}
   getBoundingClientRect(){return this.rect;}
-  scrollIntoView(){this.scrolled=true;}
+  scrollIntoView(){this.scrolled=true;this.scrolls=(this.scrolls||0)+1;}
   fire(type,values={}){const event={type,target:this,preventDefault(){this.defaultPrevented=true;},...values};this.dispatchEvent(event);return event;}
 }
 function fixture(){
@@ -74,6 +74,15 @@ test('option/locale refresh retains the selected year and updates local labels',
 test('typing selects matching options while IME composition is ignored',()=>{
   const {themes,t}=fixture();t.trigger.fire('keydown',{key:'v',isComposing:true});assert.equal(t.menu.hidden,true);
   t.trigger.fire('keydown',{key:'v'});t.trigger.fire('keydown',{key:'Enter'});assert.equal(themes.value,'violet');
+});
+
+test('unchanged background synchronization does not reset an open menu scroll position',()=>{
+  const {t,themes,dropdowns}=fixture();t.open();
+  const selected=t.menu.children[0],before=selected.scrolls;
+  for(let i=0;i<3;i++)dropdowns.sync(themes);
+  assert.equal(selected.scrolls,before,'periodic snapshots must not scroll the menu back to the active option');
+  t.trigger.fire('keydown',{key:'ArrowDown'});
+  assert.equal(t.menu.children[1].scrolled,true,'keyboard navigation still reveals its active option');
 });
 test('menus flip above controls near the bottom and stay inside the viewport',()=>{
   const {h,window}=fixture();h.trigger.rect={left:750,top:465,bottom:497,width:108};h.open();

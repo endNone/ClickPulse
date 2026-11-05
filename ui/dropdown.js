@@ -11,9 +11,9 @@ function createClickPulseDropdowns(document,window){
     select.parentNode.insertBefore(wrapper,select);select.hidden=true;document.body.append(menu);
     let options=[],items=[],signature='',active=-1,buffer='',typedAt=0;
     const current=()=>Math.max(0,options.findIndex(option=>option.value===select.value));
-    function mark(){
+    function mark(scroll=true){
       items.forEach((item,i)=>{item.classList.toggle('active',i===active);item.classList.toggle('selected',options[i].value===select.value);item.setAttribute('aria-selected',String(i===active));});
-      if(opened===controller&&items[active]){trigger.setAttribute('aria-activedescendant',items[active].id);items[active].scrollIntoView({block:'nearest'});}
+      if(opened===controller&&items[active]){trigger.setAttribute('aria-activedescendant',items[active].id);if(scroll)items[active].scrollIntoView({block:'nearest'});}
     }
     function sync(){
       const rows=Array.from(select.options).filter(option=>!option.disabled&&!option.hidden);
@@ -23,7 +23,8 @@ function createClickPulseDropdowns(document,window){
       const text=document.createElement('span');text.textContent=selected?.textContent||'';label.append(text);
       trigger.disabled=select.disabled||!rows.length;trigger.setAttribute('aria-label',select.getAttribute('aria-label')||text.textContent);menu.setAttribute('aria-label',select.getAttribute('aria-label')||text.textContent);
       const next=JSON.stringify(rows.map(option=>[option.value,option.textContent,option.dataset.swatch]));
-      if(next!==signature){
+      const changed=next!==signature;
+      if(changed){
         const activeValue=options[active]?.value;signature=next;options=rows;
         items=options.map((option,i)=>{
           const item=document.createElement('div'),caption=document.createElement('span'),check=document.createElementNS('http://www.w3.org/2000/svg','svg'),stroke=document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -38,7 +39,7 @@ function createClickPulseDropdowns(document,window){
         if(!options.some(option=>option.value===activeValue))active=current();
       }
       if(opened===controller&&!rows.length)close();
-      mark();
+      mark(changed);
     }
     function position(){
       const rect=trigger.getBoundingClientRect(),margin=8,width=Math.min(Math.max(rect.width,156),window.innerWidth-margin*2),height=Math.min(menu.scrollHeight,244),below=window.innerHeight-rect.bottom-6-margin,above=rect.top-6-margin;
