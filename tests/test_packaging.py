@@ -6,6 +6,8 @@ import sys
 import tempfile
 import subprocess
 import unittest
+import tomllib
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -17,6 +19,13 @@ from third_party import rust_notices
 from windows_imports import imported_libraries, verify_static_crt
 
 class PackagingTests(unittest.TestCase):
+
+    def test_windows_manifest_identity_matches_public_package_version(self):
+        version = tomllib.loads((ROOT/'Cargo.toml').read_text(encoding='utf-8'))['package']['version']
+        manifest = ET.parse(ROOT/'assets/windows/ClickPulse.manifest')
+        identity = manifest.find('{urn:schemas-microsoft-com:asm.v1}assemblyIdentity')
+        self.assertIsNotNone(identity)
+        self.assertEqual(identity.attrib['version'], version+'.0')
 
     def test_windows_package_rejects_external_crt_missing_on_a_clean_machine(self):
         def executable(library):
