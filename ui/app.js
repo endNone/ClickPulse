@@ -91,12 +91,33 @@ function renderChanged(name,values,render){
   if(renderSignatures.get(name)===signature)return;
   render();renderSignatures.set(name,signature);
 }
-document.querySelectorAll('nav button').forEach(button=>button.addEventListener('click',()=>{
+const settingsLinks=[...document.querySelectorAll('[data-settings-section]')];
+let settingsSection='personalization-settings';
+function syncSettingsNavigation(){
+  $('settings-subnav').hidden=page!=='settings';
+  $('settings-nav').setAttribute('aria-expanded',String(page==='settings'));
+  for(const link of settingsLinks)link.hidden=$(link.dataset.settingsSection).hidden;
+  if(!settingsLinks.some(link=>!link.hidden&&link.dataset.settingsSection===settingsSection))
+    settingsSection=settingsLinks.find(link=>!link.hidden)?.dataset.settingsSection;
+  for(const link of settingsLinks){
+    const active=link.dataset.settingsSection===settingsSection;
+    link.classList.toggle('current-section',active);
+    link.setAttribute('aria-current',active?'location':'false');
+  }
+}
+for(const link of settingsLinks)link.addEventListener('click',()=>{
+  const target=$(link.dataset.settingsSection);
+  if(page!=='settings'||target.hidden)return;
+  Dropdowns.closeAll();settingsSection=link.dataset.settingsSection;syncSettingsNavigation();
+  target.focus({preventScroll:true});
+  target.scrollIntoView({block:'start',behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+});
+document.querySelectorAll('nav button[data-page]').forEach(button=>button.addEventListener('click',()=>{
   Dropdowns.closeAll();
   page=button.dataset.page;
-  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('selected',b===button));
+  document.querySelectorAll('nav button[data-page]').forEach(b=>b.classList.toggle('selected',b===button));
   document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==page);
-  updateHeading();
+  updateHeading();syncSettingsNavigation();
   document.querySelector('main').scrollTop=0;
   window.updateSportActivity();
   if(data)window.receive(data);
@@ -129,7 +150,6 @@ window.receive=snapshot=>{
   window.presentationStats?.(data);
   if(window.presentationView?.compact)return;
   const now=new Date(data.now);$('date').textContent=I.date(now,{year:'numeric',month:'long',day:'numeric',weekday:'long'});
-  $('refresh-time').textContent=t('common.updated',{time:I.date(now,{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})});
   const demo=!!data.demo;$('demo-badge').hidden=!demo;
   let state=demo?'':data.capture.error?'error':data.paused?'paused':data.source_mode||data.capture.listening?'':'error';
   $('status').className='status '+state;$('status').lastElementChild.textContent=t(demo?'status.demo':data.capture.error?(data.source_mode?'status.read_error':'status.recording_error'):data.paused?'status.paused':data.source_mode?'status.updating':data.capture.listening?'status.recording':'status.permission');
@@ -172,6 +192,7 @@ function renderSettings(){
   $('storage-directory').hidden=storageMode!=='default';
   $('import-history-row').hidden=storageMode!=='default';
   $('reveal').disabled=!!data.demo||dataOperationBusy;
+  syncSettingsNavigation();
 }
 const svgNode=(tag,attrs={})=>{const node=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const[key,value]of Object.entries(attrs))node.setAttribute(key,String(value));return node};
 const svgText=(text,x,y,attrs={})=>{const el=svgNode('text',{x,y,...attrs});el.textContent=text;return el};

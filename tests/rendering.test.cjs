@@ -24,6 +24,7 @@ class Element {
   setAttribute(name,value){this.attributes[name]=value;}
   addEventListener(event,handler){this.listeners[event]=handler;}
   fire(event='click'){this.listeners[event]?.({target:this,button:0,preventDefault(){}});}
+  scrollIntoView(options){this.scrolled=options;}
   focus(){if(this.ownerDocument)this.ownerDocument.activeElement=this;}
 }
 function app(platform='macos',legacyWebKit=false,reducedMotion=false){
@@ -35,14 +36,16 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   };
   const nav=['overview','history','keys','settings'].map(id=>{const button=new Element();button.dataset.page=id;return button;});
   const pages=nav.map(button=>get(button.dataset.page));
+  const settingsLinks=['personalization-settings','handoff-settings','capture-settings','storage-settings','app-settings'].map(id=>{const b=new Element();b.dataset.settingsSection=id;return b;});
+  for(const id of ['handoff-settings','capture-settings'])get(id).hidden=true;
   const ranges=[14,30,90].map(days=>{const button=new Element();button.dataset.range=String(days);return button;});
   get('status').append(new Element());
   get('keyboard-layout').parentElement=new Element();
   get('keyboard-treemap').clientWidth=640;get('keyboard-treemap').clientHeight=279;
   const root=new Element('root');root.lang='en';
-  document={documentElement:root,body:new Element(),getElementById:id=>['export','history-export','settings-pause','recording-description','quit'].includes(id)?null:get(id),
+  document={documentElement:root,body:new Element(),getElementById:id=>['export','history-export','settings-pause','recording-description','quit','sport-open-mini','refresh-time'].includes(id)?null:get(id),
     querySelector(selector){return get(selector==='header'?'header':selector==='.sidebar'?'sidebar':'main');},
-    querySelectorAll(selector){return selector==='nav button'?nav:selector==='.page'?pages:selector==='[data-range]'?ranges:[];},
+    querySelectorAll(selector){return selector==='nav button[data-page]'?nav:selector==='[data-settings-section]'?settingsLinks:selector==='.page'?pages:selector==='[data-range]'?ranges:[];},
     createElement(){const node=new Element();node.ownerDocument=document;return node;},createElementNS(){const node=new Element();node.ownerDocument=document;return node;}};
   const window={ipc:{postMessage(){}},presentationView:{compact:false},clickpulsePlatform:platform,clickpulseMessages:messages,clickpulseLocale:'en'};
   Object.assign(window,{matchMedia:()=>({matches:reducedMotion,addEventListener(){}}),performance:{now:()=>now},setInterval(handler,ms){const id=++timerId;intervals.set(id,{handler,ms});return id;},clearInterval(id){intervals.delete(id);}});
@@ -55,7 +58,7 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   }
   vm.runInContext(readFileSync('ui/app.js','utf8'),context);
   vm.runInContext(readFileSync('ui/presentation.js','utf8'),context);
-  return {window,get,root,context,intervals,setTime(value){now=value;},selectRange(days){ranges.find(button=>Number(button.dataset.range)===days).fire();},navigate(page){nav.find(button=>button.dataset.page===page).fire();}};
+  return {window,get,root,context,intervals,settingsLinks,jumpTo(id){settingsLinks.find(b=>b.dataset.settingsSection===id).fire();},setTime(value){now=value;},selectRange(days){ranges.find(button=>Number(button.dataset.range)===days).fire();},navigate(page){nav.find(button=>button.dataset.page===page).fire();}};
 }
 
 test('Sport polls only in enabled visible Mini windows and discards historical or resume bursts',()=>{
@@ -614,4 +617,34 @@ test('the thirty-day trend range uses thirty dates and survives refresh and lang
   assert.ok(bars()[59].children[0].textContent.includes('999'));
   a.selectRange(14);assert.equal(bars().length,28);
   a.selectRange(90);assert.equal(bars().length,180);
+});
+
+
+test('Settings section links expand only on Settings and jump without navigating away',()=>{
+  for(const platform of ['macos','windows']){
+    const a=app(platform);a.window.receive(snapshot());a.navigate('settings');
+    assert.equal(a.get('settings-subnav').hidden,false);
+    assert.equal(a.get('settings-nav').attributes['aria-expanded'],'true');
+    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='capture-settings').hidden,platform==='windows');
+    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='handoff-settings').hidden,true);
+    a.jumpTo('storage-settings');
+    assert.equal(a.get('page-title').textContent,messages.en['page.settings']);
+    assert.equal(a.get('storage-settings').scrolled.block,'start');
+    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='storage-settings').attributes['aria-current'],'location');
+    a.window.receiveView({locale:'ja',language_preference:'ja'});a.window.receive(snapshot());
+    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='storage-settings').attributes['aria-current'],'location');
+    a.navigate('overview');assert.equal(a.get('settings-subnav').hidden,true);
+    assert.equal(a.get('settings-nav').attributes['aria-expanded'],'false');
+  }
+});
+
+test('Settings links track conditional groups and respect reduced motion',()=>{
+  const a=app('macos',false,true);const s=snapshot();s.setup_pending=true;
+  a.window.receive(s);a.navigate('settings');
+  assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='handoff-settings').hidden,false);
+  a.jumpTo('handoff-settings');assert.equal(a.get('handoff-settings').scrolled.behavior,'auto');
+  s.setup_pending=false;s.source_mode=true;a.window.receive(s);
+  assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='handoff-settings').hidden,true);
+  assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='capture-settings').hidden,true);
+  assert.equal(a.settingsLinks[0].attributes['aria-current'],'location');
 });

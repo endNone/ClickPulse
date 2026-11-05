@@ -49,7 +49,7 @@ Turn a burst of typing and clicking into a light runway. Inside Mini, Sport's **
 Sport and its Mini switch are **off by default**. To try it:
 
 1. Open **Settings → Personalization** and enable **Sport mode** to show the Mini switch.
-2. Click **Try in Mini**, or enter Mini mode and click the lightning button in its top-right corner.
+2. Enter **Mini mode** using the top-right button, then click the lightning button to enable Sport.
 3. Type or click in any app. Use the lightning button to turn Sport off; hiding its switch in Settings also disables it.
 
 Ranks use combined presses per second (CPS): **C < 2 · B ≥ 2 · A ≥ 5 · S ≥ 8 · SS ≥ 12**. Holding a key counts once until released; moving or scrolling the mouse does not increase the rank. Animation stops when you leave Mini, and follows the system's reduced-motion preference. See [Sport in Mini mode](docs/usage.md#sport-in-mini-mode) for details.

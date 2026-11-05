@@ -103,7 +103,6 @@ h2 {font-size:13px;font-weight:650;margin:0;letter-spacing:.1px}
 .heatmap-footer {display:flex;justify-content:space-between;align-items:center;margin-top:12px;color:#7187a5;font-size:9px}
 .heatmap-footer>span:last-child {display:flex;align-items:center;gap:4px}
 .heat-level {width:9px;height:9px;border-radius:2px;display:inline-block}
-footer {font:8px var(--sans);letter-spacing:0;color:#8395af;display:flex;align-items:center;gap:7px;margin-top:20px;padding-bottom:8px}.refresh-time {margin-left:auto}
 .table-wrap {max-height:370px;overflow:auto;margin-top:22px}
 table {border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 th {text-align:right;background:#f1f5fc;color:#617b9f;font-size:10px;font-weight:550;position:sticky;top:0}
@@ -113,8 +112,8 @@ td:first-child,th:first-child {text-align:left}tbody tr:hover {background:#f6f9f
 .empty-state {text-align:center;padding:45px 20px;color:#7186a3;font-size:12px}
 .empty-state strong {font-weight:600;display:block;margin-bottom:10px;color:#3d5f91}.empty-state p {font-size:11px;line-height:1.8}
 .footnote {font-size:10px;color:#7085a3;line-height:1.8;border-top:1px solid var(--line);margin:22px 0 0;padding-top:15px}
-.settings-card h2 {margin-bottom:9px}.setting-row {display:flex;justify-content:space-between;align-items:center;gap:18px;padding:19px 0;border-bottom:1px solid var(--line)}
-.setting-row:last-child {border:0;padding-bottom:2px}.setting-row strong {font-size:12px;font-weight:550;color:#365479}
+.settings-card h2 {margin-bottom:9px}.setting-row {display:flex;justify-content:space-between;align-items:center;gap:18px;padding:19px 0}
+.setting-row + .setting-row {border-top:1px solid var(--line)}.setting-row:last-child {padding-bottom:2px}.setting-row strong {font-size:12px;font-weight:550;color:#365479}
 .setting-row p {font-size:11px;line-height:1.7;color:#7186a3;margin:6px 0 0}.path {font:10px var(--mono)!important;overflow-wrap:anywhere}.setting-row>div {min-width:0}
 #demo-badge {font-size:10px;color:#497bc1;border:1px solid #bcd2ef;border-radius:4px;padding:4px 7px}
 #toast {position:fixed;bottom:25px;left:50%;transform:translateX(-50%);background:#173b6b;color:#fff;padding:12px 20px;border-radius:7px;font-size:12px;box-shadow:0 5px 24px #17376325;max-width:80%;z-index:10}
@@ -203,3 +202,10 @@ button,select,.preference-switch {user-select:none;-webkit-user-select:none}
 .hourly-slot.partial>span {opacity:.65}
 .hourly-detail {font-size:10px;color:var(--muted);margin:12px 0 0;line-height:1.6;min-height:16px;font-variant-numeric:tabular-nums}
 @media(max-width:900px){.hourly-note {max-width:55%;text-align:right}.hourly-plot {gap:2px}.hourly-detail {min-height:32px}}
+
+/* Expand section shortcuts only while Settings is open. */
+.sidebar {overflow-y:auto}
+.settings-subnav {display:flex;flex-direction:column;gap:2px;margin:0 0 4px 25px;border-left:1px solid var(--nav-line)}
+.sidebar .settings-subnav button {font-size:11px;line-height:1.5;padding:6px 10px;margin-left:8px;white-space:normal;overflow-wrap:anywhere}
+.settings-subnav button.current-section {background:var(--nav-hover);color:#fff}
+.settings-card {scroll-margin-top:76px}

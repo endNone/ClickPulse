@@ -22,9 +22,11 @@ On Windows, extract and keep the complete portable program folder. Install WebVi
 
 A held key counts once until released. Mouse counts track button presses, not movement, release or scrolling. Hidden extended keys remain in totals even when the macOS keyboard layout does not show them.
 
+Selecting **Settings** expands section shortcuts in the sidebar. Choose a heading to jump to its controls; unavailable groups are hidden.
+
 ## Sport in Mini mode
 
-Sport is off by default, including its Mini switch. In **Settings → Personalization**, enable **Sport mode** to show the switch, then choose **Try in Mini** to open Mini with Sport enabled. Sport appears only in the existing **320 × 208** Mini window. You can also enter Mini mode and use the lightning switch in its top-right toolbar to enable or disable it. Combined keyboard and mouse speed replaces the status badge with the current rank and presses per second (CPS); normal activity totals remain visible.
+Sport is off by default, including its Mini switch. In **Settings → Personalization**, enable **Sport mode** to show the switch. Sport appears only in the existing **320 × 208** Mini window. Enter **Mini mode** with the top-right button, then use the lightning switch in its top-right toolbar to enable or disable it. Combined keyboard and mouse speed replaces the status badge with the current rank and presses per second (CPS); normal activity totals remain visible.
 
 Rank C is below 2 CPS, B starts at 2, A at 5, S at 8, and red SS at 12. Speed uses a rolling one-second window and naturally falls back when you stop clicking. Each key press and mouse button press contributes once; native held-key repeat filtering is unchanged. CPS represents their combined presses per second.
 
