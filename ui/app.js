@@ -329,7 +329,6 @@ function renderCalendar(){
   }
   const max=Math.max(1,...days.map(d=>total(d.counts)));
   for(const d of days){const cell=calendarCells.get(d.day),value=total(d.counts),level=value?Math.max(1,Math.ceil(value/max*4)):0;cell.className='heat-cell level-'+level+(d.day===today?' today':'');cell.title=t('calendar.tooltip',{day:d.day,count:n(value),keyboard:n(d.counts.keyboard),mouse:n(d.counts.mouse)});}
-  $('calendar-description').textContent=t('calendar.caption',{range:calendarRange==='all'?t('common.all_history'):calendarRange==='90'?t('common.recent90'):t('common.year',{year:calendarRange})});
   $('active-days').textContent=t('calendar.recorded',{count:n(days.filter(d=>total(d.counts)>0).length)});
   const comparison=H.bookComparison(days.reduce((sum,d)=>sum+d.counts.keyboard,0)),aside=$('calendar-aside');
   aside.hidden=!comparison;

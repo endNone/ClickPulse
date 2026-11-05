@@ -43,7 +43,7 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   get('keyboard-layout').parentElement=new Element();
   get('keyboard-treemap').clientWidth=640;get('keyboard-treemap').clientHeight=279;
   const root=new Element('root');root.lang='en';
-  document={documentElement:root,body:new Element(),getElementById:id=>['export','history-export','settings-pause','recording-description','quit','sport-open-mini','refresh-time'].includes(id)?null:get(id),
+  document={documentElement:root,body:new Element(),getElementById:id=>['export','history-export','settings-pause','recording-description','quit','sport-open-mini','refresh-time','calendar-description'].includes(id)?null:get(id),
     querySelector(selector){return get(selector==='header'?'header':selector==='.sidebar'?'sidebar':'main');},
     querySelectorAll(selector){return selector==='nav button[data-page]'?nav:selector==='[data-settings-section]'?settingsLinks:selector==='.page'?pages:selector==='[data-range]'?ranges:[];},
     createElement(){const node=new Element();node.ownerDocument=document;return node;},createElementNS(){const node=new Element();node.ownerDocument=document;return node;}};
