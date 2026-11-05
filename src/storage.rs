@@ -119,6 +119,33 @@ pub(crate) fn remove_database(path: &Path) {
     }
 }
 
+/// Publish a synced staged file without replacing an existing destination. A
+/// hard link is atomic; exFAT/FAT32 and some shares lack links, so fall back to
+/// an exclusive create plus copy and remove a partial copy on failure.
+pub(crate) fn publish_new(staged: &Path, output: &Path) -> Result<()> {
+    let error = match std::fs::hard_link(staged, output) {
+        Ok(()) => return Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(error)
+                .context("Unable to publish database without overwriting existing data");
+        }
+        Err(error) => error,
+    };
+    let mut file = std::fs::File::create_new(output).with_context(|| {
+        format!("Unable to publish database without overwriting existing data ({error})")
+    })?;
+    let copied = (|| {
+        std::io::copy(&mut std::fs::File::open(staged)?, &mut file)?;
+        file.sync_all()
+    })();
+    if let Err(copy_error) = copied {
+        drop(file);
+        let _ = std::fs::remove_file(output);
+        return Err(copy_error).context("Unable to copy database to the selected folder");
+    }
+    Ok(())
+}
+
 /// Online backup observes one committed SQLite snapshot, including WAL data.
 /// Publish without clobbering a destination, even if another process created it.
 pub(crate) fn backup_connection(source: &Connection, output: &Path) -> Result<()> {
@@ -141,9 +168,7 @@ pub(crate) fn backup_connection(source: &Connection, output: &Path) -> Result<()
         .write(true)
         .open(&staged.0)?
         .sync_all()?;
-    std::fs::hard_link(&staged.0, output)
-        .context("Unable to publish database without overwriting existing data")?;
-    Ok(())
+    publish_new(&staged.0, output)
 }
 
 pub(crate) fn backup_file(source: &Path, output: &Path) -> Result<()> {
@@ -243,6 +268,20 @@ mod tests {
             resolve(&profile).is_err(),
             "never silently start empty when a selected disk is missing"
         );
+    }
+
+    #[test]
+    fn publishing_never_replaces_an_existing_destination() {
+        let temp = tempfile::tempdir().unwrap();
+        let staged = temp.path().join("staged");
+        let output = temp.path().join("events.sqlite3");
+        std::fs::write(&staged, b"new").unwrap();
+        std::fs::write(&output, b"keep").unwrap();
+        assert!(publish_new(&staged, &output).is_err());
+        assert_eq!(std::fs::read(&output).unwrap(), b"keep");
+        std::fs::remove_file(&output).unwrap();
+        publish_new(&staged, &output).unwrap();
+        assert_eq!(std::fs::read(&output).unwrap(), b"new");
     }
 
     #[test]

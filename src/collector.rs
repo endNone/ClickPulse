@@ -120,8 +120,8 @@ impl CollectorDb {
                 .write(true)
                 .open(&staged)?
                 .sync_all()?;
-            // Same-directory hard link is atomic and fails if another destination exists.
-            std::fs::hard_link(&staged, output)?;
+            // Never replaces another destination, including on link-less volumes.
+            crate::storage::publish_new(&staged, output)?;
             Ok(after)
         })();
         let _ = std::fs::remove_file(&staged);
