@@ -310,15 +310,27 @@ test('settings distinguish storage modes and only offer login startup for the de
   }
 });
 
-test('refresh preserves selected statistics text until copying finishes',()=>{
-  const a=app(),s=snapshot();a.window.receive(s);
-  const node=a.get('today'),before=node.textContent;
-  a.window.getSelection=()=>({isCollapsed:false,rangeCount:1,getRangeAt:()=>({intersectsNode:target=>target===node})});
-  a.window.receive({...s,today:{keyboard:123456,mouse:10}});
-  assert.equal(node.textContent,before);
-  a.window.getSelection=()=>({isCollapsed:true,rangeCount:0});
-  a.window.receive({...s,today:{keyboard:123456,mouse:10}});
-  assert.equal(node.textContent,'123,466');
+test('selected main and Mini statistics keep updating without losing copy selection',()=>{
+  for(const id of ['today','mini-today'])for(const backwards of [false,true]){
+    const a=app('windows'),s={...snapshot(),today:{keyboard:8,mouse:1}};a.window.receive(s);
+    const node=a.get(id);let value=node.textContent;
+    const text={nodeType:3,get data(){return value;},set data(next){value=next;selection.anchorOffset=selection.focusOffset=0;}};
+    Object.defineProperty(node,'textContent',{get(){return text.data;},set(next){text.data=next;}});
+    node.firstChild=text;node.childNodes=[text];
+    const selection={isCollapsed:false,rangeCount:1,anchorNode:text,focusNode:text,anchorOffset:backwards?1:0,focusOffset:backwards?0:1,
+      getRangeAt:()=>({intersectsNode:target=>target===node}),
+      setBaseAndExtent(anchor,from,focus,to){this.anchorNode=anchor;this.anchorOffset=from;this.focusNode=focus;this.focusOffset=to;}};
+    a.window.getSelection=()=>selection;
+    for(const count of [10,12345,7]){
+      a.window.receive({...s,today:{keyboard:count-1,mouse:1}});
+      const expected=count.toLocaleString('en');
+      assert.equal(node.textContent,expected,'selected count must match the latest snapshot');
+      assert.equal(selection.anchorNode,text);assert.equal(selection.focusNode,text);
+      assert.equal(selection.anchorOffset,backwards?expected.length:0);
+      assert.equal(selection.focusOffset,backwards?0:expected.length);
+      assert.equal(text.data.slice(Math.min(selection.anchorOffset,selection.focusOffset),Math.max(selection.anchorOffset,selection.focusOffset)),expected,'copy selection covers the current count');
+    }
+  }
 });
 
 test('data processing prevents another mutation while page navigation remains available',()=>{

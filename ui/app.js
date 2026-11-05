@@ -4,8 +4,14 @@ function setSelectableText(node,value){
   value=String(value);
   if(node.textContent===value)return;
   const selection=window.getSelection?.();
-  if(selection&&!selection.isCollapsed&&selection.rangeCount&&selection.getRangeAt(0).intersectsNode(node))return;
-  node.textContent=value;
+  const text=node.firstChild;
+  if(text?.nodeType!==3||node.childNodes.length!==1){node.textContent=value;return;}
+  if(!selection||selection.isCollapsed||!selection.rangeCount||!selection.setBaseAndExtent||!selection.getRangeAt(0).intersectsNode(node)){text.data=value;return;}
+  // Retain selection (including backwards selections) without freezing live counts.
+  const {anchorNode,anchorOffset,focusNode,focusOffset}=selection,oldLength=text.data.length;
+  const offset=(container,position)=>container===text?(position===oldLength?value.length:Math.min(position,value.length)):position;
+  text.data=value;
+  selection.setBaseAndExtent(anchorNode,offset(anchorNode,anchorOffset),focusNode,offset(focusNode,focusOffset));
 }
 window.setSelectableText=setSelectableText;
 const I=ClickPulseI18n;
