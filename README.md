@@ -32,15 +32,27 @@ Confirm **Recording**, then press a few keys and click in another app to check t
 
 ## Features
 
-The download links above still point to public preview build 55. Mini Sport, the expanded language options and data management below are in development source and are not included in that published preview. Current development source also removes CSV export; the published preview retains its original features.
+The download links above still point to public preview build 55. Sport mode, the rolling 24-hour chart, 30-day trends, expanded language options and data management below are in development source and are not included in that published preview. Current development source also removes CSV export; the published preview retains its original features.
 
-- **Activity overview:** daily trends, seven-day and all-time totals, and an activity calendar.
+- **Activity overview:** 14/30/90-day trends, an hourly breakdown of the last 24 hours, seven-day and all-time totals, and an activity calendar.
 - **Keyboard views:** physical-key heatmap and a treemap sized by usage.
 - **History:** year filtering and complete daily records.
-- **Mini mode:** floating counts with pin, pause and expand controls; optional launch at login. Sport feedback grades combined keyboard/mouse speed from C to SS.
+- **Mini mode:** floating counts with pin, pause and expand controls, plus optional Sport feedback. Launch at login is available in Settings.
 - **Data management:** choose a save folder and merge compatible SQLite history with automatic backups.
 
 Four themes and eight interface languages are available in Settings: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German and Spanish. The language follows the system by default. Closing a window can keep recording; use **Quit ClickPulse** from the menu bar or tray to stop. See [Usage](docs/usage.md).
+
+## Sport mode
+
+Turn a burst of typing and clicking into a light runway. Inside Mini, Sport's **Warp** effect responds to your combined keyboard and mouse speed with light gates, particles and a live rank: **C → B → A → S → SS**. Red **SS** keeps the particles without shaking the window. Your activity totals stay visible.
+
+Sport and its Mini switch are **off by default**. To try it:
+
+1. Open **Settings → Personalization** and enable **Sport mode** to show the Mini switch.
+2. Click **Try in Mini**, or enter Mini mode and click the lightning button in its top-right corner.
+3. Type or click in any app. Use the lightning button to turn Sport off; hiding its switch in Settings also disables it.
+
+Ranks use combined presses per second (CPS): **C < 2 · B ≥ 2 · A ≥ 5 · S ≥ 8 · SS ≥ 12**. Holding a key counts once until released; moving or scrolling the mouse does not increase the rank. Animation stops when you leave Mini, and follows the system's reduced-motion preference. See [Sport in Mini mode](docs/usage.md#sport-in-mini-mode) for details.
 
 ## Screenshots
 
