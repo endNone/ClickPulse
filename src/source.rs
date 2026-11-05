@@ -55,6 +55,15 @@ impl LiveSource {
         now: DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
     ) -> Result<Snapshot> {
+        self.snapshot_with_cache(now, zone, None)
+    }
+
+    pub(crate) fn snapshot_with_cache(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+        cache: Option<&crate::timezone::ProjectionCache>,
+    ) -> Result<Snapshot> {
         let tx = self.conn.unchecked_transaction()?;
         let mut snapshot = self.snapshot_from(&tx, now)?;
         let precise = aggregates_ready(&tx)?
@@ -65,7 +74,7 @@ impl LiveSource {
             &mut snapshot,
             zone,
             now,
-            "SELECT bucket,dev,SUM(cnt) FROM events GROUP BY bucket,dev",
+            "SELECT bucket,dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY bucket,dev",
             &[(
                 if precise { "recent_counts" } else { "events" },
                 if precise {
@@ -74,6 +83,7 @@ impl LiveSource {
                     crate::hourly::Resolution::Minute
                 },
             )],
+            cache,
         )?;
         Ok(snapshot)
     }

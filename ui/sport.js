@@ -134,13 +134,16 @@ const ClickPulseSport=(() => {
       else{const now=clock(),delta=meter.sample(sample,now);emit(delta,now);}
       const s=render();if(s.cps>0||marks.length)wake();
     }
+    function setPaused(value){
+      paused=value;meter.suspend();marks=[];lastHit=-Infinity;paint(0);render();
+    }
     el('mini-sport').addEventListener('click',()=>send('sport',{enabled:!enabled}));
     el('sport-visible').addEventListener('change',event=>send('sport_visible',{visible:!!event.target.checked}));
     doc.addEventListener?.('visibilitychange',()=>win.updateSportActivity?.());
     motion?.addEventListener?.('change',()=>{paint(0);render();wake();});
     win.addEventListener?.('resize',()=>{resize();wake();});
     render();
-    return {sync,receive,render,get active(){return active;}};
+    return {sync,receive,setPaused,render,get active(){return active;}};
   }
   return {ranks,gradeFor,createMeter,createView};
 })();

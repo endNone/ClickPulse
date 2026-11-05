@@ -80,6 +80,7 @@ pub struct Snapshot {
 
 pub struct EventDb {
     conn: Connection,
+    projection: crate::timezone::ProjectionCache,
 }
 
 impl EventDb {
@@ -122,7 +123,10 @@ impl EventDb {
         tx.pragma_update(None, "user_version", crate::storage_schema::VERSION)?;
         tx.commit()?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            projection: Default::default(),
+        })
     }
 
     /// Import the original Python database once, in a single destination transaction.
@@ -190,6 +194,7 @@ impl EventDb {
             [path.to_string_lossy().as_ref()],
         )?;
         tx.commit()?;
+        self.projection.clear();
         Ok(totals.total())
     }
 
@@ -232,6 +237,7 @@ impl EventDb {
             }
         }
         tx.commit()?;
+        self.projection.record(events);
         Ok(())
     }
 
@@ -303,11 +309,12 @@ impl EventDb {
             &mut snapshot,
             zone,
             now,
-            "SELECT bucket,dev,SUM(cnt) FROM (SELECT bucket,dev,cnt FROM minutes UNION ALL SELECT bucket,dev,cnt FROM legacy_minutes) GROUP BY bucket,dev",
+            "SELECT bucket,dev,SUM(cnt) FROM (SELECT bucket,dev,cnt FROM minutes WHERE bucket>=?1 AND bucket<=?2 UNION ALL SELECT bucket,dev,cnt FROM legacy_minutes WHERE bucket>=?1 AND bucket<=?2) GROUP BY bucket,dev",
             &[
                 ("recent", crate::hourly::Resolution::Millisecond),
                 ("legacy_minutes", crate::hourly::Resolution::Minute),
             ],
+            Some(&self.projection),
         )?;
         Ok(snapshot)
     }

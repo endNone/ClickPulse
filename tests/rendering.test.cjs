@@ -129,6 +129,31 @@ function keyCells(a){
   const visit=node=>node.dataset.key?[node]:node.children.flatMap(visit);
   return visit(a.get('keyboard-layout'));
 }
+
+test('Pause acknowledges immediately while statistics are pending and stale replies cannot undo it',()=>{
+  for(const compact of [false,true])for(const source_mode of [false,true]){
+    const a=app('windows'),s={...snapshot(),source_mode};
+    a.window.receive(s);a.window.receiveView({compact,sport_enabled:true,sport_visible:true});
+    a.window.receiveSport({keyboard:0,mouse:0,available:true});a.setTime(250);
+    a.window.receiveSport({keyboard:10,mouse:0,available:true});
+    a.window.receivePaused(true);
+    assert.equal(a.get('pause').textContent,messages.en[source_mode?'action.resume_refresh':'action.resume']);
+    assert.equal(a.get('mini-pause').attributes['aria-label'],messages.en[source_mode?'action.resume_refresh':'action.resume']);
+    assert.equal(a.get('status').lastElementChild.textContent,messages.en['status.paused']);
+    assert.equal(a.get('mini-sport-cps').textContent,'0.0');
+    a.window.receive(s);a.window.receiveSport({keyboard:20,mouse:0,available:true,paused:false});
+    assert.equal(a.get('mini-pause-label').textContent,messages.en['mini.resume']);
+    assert.equal(a.get('mini-sport-cps').textContent,'0.0');
+    a.window.receivePaused(false);a.window.receive({...s,paused:true});
+    assert.equal(a.get('mini-pause-label').textContent,messages.en['mini.pause']);
+    assert.equal(a.get('pause').textContent,messages.en[source_mode?'action.pause_refresh':'action.pause']);
+  }
+  const a=app('windows');a.window.receivePaused(true);
+  assert.equal(a.get('pause').textContent,messages.en['action.resume']);
+  assert.equal(a.get('mini-pause-label').textContent,messages.en['mini.resume']);
+  a.window.receive(snapshot());
+  assert.equal(a.get('pause').textContent,messages.en['action.resume']);
+});
 test('the app starts and renders history without Safari 15.4 built-ins',()=>{
   const a=app('macos',true),s=snapshot();
   s.history_days=[{day:'2025-12-31',counts:{keyboard:3,mouse:1}},...s.history_days];

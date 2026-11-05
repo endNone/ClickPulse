@@ -66,18 +66,21 @@
     $('mini-pin').title=t(view.pinned?'mini.unpin':'mini.pin');
     if(data)window.receive(data);
   };
-  window.presentationStats=snapshot=>{
+  window.presentationRecordingState=snapshot=>{
     const caption=t(snapshot.demo?'common.demo':snapshot.capture.error?'status.recording_error':snapshot.paused?'status.paused':snapshot.source_mode?'status.history':snapshot.capture.listening?'status.recording':'status.permission');
     put('mini-status',caption);
     $('mini-status').classList.toggle('error',!!snapshot.capture.error||snapshot.capture.permission_needed);
-    put('mini-today',n(total(snapshot.today)));
-    put('mini-keyboard',n(snapshot.today.keyboard));
-    put('mini-mouse',n(snapshot.today.mouse));
     $('mini-status').classList.toggle('paused',snapshot.paused);
     put('mini-pause-label',t(snapshot.paused?'mini.resume':'mini.pause'));
     $('mini-pause').setAttribute('aria-label',t(snapshot.source_mode?(snapshot.paused?'action.resume_refresh':'action.pause_refresh'):(snapshot.paused?'action.resume':'action.pause')));
     $('mini-pause').classList.toggle('paused',snapshot.paused);
     $('mini-pause-glyph').setAttribute('d',snapshot.paused?'M5 3l7 5-7 5Z':'M6 4v8m4-8v8');
+  };
+  window.presentationStats=snapshot=>{
+    window.presentationRecordingState(snapshot);
+    put('mini-today',n(total(snapshot.today)));
+    put('mini-keyboard',n(snapshot.today.keyboard));
+    put('mini-mouse',n(snapshot.today.mouse));
   };
   $('mini-drag').addEventListener('mousedown',event=>{if(event.button===0){event.preventDefault();send('drag');}});
   for(const [id,action] of [['compact','compact'],['mini-expand','expand'],['mini-hide','hide'],['mini-pin','pin'],['mini-pause','pause']]) {

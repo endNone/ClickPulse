@@ -249,6 +249,7 @@ impl CollectorDb {
                 )?;
             }
             tx.commit()?;
+            self.projection.clear();
             // Only after a committed merge: a failed import keeps every older copy.
             prune_import_backups(&backup_dir, &backup);
             Ok(ImportReport {

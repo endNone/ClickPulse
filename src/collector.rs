@@ -22,6 +22,7 @@ pub fn data_path() -> Result<PathBuf> {
 pub struct CollectorDb {
     pub(crate) conn: Connection,
     reader: LiveSource,
+    pub(crate) projection: crate::timezone::ProjectionCache,
 }
 
 impl CollectorDb {
@@ -46,7 +47,11 @@ impl CollectorDb {
         initialize(&mut conn)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;")?;
         let reader = LiveSource::open(path)?;
-        Ok(Self { conn, reader })
+        Ok(Self {
+            conn,
+            reader,
+            projection: Default::default(),
+        })
     }
 
     /// SQLite backup includes WAL commits. Publish only a complete validated copy,
@@ -153,6 +158,7 @@ impl CollectorDb {
             }
         }
         tx.commit()?;
+        self.projection.record(events);
         Ok(())
     }
     pub fn snapshot(&self, now: DateTime<Local>) -> Result<Snapshot> {
@@ -164,7 +170,8 @@ impl CollectorDb {
         now: DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
     ) -> Result<Snapshot> {
-        self.reader.snapshot_in_timezone(now, zone)
+        self.reader
+            .snapshot_with_cache(now, zone, Some(&self.projection))
     }
     pub fn lifetime(&self) -> Result<crate::db::Counts> {
         self.reader.lifetime()

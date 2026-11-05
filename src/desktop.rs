@@ -864,7 +864,7 @@ pub fn run(
             }
             Event::MainEventsCleared if Instant::now() >= next_refresh => {
                 refresh = true;
-                next_refresh = Instant::now() + Duration::from_secs(2);
+                next_refresh = Instant::now() + Duration::from_millis(500);
             }
             Event::LoopDestroyed => {
                 #[cfg(target_os = "windows")]
@@ -936,6 +936,9 @@ pub fn run(
             }
         }
         if refresh && ready {
+            // A history query must not delay acknowledgement of Pause/Resume.
+            let paused = runtime.as_ref().map_or(demo_paused, Runtime::is_paused);
+            let _ = webview.evaluate_script(&format!("window.receivePaused({paused});"));
             if let Some(rt) = &runtime
                 && let Ok(capture) = rt.capture_status()
             {

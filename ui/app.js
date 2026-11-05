@@ -27,6 +27,7 @@ const Dropdowns=ClickPulseDropdowns.create(document,window);
 const total=c=>(c?.keyboard||0)+(c?.mouse||0);
 const send=(action,values={})=>window.ipc?.postMessage(JSON.stringify({action,...values}));
 let data=null,page='overview',range=14,toastTimer;
+let recordingPaused=null;
 let dataOperationBusy=false;
 function renderDataOperation(){
   $('data-operation-status').hidden=!dataOperationBusy;
@@ -43,7 +44,16 @@ let calendarCells=new Map();
 const H=ClickPulseHistory;
 const titles={overview:'page.overview',history:'page.history',keys:'page.keys',settings:'page.settings'};
 const sportView=typeof ClickPulseSport==='undefined'?null:ClickPulseSport.createView({document,window,translate:t,formatSpeed:value=>I.decimal(value,1),send});
-window.receiveSport=sample=>sportView?.receive(sample);
+window.receiveSport=sample=>sportView?.receive(recordingPaused===null?sample:{...sample,paused:recordingPaused});
+window.receivePaused=paused=>{
+  const changed=recordingPaused!==paused;recordingPaused=paused;
+  if(data){data={...data,paused};renderRecordingState();window.presentationStats?.(data);}
+  else{
+    $('pause').textContent=t(paused?'action.resume':'action.pause');
+    window.presentationRecordingState?.({paused,capture:{listening:!paused}});
+  }
+  if(changed)sportView?.setPaused(paused);
+};
 window.updateSportActivity=()=>sportView?.sync(window.presentationView);
 function updateHeading(){
   $('page-title').textContent=t(titles[page]);
@@ -175,17 +185,15 @@ window.failure=message=>{
 window.receive=snapshot=>{
   if(snapshot.timezone && snapshot.timezone!==(window.presentationView?.timezone||'system'))return;
   if(!window.setInterfaceTimeZone(snapshot.timezone||window.presentationView?.timezone||'system'))return;
-  data=snapshot;
+  data=recordingPaused===null?snapshot:{...snapshot,paused:recordingPaused};
   window.presentationStats?.(data);
   if(window.presentationView?.compact)return;
   const now=new Date(data.now);$('date').textContent=I.date(now,{year:'numeric',month:'long',day:'numeric',weekday:'long'});
   const demo=!!data.demo;$('demo-badge').hidden=!demo;
-  let state=demo?'':data.capture.error?'error':data.paused?'paused':data.source_mode||data.capture.listening?'':'error';
-  $('status').className='status '+state;$('status').lastElementChild.textContent=t(demo?'status.demo':data.capture.error?(data.source_mode?'status.read_error':'status.recording_error'):data.paused?'status.paused':data.source_mode?'status.updating':data.capture.listening?'status.recording':'status.permission');
+  renderRecordingState();
   $('permission-banner').hidden=!data.capture.permission_needed;
   $('error-banner').hidden=!data.capture.error;
   if(data.capture.error)$('error-banner').textContent=t(data.capture.error_code||'error.recording');
-  $('pause').textContent=t(data.source_mode?(data.paused?'action.resume_refresh':'action.pause_refresh'):(data.paused?'action.resume':'action.pause'));
   if(page==='settings')renderSettings();
   if(page==='overview'){
     for(const key of ['today','week','lifetime']){setSelectableText($(key),n(total(data[key])));setSelectableText($(key+'-detail'),`${t('common.keyboard')} ${n(data[key].keyboard)} / ${t('common.mouse')} ${n(data[key].mouse)}`);}
@@ -205,6 +213,12 @@ window.receive=snapshot=>{
     renderChanged('keyboard',data.keyboard_stats||data.top_keys,renderKeyboard);
   }
 };
+function renderRecordingState(){
+  const demo=!!data.demo;
+  const state=demo?'':data.capture.error?'error':data.paused?'paused':data.source_mode||data.capture.listening?'':'error';
+  $('status').className='status '+state;$('status').lastElementChild.textContent=t(demo?'status.demo':data.capture.error?(data.source_mode?'status.read_error':'status.recording_error'):data.paused?'status.paused':data.source_mode?'status.updating':data.capture.listening?'status.recording':'status.permission');
+  $('pause').textContent=t(data.source_mode?(data.paused?'action.resume_refresh':'action.pause_refresh'):(data.paused?'action.resume':'action.pause'));
+}
 function renderSettings(){
   $('permission-description').textContent=t(onWindows?(data.capture.listening?'settings.windows_capture':'status.unavailable'):data.source_mode && !data.setup_pending?'settings.source_permission':data.capture.listening?'settings.authorized':'settings.permission_description');
   $('permission-row').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
