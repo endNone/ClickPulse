@@ -1,12 +1,12 @@
 # Windows installation and updates
 
-For **0.1.0 preview · Windows 10/11 x64**. Download the portable ZIP from the [0.1.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0). No Setup installer is offered.
+For **0.2.0 release · Windows 10/11 x64**. Download the portable ZIP from the [0.2.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.0). No Setup installer is offered.
 
-Ready-to-run packages need no Rust, Python, development tools or developer account. The Windows C runtime is included in the program; no separate Visual C++ package is needed. This preview is unsigned. Use a complete package from a trusted source and compare it with `SHA256SUMS.txt`.
+Ready-to-run packages need no Rust, Python, development tools or developer account. The Windows C runtime is included in the program; no separate Visual C++ package is needed. This package is unsigned. Use a complete package from a trusted source and compare it with `SHA256SUMS.txt`.
 
 ## Portable ZIP
 
-1. Extract the **entire folder** from `ClickPulse-0.1.0-windows-x64.zip`.
+1. Extract the **entire folder** from `ClickPulse-0.2.0-windows-x64.zip`.
 2. Place the complete contents in a fixed program directory such as `%LOCALAPPDATA%\Programs\ClickPulse` or `D:\Apps\ClickPulse`. Keep `WebView2Loader.dll`, `Licenses`, the README and manifest beside the EXE. Use a separate folder from your statistics.
 3. Open **ClickPulse.exe**. Do not run inside the ZIP or copy only the EXE.
 
@@ -34,7 +34,7 @@ After startup, check the recording status and tray icon. Use the physical keyboa
 
 ## Updates and directories
 
-Check the running build before testing a fix: expand mini mode, open **Settings → App**, and note the complete version, for example **ClickPulse 0.1.0 (55)**. The number in parentheses is the internal build; the sidebar and `ClickPulse.exe --version` show the same identity. Different preview builds can share the public version and ZIP filename.
+Check the running build before testing a fix: expand mini mode, open **Settings → Application**, and note the complete version, for example **ClickPulse 0.2.0 (69)**. The number in parentheses is the internal build; the sidebar and `ClickPulse.exe --version` show the same identity. Different preview builds can share the public version and ZIP filename.
 
 Older builds only show `0.1.0` in the app. For those builds, inspect **ClickPulse.exe → Properties → Details → File version** (for example `0.1.0.49`), or read `internal_build` and `source_revision` in the adjacent `build-manifest.json`. Confirm the executable belongs to the folder you just extracted; downloading a package or merging a source fix does not update an already running copy.
 

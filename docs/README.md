@@ -22,4 +22,4 @@
 | [Screenshot assets](images/README.md) | Capture app screenshots and the mini desktop animation |
 | [Windows validation checklist](windows-testing.md) | Maintainer checklist for installation and native behavior |
 
-Current packages target macOS 12+ on Apple Silicon/Intel and Windows 10/11 x64. Version 0.1.0 is available as a [public preview](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0). Automated checks and packaging pass for all three targets. The Windows validation guide records hardware-specific test coverage.
+Current packages target macOS 12+ on Apple Silicon/Intel and Windows 10/11 x64. Version 0.2.0 is available as a [release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.0). Automated checks and packaging pass for all three targets. The Windows validation guide records hardware-specific test coverage.

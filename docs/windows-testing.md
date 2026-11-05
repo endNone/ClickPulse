@@ -1,6 +1,10 @@
 # Windows validation
 
-The 0.1.0 preview's Windows x64 portable package passes automated Rust/interface tests, native MSVC builds and package-integrity checks on a hosted Windows runner. Native WebView2 tests cover mini-window startup and full/mini transitions. Preview desktop testing also verified clean mini-window edges on Windows 11, as recorded in [PR #2](https://github.com/endNone/ClickPulse/pull/2). The checklist below distinguishes that evidence from physical input, login startup, upgrades and display scaling. Windows downloads contain the portable ZIP only.
+The 0.2.0 Windows x64 portable package passes automated Rust/interface tests, native MSVC builds and package-integrity checks on a hosted Windows runner. Native WebView2 tests cover mini-window startup and full/mini transitions. Preview desktop testing also verified clean mini-window edges on Windows 11, as recorded in [PR #2](https://github.com/endNone/ClickPulse/pull/2). The checklist below distinguishes that evidence from physical input, login startup, upgrades and display scaling. Windows downloads contain the portable ZIP only.
+
+## Recent desktop checks
+
+A Windows 11 ThinkPad session at 200% scaling tested the shared dropdown, selected-counter and pause/resume fixes through source `154f3cd`, including a large synthetic history. These fixes are included in 0.2.0. The recorded physical-key sequence was not fully reconciled; special keys, other display scales, multi-display movement and actual login restart still need dedicated hardware checks. Current release CI validates its exact tagged source separately.
 
 ## Installation and data locations
 
@@ -35,7 +39,7 @@ Verify package SHA256 values and manifest file hashes. Extract the complete pack
 | Main window | Native title bar is absent; app minimize, maximize/restore, close and header dragging work while scrolling |
 | Mini mode | Fixed 320 × 208 logical size; rounded native corners have no white border; pin/hide/expand work |
 | Display scaling | Where hardware permits, moving between displays preserves mini logical size; otherwise mark **Not tested** |
-| Close choices | First close/page Quit offers minimize or save-and-quit; cancel, remembered choice, restart and resetting to Ask work in both app languages |
+| Close choices | First close offers minimize or save-and-quit; cancel, remembered choice, restart and resetting to Ask work in all app languages |
 | Background recording | Minimizing to tray or hiding mini mode still records physical input |
 | Actual exit | Save-and-quit or tray Quit saves records, stops capture and removes the process/tray icon; dedicated WebView2 children exit without affecting other apps |
 | Reopen/single instance | Tray double-click or running the EXE again opens full statistics with one collector process |

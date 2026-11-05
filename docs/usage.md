@@ -1,6 +1,6 @@
 # Usage
 
-This guide describes current development source. Public preview build 55 does not yet include Mini Sport, the expanded language options, manual time-zone selection or the new data-management controls. Current source removes CSV export, including the toolbar, history-page action and command-line command.
+This guide describes **ClickPulse 0.2.0**. CSV export has been removed; use SQLite backups and history import to manage your data.
 
 ## First launch
 

@@ -1,8 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 · 2026-11-05
 
-- Remove CSV export from the toolbar, History page and command line; retain complete SQLite history, database import and automatic backups.
+- Add optional Mini Sport with combined keyboard/mouse speed ranks C → SS, particles and red SS without window shake; disabled by default.
+- Add rolling 24-hour activity, 30-day trends and a system-default or custom time zone for all desktop calendar views.
+- Add Traditional Chinese, Japanese, Korean, French, German and Spanish alongside Simplified Chinese and English.
+- Add custom data folders and SQLite history imports with conflict warnings, duplicate-safe max-count merging and retained recovery backups.
+- Keep input capture responsive during imports and long reads; cache calendar projections and acknowledge pause immediately.
+- Keep selected live counters updating and copyable; constrain dropdown menus and preserve their scroll position during refresh.
+- Simplify Settings, add section shortcuts, align controls and link GitHub Discussions from the README.
+- Fix same-database alias locking, missing explicit legacy-source errors, custom Mac build directories and database publication on volumes without hard links.
+- Remove CSV export throughout the interface and command line; retain SQLite history, import and backups.
+
+Internal build 69. Automated checks and packages cover Apple Silicon, Intel Mac and Windows x64. Mac packages are ad-hoc signed without notarization; Windows packages remain unsigned. Hardware-specific coverage and remaining checks are listed in the [Windows validation guide](docs/windows-testing.md).
 
 ## 0.1.0 — Preview · 2026-10-10
 

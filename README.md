@@ -4,7 +4,7 @@
 
 <p align="center"><strong>Small app. Every click. Big insights.</strong></p>
 
-<p align="center"><a href="#installation"><img src="assets/badges/preview.svg" alt="preview: v0.1.0"></a> <a href="docs/development.md"><img src="assets/badges/rust.svg" alt="Core: Rust"></a> <a href="LICENSE"><img src="assets/badges/license.svg" alt="license: GPL-3.0-or-later"></a> <a href="docs/install-macos.md"><img src="assets/badges/macos.svg" alt="macOS: 12+ · arm64/x64"></a> <a href="docs/install-windows.md"><img src="assets/badges/windows.svg" alt="Windows: 10/11 · x64"></a></p>
+<p align="center"><a href="#installation"><img src="assets/badges/preview.svg" alt="release: v0.2.0"></a> <a href="docs/development.md"><img src="assets/badges/rust.svg" alt="Core: Rust"></a> <a href="LICENSE"><img src="assets/badges/license.svg" alt="license: GPL-3.0-or-later"></a> <a href="docs/install-macos.md"><img src="assets/badges/macos.svg" alt="macOS: 12+ · arm64/x64"></a> <a href="docs/install-windows.md"><img src="assets/badges/windows.svg" alt="Windows: 10/11 · x64"></a></p>
 
 An offline keyboard and mouse activity tracker for macOS and Windows. See your daily patterns, most-used keys and live counts.
 
@@ -18,7 +18,7 @@ Simulated desktop · Demo data.
 
 ## Installation
 
-**0.1.0 Preview** — [Download packages](https://github.com/endNone/ClickPulse/releases/tag/v0.1.0). You can also [build from source](docs/development.md).
+**0.2.0** — [Download packages](https://github.com/endNone/ClickPulse/releases/tag/v0.2.0). You can also [build from source](docs/development.md).
 
 | System | Package | Guide |
 | --- | --- | --- |
@@ -28,13 +28,11 @@ Simulated desktop · Demo data.
 
 **macOS:** move the App to Applications, allow the [first launch](docs/install-macos.md#2-allow-the-first-launch), then enable Input Monitoring. **Windows:** extract the ZIP and open ClickPulse.exe. Check **Recording** before use.
 
-Mac previews are ad-hoc signed without notarization; Windows previews are unsigned.
+Mac packages are ad-hoc signed without notarization; Windows packages are unsigned.
 
 **Windows launch blocked?** See [Windows security prompts](docs/install-windows.md#windows-security-prompts), including Smart App Control error 4551.
 
 ## Features
-
-**Development preview:** the features below are in current source; the published v0.1.0 packages are an earlier preview. [Build from source](docs/development.md) to try them.
 
 - **Overview:** 24-hour activity, 14/30/90-day trends and an activity calendar.
 - **Keyboard:** physical-key heatmap and usage treemap.

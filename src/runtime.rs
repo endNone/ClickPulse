@@ -228,12 +228,22 @@ impl Runtime {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)?;
         }
+        let lock_path = if path.exists() {
+            std::fs::canonicalize(path)?
+        } else {
+            let parent = path
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            std::fs::canonicalize(parent)?.join(path.file_name().unwrap_or_default())
+        }
+        .with_extension("lock");
         let instance_lock = std::fs::OpenOptions::new()
             .create(true)
             .truncate(false)
             .read(true)
             .write(true)
-            .open(path.with_extension("lock"))?;
+            .open(lock_path)?;
         instance_lock
             .try_lock()
             .map_err(|_| anyhow!("此数据库已有 ClickPulse 正在运行，请从菜单栏打开原窗口"))?;
@@ -241,7 +251,7 @@ impl Runtime {
             Storage::App(CollectorDb::open(path)?)
         } else {
             let mut db = EventDb::open(path)?;
-            if let Some(legacy) = legacy.filter(|p| p.is_file()) {
+            if let Some(legacy) = legacy {
                 db.import_legacy(legacy)?;
             }
             Storage::Independent(db)
@@ -1758,6 +1768,37 @@ mod tests {
         assert!(second.snapshot().unwrap().paused);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn database_symlink_shares_instance_lock_and_releases_on_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("db.sqlite3");
+        let alias = temp.path().join("alias.sqlite3");
+        let first = Runtime::start(&path, None, true).unwrap();
+        std::os::unix::fs::symlink(&path, &alias).unwrap();
+        assert!(Runtime::start(&alias, None, true).is_err());
+        drop(first);
+        let second = Runtime::start(&alias, None, true).unwrap();
+        assert_eq!(
+            second.snapshot().unwrap().database_path,
+            alias.display().to_string()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn new_database_in_symlinked_directory_uses_canonical_lock() {
+        let temp = tempfile::tempdir().unwrap();
+        let directory = temp.path().join("real");
+        let alias = temp.path().join("alias");
+        std::fs::create_dir(&directory).unwrap();
+        std::os::unix::fs::symlink(&directory, &alias).unwrap();
+        let first = Runtime::start(&alias.join("db.sqlite3"), None, true).unwrap();
+        assert!(Runtime::start(&directory.join("db.sqlite3"), None, true).is_err());
+        drop(first);
+        assert!(Runtime::start(&directory.join("db.sqlite3"), None, true).is_ok());
+    }
+
     #[test]
     fn storage_tests_never_start_native_input_capture() {
         let temp = tempfile::tempdir().unwrap();
@@ -1903,5 +1944,32 @@ mod tests {
                 .keyboard,
             20005
         );
+    }
+    #[test]
+    fn missing_explicit_legacy_database_fails_startup() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("db.sqlite3");
+        let missing = temp.path().join("missing.sqlite3");
+        assert!(Runtime::start(&path, Some(&missing), true).is_err());
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn imported_legacy_database_can_be_missing_on_restart() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("db.sqlite3");
+        let legacy = temp.path().join("legacy.sqlite3");
+        let conn = rusqlite::Connection::open(&legacy).unwrap();
+        conn.execute_batch("CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER); INSERT INTO events VALUES(2,1,97,3),(2,0,1,2);").unwrap();
+        drop(conn);
+        let first = Runtime::start(&path, Some(&legacy), true).unwrap();
+        assert_eq!(first.snapshot().unwrap().stats.lifetime.total(), 5);
+        drop(first);
+        std::fs::remove_file(&legacy).unwrap();
+        let second = Runtime::start(&path, Some(&legacy), true).unwrap();
+        let snapshot = second.snapshot().unwrap();
+        assert!(snapshot.stats.legacy_imported);
+        assert_eq!(snapshot.stats.lifetime.total(), 5);
+        assert!(!legacy.exists());
     }
 }

@@ -8,7 +8,7 @@ Native Rust capture, local SQLite summaries, full history, activity calendar, ke
 
 The 0.1.0 preview adds transactional schema versions, explicit legacy encoding metadata, preserved damaged preferences with a localized recovery notice, asynchronous snapshot delivery, strict typed IPC validation and compatibility fixes for earlier macOS 12 WebKit versions.
 
-The 0.1.0 public preview includes complete packages, corresponding source and checksums. Automated checks and packaging pass on hosted Apple Silicon, Intel Mac and Windows x64 runners, with release tooling checked on Linux. Private security reports use GitHub's vulnerability-reporting form. Desktop interaction and physical-input coverage are recorded separately below.
+Release 0.2.0 adds Mini Sport, hourly activity, selectable time zones, eight languages and SQLite import/folder controls, with complete packages, corresponding source and checksums. Automated checks and packaging pass on hosted Apple Silicon, Intel Mac and Windows x64 runners, with release tooling checked on Linux. Private security reports use GitHub's vulnerability-reporting form. Desktop interaction and physical-input coverage are recorded separately below.
 
 ## Release follow-up
 
@@ -21,8 +21,8 @@ The 0.1.0 public preview includes complete packages, corresponding source and ch
 
 ## Future candidates
 
-Prioritize backup and restore controls, optional date-based deletion with a clear preview, database size diagnostics and explicit compaction, keyboard-layout detection, accessibility and screen-size adaptation, permission diagnostics and smoother upgrades before adding unrelated features. History stays permanent by default; storage maintenance must not silently expire it.
+Prioritize optional date-based deletion with a clear preview, database size diagnostics and explicit compaction, keyboard-layout detection, accessibility and screen-size adaptation, permission diagnostics and smoother upgrades before adding unrelated features. History stays permanent by default; storage maintenance must not silently expire it.
 
-Incremental history/keyboard payloads and background caching need profiling against long synthetic histories. The current asynchronous delivery avoids blocking the interface while preserving complete statistics.
+Writer connections cache calendar projections and invalidate them after import or time-zone changes. Incremental history/keyboard payloads remain a possible optimization for very long histories.
 
-Keep the focus on lightweight activity statistics. Exercise and game modes were dropped; cloud sync and online analysis are outside the current plan.
+Keep the focus on lightweight activity statistics. The optional Mini Sport visualizer does not add games; cloud sync and online analysis are outside the current plan.
