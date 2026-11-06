@@ -170,8 +170,11 @@ impl CollectorDb {
         now: DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
     ) -> Result<Snapshot> {
-        self.reader
-            .snapshot_with_cache(now, zone, Some(&self.projection))
+        self.reader.snapshot_with_cache(
+            now,
+            zone,
+            crate::timezone::Projection::Writer(&self.projection),
+        )
     }
     pub fn lifetime(&self) -> Result<crate::db::Counts> {
         self.reader.lifetime()

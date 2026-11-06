@@ -12,6 +12,7 @@ use crate::db::{
 
 pub struct LiveSource {
     conn: Connection,
+    sealed: crate::timezone::SealedProjection,
 }
 
 pub struct ActivityCounts {
@@ -40,7 +41,10 @@ impl LiveSource {
         conn.execute_batch("PRAGMA query_only=ON")?;
         crate::storage_schema::require_key_encoding(&conn)?;
         conn.prepare("SELECT bucket,dev,code,cnt FROM events LIMIT 0")?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            sealed: Default::default(),
+        })
     }
 
     pub fn snapshot(&self, now: DateTime<Local>) -> Result<Snapshot> {
@@ -55,14 +59,14 @@ impl LiveSource {
         now: DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
     ) -> Result<Snapshot> {
-        self.snapshot_with_cache(now, zone, None)
+        self.snapshot_with_cache(now, zone, crate::timezone::Projection::Sealed(&self.sealed))
     }
 
     pub(crate) fn snapshot_with_cache(
         &self,
         now: DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
-        cache: Option<&crate::timezone::ProjectionCache>,
+        cache: crate::timezone::Projection,
     ) -> Result<Snapshot> {
         let tx = self.conn.unchecked_transaction()?;
         let mut snapshot = self.snapshot_from(&tx, now)?;

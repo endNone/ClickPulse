@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Keep read-only external sources responsive with long histories: calendar views no longer regroup every saved minute on each refresh.
+
 ## 0.2.0 · 2026-11-05
 
 - Add optional Mini Sport with combined keyboard/mouse speed ranks C → SS, particles and red SS without window shake; disabled by default.

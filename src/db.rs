@@ -314,7 +314,7 @@ impl EventDb {
                 ("recent", crate::hourly::Resolution::Millisecond),
                 ("legacy_minutes", crate::hourly::Resolution::Minute),
             ],
-            Some(&self.projection),
+            crate::timezone::Projection::Writer(&self.projection),
         )?;
         Ok(snapshot)
     }
