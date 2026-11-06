@@ -80,8 +80,13 @@ fn archive(
     }
     zip.start_file(format!("{prefix}build-manifest.json"), options)
         .unwrap();
-    zip.write_all(&serde_json::to_vec(manifest).unwrap())
-        .unwrap();
+    zip.write_all(
+        serde_json::to_string_pretty(manifest)
+            .unwrap()
+            .replace('\n', "\r\n")
+            .as_bytes(),
+    )
+    .unwrap();
     if let Some((name, bytes)) = extra {
         if link {
             zip.add_symlink(name, "../../outside", options).unwrap();
@@ -187,6 +192,10 @@ fn complete_verified_package_extracts_only_its_declared_files() {
     fs::create_dir(&out).unwrap();
     let got = unpack(&zip, &out, &candidate(), &serde_json::to_vec(&m).unwrap()).unwrap();
     assert_eq!(got.version, "1.2.3");
+    assert_eq!(
+        fs::read(out.join("payload/build-manifest.json")).unwrap(),
+        serde_json::to_vec(&m).unwrap()
+    );
     for (name, bytes) in files {
         assert_eq!(fs::read(out.join("payload").join(name)).unwrap(), bytes);
     }

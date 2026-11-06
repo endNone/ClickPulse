@@ -441,10 +441,14 @@ fn unpack(
         if relative == "build-manifest.json" {
             let bytes = read_limited(&mut member, 1024 * 1024)?;
             ensure!(
-                bytes == external,
+                serde_json::from_slice::<serde_json::Value>(&bytes)?
+                    == serde_json::from_slice::<serde_json::Value>(external)?,
                 "Embedded manifest differs from verified manifest"
             );
-            fs::write(&dest, &bytes)?;
+            // Windows packages use CRLF; the release service writes its verified
+            // external copy with LF. Preserve that authenticated copy for the
+            // helper's exact-byte handoff after comparing the complete JSON.
+            fs::write(&dest, external)?;
         } else {
             let wanted = manifest
                 .files
