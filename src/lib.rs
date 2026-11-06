@@ -22,5 +22,6 @@ pub mod source;
 pub mod storage;
 mod storage_schema;
 pub mod timezone;
+pub mod updater;
 pub mod version;
 pub mod windows_input;

@@ -6,7 +6,7 @@ ClickPulse counts keyboard presses and mouse-button presses. It stores device ca
 
 A held key counts once until released. Shift does not change a physical key’s identity. Windows distinguishes input using device and scan-code information.
 
-The statistics app works offline, with no telemetry, account, cloud sync or upload service. Downloading build dependencies and installing WebView2 are separate steps that can require network access.
+Statistics work offline, with no telemetry, account, cloud sync or upload service. In builds with the manual updater, clicking **Check for updates** contacts this project's GitHub release API; **Update & restart** downloads the matching package from GitHub. Activity data and preferences are never uploaded. There is no startup polling. Downloading build dependencies and installing WebView2 are separate steps that can require network access.
 
 ## Time and retention
 

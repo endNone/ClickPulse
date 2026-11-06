@@ -16,6 +16,7 @@ mod data_settings;
 mod edit_menu;
 mod ipc;
 mod refresh;
+mod updates;
 mod window;
 use ipc::Request;
 use refresh::SnapshotGate;
@@ -38,6 +39,7 @@ use wry::WebViewBuilder;
 
 #[derive(Debug)]
 enum UiEvent {
+    Update(updates::Event),
     Ipc(String),
     Menu(MenuEvent),
     Snapshot {
@@ -206,7 +208,7 @@ pub fn run(
     }
     let proxy = event_loop.create_proxy();
     let html = include_str!("../ui/index.html")
-        .replace("__VERSION__", clickpulse::version::DISPLAY)
+        .replace("__VERSION__", clickpulse::version::PUBLIC)
         .replace("__BRAND_MARK__", &clickpulse::branding::mark_data_url())
         .replace("__LOCALE__", locale.code())
         .replace("__THEME__", preferences.theme.code())
@@ -367,6 +369,8 @@ pub fn run(
     let mut next_data_job = 0u64;
     let mut quit_after_data = false;
     let mut data_notice: Option<DataNotice> = None;
+    let mut updates =
+        updates::Controller::new(options.owned && !demo && !source_mode && !setup_pending);
     let handle_event = move |event: Event<'_, UiEvent>,
                              target: &EventLoopWindowTarget<UiEvent>,
                              flow: &mut ControlFlow| {
@@ -377,6 +381,14 @@ pub fn run(
         let mut refresh = false;
         let mut view_changed = false;
         match event {
+            Event::UserEvent(UiEvent::Update(event)) => {
+                if updates.receive(event) {
+                    *flow = ControlFlow::Exit;
+                }
+                if ready {
+                    updates.publish(&webview);
+                }
+            }
             Event::UserEvent(UiEvent::DataFinished { id, result }) => {
                 if let Some(current) = data_job
                     && current == id
@@ -563,8 +575,26 @@ pub fn run(
                             view_changed = true;
                             refresh = true;
                         }
+                        Request::CheckUpdates {} => {
+                            updates.check(snapshot_proxy.clone());
+                            updates.publish(&webview);
+                        }
+                        Request::InstallUpdate {} => {
+                            if data_job.is_some() {
+                                toast(&webview, &locale.text("storage.processing"));
+                            } else if let Err(error) = updates.install(snapshot_proxy.clone()) {
+                                report_error(&webview, locale, "update.failed", &error);
+                            }
+                            updates.publish(&webview);
+                        }
+                        Request::UpdateRelease {} => {
+                            if let Err(error) = updates.open_release() {
+                                report_error(&webview, locale, "update.failed", &error);
+                            }
+                        }
                         Request::Ready {} => {
                             ready = true;
+                            updates.publish(&webview);
                             view_changed = true;
                             refresh = true;
                         }
@@ -783,6 +813,7 @@ pub fn run(
                         }
                         action @ (Request::StorageDirectory {} | Request::ImportHistory {}) => {
                             if data_job.is_none()
+                                && !updates.installing()
                                 && let Some(rt) = &runtime
                                 && rt.can_manage_auto_start()
                             {
@@ -869,10 +900,21 @@ pub fn run(
             Event::LoopDestroyed => {
                 #[cfg(target_os = "windows")]
                 drop(activation.take());
-                if let Some(mut rt) = runtime.take()
-                    && let Err(error) = rt.shutdown()
+                let was_paused = runtime.as_ref().is_some_and(|rt| rt.is_paused());
+                let saved = match runtime.take() {
+                    Some(mut rt) => match rt.shutdown() {
+                        Ok(()) => true,
+                        Err(error) => {
+                            eprintln!("退出保存失败：{error:#}");
+                            false
+                        }
+                    },
+                    None => true,
+                };
+                if let Some(guard) = &updates.guard
+                    && let Err(error) = guard.finish_shutdown(saved, was_paused)
                 {
-                    eprintln!("退出保存失败：{error:#}");
+                    eprintln!("Update handoff failed: {error:#}");
                 }
                 #[cfg(target_os = "windows")]
                 {

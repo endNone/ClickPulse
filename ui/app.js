@@ -29,11 +29,35 @@ const send=(action,values={})=>window.ipc?.postMessage(JSON.stringify({action,..
 let data=null,page='overview',range=14,toastTimer;
 let recordingPaused=null;
 let dataOperationBusy=false;
+let updateState={status:'idle',current:'',version:null,can_install:false,received:0,total:0};
+const updateInstalling=()=>['downloading','verifying','preparing','installing'].includes(updateState.status);
+function renderUpdateState(){
+  const button=$('check-updates'),status=$('update-status'),details=$('update-details');
+  if(!button||!status||!details)return;
+  const state=updateState,available=state.status==='available';
+  const key={checking:'update.checking',current:'update.current',available:state.can_install?'update.available':'update.manual',error:'update.failed',verifying:'update.verifying',preparing:'update.preparing',installing:'update.restarting'}[state.status];
+  const percent=state.total>0?Math.min(100,Math.floor(state.received/state.total*100)):0;
+  const text=state.status==='downloading'?t('update.downloading',{percent}):key?t(key,{version:state.version||state.current}):state.current?t('update.version',{version:state.current}):'';
+  setSelectableText(status,text);
+  button.textContent=t(state.status==='checking'?'update.checking':updateInstalling()?'update.updating':available?(state.can_install?'update.install':'update.download'):'update.check');
+  button.disabled=dataOperationBusy||state.status==='checking'||updateInstalling();
+  button.setAttribute('aria-busy',String(state.status==='checking'||updateInstalling()));
+  details.hidden=!available&&state.status!=='error';
+}
+window.receiveUpdateState=state=>{Object.assign(updateState,state);renderDataOperation();};
+window.receiveUpdateNotice=notice=>window.toast(t(notice.success?'update.installed':'update.failed_last',{version:notice.version}));
+$('check-updates')?.addEventListener('click',()=>{
+  if(dataOperationBusy||updateInstalling()||updateState.status==='checking')return;
+  send(updateState.status==='available'?(updateState.can_install?'install_update':'update_release'):'check_updates');
+});
+$('update-details')?.addEventListener('click',event=>{event.preventDefault();send('update_release');});
+
 function renderDataOperation(){
   $('data-operation-status').hidden=!dataOperationBusy;
   $('data-operation-message').textContent=t('storage.processing');
-  for(const id of ['storage-directory','import-history','reveal'])$(id).disabled=dataOperationBusy||(id==='reveal'&&!!data?.demo);
+  for(const id of ['storage-directory','import-history','reveal'])$(id).disabled=dataOperationBusy||updateInstalling()||(id==='reveal'&&!!data?.demo);
   $('takeover').disabled=dataOperationBusy||!data?.capture?.listening||!!data?.capture?.permission_needed;
+  renderUpdateState();
 }
 window.receiveDataBusy=busy=>{
   dataOperationBusy=!!busy;

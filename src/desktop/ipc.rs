@@ -16,6 +16,9 @@ pub(super) enum Request {
     Theme {
         theme: Theme,
     },
+    CheckUpdates {},
+    InstallUpdate {},
+    UpdateRelease {},
     Ready {},
     Compact {},
     Expand {},
@@ -63,6 +66,9 @@ mod tests {
     fn invalid_actions_and_payloads_are_rejected() {
         for body in [
             r#"{"action":"unknown"}"#,
+            r#"{"action":"check_updates","url":"https://example.com"}"#,
+            r#"{"action":"install_update","path":"/tmp/other"}"#,
+            r#"{"action":"update_release","url":"https://example.com"}"#,
             r#"{"action":"timezone","timezone":"not/a-zone"}"#,
             r#"{"action":"timezone"}"#,
             r#"{"action":"timezone","timezone":null}"#,

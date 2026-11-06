@@ -1,6 +1,29 @@
 use std::process::Command;
 
 #[test]
+fn invalid_updater_invocation_never_opens_or_creates_a_profile() {
+    let home = tempfile::tempdir().unwrap();
+    let database = home.path().join("must-not-create.sqlite3");
+    let plan = home.path().join("apply.json");
+    std::fs::write(&plan, b"{}").unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_clickpulse"))
+        .env("HOME", home.path())
+        .env("LOCALAPPDATA", home.path().join("local"))
+        .env("XDG_DATA_HOME", home.path().join("xdg"))
+        .arg("--db")
+        .arg(&database)
+        .arg("--apply-update")
+        .arg(plan)
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    assert!(!database.exists());
+    assert!(!home.path().join("Library").exists());
+    assert!(!home.path().join("local").exists());
+    assert!(!home.path().join("xdg").exists());
+}
+
+#[test]
 fn version_identifies_the_packaged_build_without_opening_user_data() {
     let temp = tempfile::tempdir().unwrap();
     let missing = temp.path().join("must-not-create.sqlite3");

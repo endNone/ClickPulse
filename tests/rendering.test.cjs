@@ -704,3 +704,48 @@ test('time zone choices persist across locale changes and stale-zone snapshots a
   a.window.receiveView({timezone:'system'});a.window.receive(s);
   assert.equal(a.get('timezone-select').value,'system');
 });
+
+test('updates require an explicit user click for both checking and installing',()=>{
+  for(const platform of ['macos','windows']){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+    a.window.receiveUpdateState({status:'idle',current:'0.2.0'});assert.equal(sent.length,0);
+    a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
+    a.window.receiveUpdateState({status:'checking'});a.get('check-updates').fire();assert.equal(sent.length,0);
+    a.window.receiveUpdateState({status:'available',version:'0.2.1',can_install:true});assert.equal(sent.length,0);
+    assert.equal(a.get('check-updates').textContent,messages.en['update.install']);
+    assert.equal(a.get('update-details').hidden,false);
+    a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'install_update'});
+  }
+});
+test('updater progress and data operations exclude concurrent destructive actions',()=>{
+  const a=app();a.window.receive(snapshot());
+  for(const status of ['downloading','verifying','preparing','installing']){
+    a.window.receiveUpdateState({status,current:'0.2.0',received:50,total:100});
+    assert.equal(a.get('check-updates').disabled,true);
+    assert.equal(a.get('storage-directory').disabled,true);assert.equal(a.get('import-history').disabled,true);
+    assert.equal(a.get('check-updates').attributes['aria-busy'],'true');
+  }
+  a.window.receiveUpdateState({status:'available',version:'0.2.1',can_install:true});a.window.receiveDataBusy(true);
+  assert.equal(a.get('check-updates').disabled,true);
+  const sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));a.get('check-updates').fire();assert.equal(sent.length,0);
+  a.window.receiveDataBusy(false);assert.equal(a.get('check-updates').disabled,false);
+});
+test('unsupported installations open release downloads and errors can be retried',()=>{
+  const a=app(),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+  a.window.receiveUpdateState({status:'available',version:'0.2.1',can_install:false});
+  assert.equal(a.get('check-updates').textContent,messages.en['update.download']);
+  a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'update_release'});
+  a.window.receiveUpdateState({status:'error'});a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
+  a.window.receiveUpdateState({status:'current'});assert.equal(a.get('update-status').textContent,messages.en['update.current']);
+  assert.equal(a.get('update-details').hidden,true);
+});
+test('all updater states follow all eight languages without restarting a transfer',()=>{
+  for(const platform of ['macos','windows'])for(const locale of Object.keys(messages)){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+    a.window.receiveUpdateState({status:'downloading',current:'0.2.0',version:'0.2.1',received:51,total:100});
+    a.window.receiveView({locale,language_preference:locale});
+    assert.equal(a.get('update-status').textContent,createI18n(messages,locale).t('update.downloading',{percent:51}));
+    assert.equal(a.get('check-updates').textContent,messages[locale]['update.updating']);
+    assert.equal(a.get('check-updates').disabled,true);assert.equal(sent.length,0);
+  }
+});

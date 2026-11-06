@@ -42,6 +42,14 @@ Language follows the system by default, unless you have saved a manual choice. E
 
 Dropdown menus are rendered inside the app: use arrow keys to browse, Enter or Space to confirm, Escape to cancel, or Tab to confirm and move to the next control.
 
+## Check for updates
+
+In builds with **Settings → Application → App updates**, click **Check for updates**. When a newer stable release is available, review its release notes and click **Update & restart** to download, verify, save pending activity and relaunch. Checking alone never downloads or installs a package. The app does not check on startup.
+
+The updater replaces program files and keeps a recovery copy; history, save-folder settings and preferences stay in place. If saving or verification fails, the update is cancelled. A read-only installation or an independent/demo session offers the release download page instead. On macOS, an ad-hoc signed update may require confirming Input Monitoring again. The app shows the public version; `--version` includes its internal build for diagnostics.
+
+This control is included in the development build after 0.2.0. The published 0.2.0 package still needs a manual installation to gain it.
+
 ## Time zone
 
 In **Settings → Application → Time zone**, **Follow system** is the default. Choose an IANA zone such as **Asia/Shanghai** or **America/Los_Angeles** to use it throughout the desktop statistics. Type a city name while the menu is open to find a zone quickly. The choice is saved independently of language and theme. Choosing a different zone explicitly refreshes a read-only view once, even if its automatic updates are paused.
