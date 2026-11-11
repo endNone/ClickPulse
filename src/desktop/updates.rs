@@ -152,6 +152,7 @@ mod tests {
         let mut notices = updater::UpdateNotifications::default();
         let mut controller = Controller::new(false);
         controller.automatic_allowed = true;
+        controller.check_source = CheckSource::Automatic;
         controller.id = 2;
         controller.receive(Event::Checked {
             id: 1,
@@ -181,6 +182,49 @@ mod tests {
         });
         assert!(!excluded.sync_notifications(&mut notices));
         assert_eq!(notices.pending(), None);
+    }
+
+    #[test]
+    fn a_manual_check_marks_its_result_announced_without_a_reminder() {
+        for already_pending in [false, true] {
+            let mut notices = updater::UpdateNotifications::default();
+            let mut controller = Controller::new(false);
+            controller.automatic_allowed = true;
+            if already_pending {
+                // A reminder queued by a background check while the window was hidden
+                // is also settled once the user sees the result of a manual check.
+                assert!(controller.begin_check(1, CheckSource::Automatic));
+                controller.receive(Event::Checked {
+                    id: controller.id,
+                    result: Ok(Some(Box::new(Candidate::placeholder("9.9.9")))),
+                });
+                assert!(controller.sync_notifications(&mut notices));
+                assert_eq!(notices.pending(), Some("9.9.9"));
+            }
+            assert!(controller.begin_check(2, CheckSource::Manual));
+            controller.receive(Event::Checked {
+                id: controller.id,
+                result: Ok(Some(Box::new(Candidate::placeholder("9.9.9")))),
+            });
+            assert!(controller.sync_notifications(&mut notices));
+            assert_eq!(notices.pending(), None);
+            // The announced version is not repeated by later background checks.
+            assert!(controller.begin_check(90_000, CheckSource::Automatic));
+            controller.receive(Event::Checked {
+                id: controller.id,
+                result: Ok(Some(Box::new(Candidate::placeholder("9.9.9")))),
+            });
+            controller.sync_notifications(&mut notices);
+            assert_eq!(notices.pending(), None);
+            // A newer release found by a later background check is announced.
+            assert!(controller.begin_check(180_000, CheckSource::Automatic));
+            controller.receive(Event::Checked {
+                id: controller.id,
+                result: Ok(Some(Box::new(Candidate::placeholder("10.0.0")))),
+            });
+            assert!(controller.sync_notifications(&mut notices));
+            assert_eq!(notices.pending(), Some("10.0.0"));
+        }
     }
 
     #[test]
@@ -284,9 +328,20 @@ impl Controller {
         self.automatic_allowed
     }
     pub fn sync_notifications(&mut self, notices: &mut updater::UpdateNotifications) -> bool {
-        self.checked_version
-            .take()
-            .is_some_and(|version| self.automatic_allowed && notices.observe(version.as_deref()))
+        let Some(version) = self.checked_version.take() else {
+            return false;
+        };
+        if !self.automatic_allowed {
+            return false;
+        }
+        let mut changed = notices.observe(version.as_deref());
+        // A manual check already shows its result in Settings; record the
+        // version as announced instead of repeating it in a reminder.
+        if self.check_source == CheckSource::Manual && notices.pending().is_some() {
+            notices.mark_shown();
+            changed = true;
+        }
+        changed
     }
     pub fn automatic_due(&self, enabled: bool, last_attempt: Option<i64>, now: i64) -> bool {
         self.automatic_allowed

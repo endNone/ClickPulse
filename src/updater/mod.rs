@@ -64,7 +64,7 @@ impl UpdateNotifications {
             .as_deref()
             .filter(|version| self.unseen(version))
     }
-    /// Record only after the reminder has been sent to a visible, focused view.
+    /// Record after a foreground reminder or a successful manual check result.
     pub fn mark_shown(&mut self) {
         if let Some(version) = self.pending().map(str::to_owned) {
             self.last_shown = Some(version);
