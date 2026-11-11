@@ -10,6 +10,8 @@ The 0.1.0 preview adds transactional schema versions, explicit legacy encoding m
 
 Release 0.2.0 adds Mini Sport, hourly activity, selectable time zones, eight languages and SQLite import/folder controls, with complete packages, corresponding source and checksums. Automated checks and packaging pass on hosted Apple Silicon, Intel Mac and Windows x64 runners, with release tooling checked on Linux. Private security reports use GitHub's vulnerability-reporting form. Desktop interaction and physical-input coverage are recorded separately below.
 
+Release 0.2.1 adds daily and manual update checks, verified installation with explicit confirmation, persistent one-time reminders, bounded failure logs and clearer Settings controls. It also caches calendar history for read-only sources. Existing 0.2.0 installations need a manual upgrade once to obtain the updater.
+
 ## Release follow-up
 
 1. Extend Windows hardware coverage for physical special keys, sign-out/sign-in, multi-display DPI, upgrades and removal. Record publisher-trust behavior with Smart App Control separately from capture results.

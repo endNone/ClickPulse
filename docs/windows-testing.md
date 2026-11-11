@@ -1,10 +1,12 @@
 # Windows validation
 
-The 0.2.0 Windows x64 portable package passes automated Rust/interface tests, native MSVC builds and package-integrity checks on a hosted Windows runner. Native WebView2 tests cover mini-window startup and full/mini transitions. Preview desktop testing also verified clean mini-window edges on Windows 11, as recorded in [PR #2](https://github.com/endNone/ClickPulse/pull/2). The checklist below distinguishes that evidence from physical input, login startup, upgrades and display scaling. Windows downloads contain the portable ZIP only.
+The 0.2.1 Windows x64 portable package passes automated Rust/interface tests, native MSVC builds and package-integrity checks on a hosted Windows runner. Native WebView2 tests cover mini-window startup and full/mini transitions. Preview desktop testing also verified clean mini-window edges on Windows 11, as recorded in [PR #2](https://github.com/endNone/ClickPulse/pull/2). The checklist below distinguishes that evidence from physical input, login startup, upgrades and display scaling. Windows downloads contain the portable ZIP only.
 
 ## Recent desktop checks
 
 A Windows 11 ThinkPad session at 200% scaling tested the shared dropdown, selected-counter and pause/resume fixes through source `154f3cd`, including a large synthetic history. These fixes are included in 0.2.0. The recorded physical-key sequence was not fully reconciled; special keys, other display scales, multi-display movement and actual login restart still need dedicated hardware checks. Current release CI validates its exact tagged source separately.
+
+A separate Windows 11 session on 2026-11-11 tested development build76 (`d9cfd7f`) at 200% scaling: real manual/background checks, saved preferences, Mini/hidden restore, single-instance behavior and a reconciled physical A-key/mouse sequence passed. New-version reminders and retry timing were tested with fixtures; real newer-version installation and minimized/unfocused reminder delivery were not tested. Its stderr-only update diagnostics and German time-zone label findings were fixed in build77, including the same Spanish label issue; file/state regressions pass on a native Windows CI runner. These findings are included in 0.2.1. Interactive Windows revalidation of the fixes remains separate from CI.
 
 ## Installation and data locations
 

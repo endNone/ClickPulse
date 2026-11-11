@@ -1,13 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 · 2026-11-11
 
-- Add explicit update checks and verified in-app updates with saved activity, recovery copies and restart; keep the interface version display concise.
-- Keep background update failures quiet while retaining explicit errors for manual checks, and show a one-time, persistent reminder when a background check finds a new version.
-- Retry a failed daily update check a few times while running, keep an offered update after a failed re-check, and keep demo, read-only and independent sessions from changing the installed app's update schedule.
-- Keep Settings controls at 14px without truncation: long time zones and translated close actions wrap to two centered lines, and section shortcuts wrap in narrow English, French and German windows.
-- Explain how to refresh macOS Input Monitoring when an update leaves an old permission entry ineffective, including guidance in all supported languages.
-- Keep read-only external sources responsive with long histories: calendar views no longer regroup every saved minute on each refresh.
+- Add **Check for updates** in Settings and a default-on daily check with a saved last-attempt time and an opt-out. Downloading and installation always require **Update & restart**.
+- Verify update packages before saving activity, retaining a recovery copy and restarting. Accept equivalent Windows manifest JSON across line-ending styles without relaxing file checksums.
+- Keep background failures quiet, retry a few times while running, and retain an already offered update after a failed recheck. Save error time, request source and operation in the bounded application log.
+- Show a newer-version reminder once, including across restarts; defer it until the full window is focused. A successful manual check clears duplicate queued reminders.
+- Enlarge and center Settings controls, wrap long translated labels, give system time zones their own translations in all eight languages, and remove the hourly-chart explanatory note.
+- Explain how to refresh macOS Input Monitoring when an updated App's existing permission entry stops working.
+- Keep read-only sources responsive with long histories by caching calendar projections, and render the README Sport demonstration at 60 fps.
+
+Internal build 78. Install 0.2.1 manually when upgrading from the published 0.2.0 or earlier: those packages do not include the updater. History and preferences remain separate from program files. Mac packages are ad-hoc signed without notarization; Windows packages remain unsigned. Automated tests include update validation, recovery and reminder fixtures; real newer-release installation and remaining hardware checks are tracked separately in the [Windows validation guide](docs/windows-testing.md).
 
 ## 0.2.0 · 2026-11-05
 

@@ -6,7 +6,7 @@ ClickPulse counts keyboard presses and mouse-button presses. It stores device ca
 
 A held key counts once until released. Shift does not change a physical key’s identity. Windows distinguishes input using device and scan-code information.
 
-Statistics work offline, with no telemetry, account, cloud sync or upload service. In builds with the manual updater, clicking **Check for updates** contacts this project's GitHub release API; **Update & restart** downloads the matching package from GitHub. Activity data and preferences are never uploaded. There is no startup polling. Downloading build dependencies and installing WebView2 are separate steps that can require network access.
+Statistics work offline, with no telemetry, account, cloud sync or upload service. Starting with 0.2.1, normal desktop sessions contact this project's GitHub release API once per 24-hour window by default, including after startup if the saved check is due. Failed checks can retry a few times while the app remains open. Turn off **Check automatically every day** in Settings to stop automatic checks and retries. **Check for updates** makes a manual request; **Update & restart** explicitly downloads the matching package from GitHub. Activity data and preferences are never uploaded. Downloading build dependencies and installing WebView2 are separate steps that can require network access.
 
 ## Time and retention
 
@@ -23,7 +23,7 @@ The overview’s hourly chart covers that same trailing 24-hour interval, with s
 
 History is not deleted by age. Only the temporary rolling cache is pruned; saved minute details and summaries remain. Permanent history means the database grows with use.
 
-The status log is optional diagnostic output, separate from activity history. Identical consecutive status lines are skipped. Older log versions that exceed the limit are trimmed to their most recent bytes, and rotation replaces the oldest diagnostic copy. Log failures do not stop database recording.
+The status log is optional diagnostic output, separate from activity history. It also records update failures with UTC time, request source and operation. Identical consecutive status lines are skipped. Older log versions that exceed the limit are trimmed to their most recent bytes, and rotation replaces the oldest diagnostic copy. Log failures do not stop database recording.
 
 The desktop calendar groups all saved minute records into dates in the selected time zone, independently of the recent trend range. Time-zone changes affect the read-time view, not stored timestamps, original daily summaries or lifetime totals. Storage paths and backup steps are listed in the [usage guide](usage.md#data-locations-and-backups).
 
