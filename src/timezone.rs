@@ -305,7 +305,6 @@ pub(crate) fn project(
         for (bucket, dev, count) in tail {
             add(bucket, dev, count, true)?;
         }
-        drop(add);
         for (day, counts) in days {
             let entry = history.entry(day).or_default();
             entry.keyboard += counts.keyboard;

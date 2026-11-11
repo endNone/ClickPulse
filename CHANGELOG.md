@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add explicit update checks and verified in-app updates with saved activity, recovery copies and restart; keep the interface version display concise.
+- Explain how to refresh macOS Input Monitoring when an update leaves an old permission entry ineffective, including guidance in all supported languages.
 - Keep read-only external sources responsive with long histories: calendar views no longer regroup every saved minute on each refresh.
 
 ## 0.2.0 · 2026-11-05

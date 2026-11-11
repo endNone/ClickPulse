@@ -45,7 +45,13 @@ function renderUpdateState(){
   details.hidden=!available&&state.status!=='error';
 }
 window.receiveUpdateState=state=>{Object.assign(updateState,state);renderDataOperation();};
-window.receiveUpdateNotice=notice=>window.toast(t(notice.success?'update.installed':'update.failed_last',{version:notice.version}));
+// An ad-hoc signed update can leave macOS showing a stale, ineffective grant.
+let updatedThisLaunch=false;
+window.receiveUpdateNotice=notice=>{
+  updatedThisLaunch=updatedThisLaunch||!!notice.success;
+  window.toast(t(notice.success?'update.installed':'update.failed_last',{version:notice.version}));
+  if(data)renderPermission();
+};
 $('check-updates')?.addEventListener('click',()=>{
   if(dataOperationBusy||updateInstalling()||updateState.status==='checking')return;
   send(updateState.status==='available'?(updateState.can_install?'install_update':'update_release'):'check_updates');
@@ -215,7 +221,7 @@ window.receive=snapshot=>{
   const now=new Date(data.now);$('date').textContent=I.date(now,{year:'numeric',month:'long',day:'numeric',weekday:'long'});
   const demo=!!data.demo;$('demo-badge').hidden=!demo;
   renderRecordingState();
-  $('permission-banner').hidden=!data.capture.permission_needed;
+  renderPermission();
   $('error-banner').hidden=!data.capture.error;
   if(data.capture.error)$('error-banner').textContent=t(data.capture.error_code||'error.recording');
   if(page==='settings')renderSettings();
@@ -237,6 +243,10 @@ window.receive=snapshot=>{
     renderChanged('keyboard',data.keyboard_stats||data.top_keys,renderKeyboard);
   }
 };
+function renderPermission(){
+  $('permission-banner').hidden=!data.capture.permission_needed;
+  $('permission-title').hidden=updatedThisLaunch;$('permission-updated-title').hidden=!updatedThisLaunch;
+}
 function renderRecordingState(){
   const demo=!!data.demo;
   const state=demo?'':data.capture.error?'error':data.paused?'paused':data.source_mode||data.capture.listening?'':'error';
@@ -246,6 +256,7 @@ function renderRecordingState(){
 function renderSettings(){
   $('permission-description').textContent=t(onWindows?(data.capture.listening?'settings.windows_capture':'status.unavailable'):data.source_mode && !data.setup_pending?'settings.source_permission':data.capture.listening?'settings.authorized':'settings.permission_description');
   $('permission-row').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
+  $('permission-reset-settings').hidden=$('permission-row').hidden || data.capture.listening;
   $('capture-settings').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
   $('handoff-settings').hidden=!data.setup_pending;
   $('takeover').disabled=dataOperationBusy || !data.capture.listening || data.capture.permission_needed;

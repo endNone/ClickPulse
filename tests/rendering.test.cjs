@@ -319,6 +319,24 @@ test('Windows settings report native capture without offering macOS permission c
   assert.equal(a.get('permission-description').textContent,messages.en['status.unavailable']);
 });
 
+test('macOS access guidance explains stale grants and names a completed update',()=>{
+  const a=app(),s=snapshot(),denied={...s,capture:{listening:false,permission_needed:true,error:null}};
+  a.window.receive(denied);
+  assert.equal(a.get('permission-banner').hidden,false);
+  assert.equal(a.get('permission-title').hidden,false);assert.equal(a.get('permission-updated-title').hidden,true);
+  a.navigate('settings');assert.equal(a.get('permission-reset-settings').hidden,false);
+  a.window.receiveUpdateNotice({success:false,version:'0.3.0'});
+  assert.equal(a.get('permission-updated-title').hidden,true);
+  // The notice can arrive after the first snapshot; the banner updates at once.
+  a.window.receiveUpdateNotice({success:true,version:'0.3.0'});
+  assert.equal(a.get('toast').textContent,messages.en['update.installed'].replace('{version}','0.3.0'));
+  assert.equal(a.get('permission-title').hidden,true);assert.equal(a.get('permission-updated-title').hidden,false);
+  a.window.receive(s);
+  assert.equal(a.get('permission-banner').hidden,true);assert.equal(a.get('permission-reset-settings').hidden,true);
+  const w=app('windows');w.navigate('settings');w.window.receive(denied);
+  assert.equal(w.get('permission-reset-settings').hidden,true);
+});
+
 test('settings distinguish storage modes and only offer login startup for the default database',()=>{
   const a=app('windows');a.navigate('settings');
   for(const mode of ['default','custom','source','demo']){
