@@ -735,6 +735,29 @@ test('manual checks remain available and an offered update never installs withou
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'install_update'});
   }
 });
+test('background failure keeps version copy and only explicit error states show failures',()=>{
+  for(const locale of Object.keys(messages)){
+    const a=app();a.window.receiveView({locale,language_preference:locale});
+    a.window.receiveUpdateState({status:'idle',current:'0.2.0'});
+    assert.equal(a.get('update-status').textContent,createI18n(messages,locale).t('update.version',{version:'0.2.0'}));
+    assert.equal(a.get('update-details').hidden,true);
+    assert.equal(a.get('check-updates').disabled,false);
+    a.window.receiveUpdateState({status:'error'});
+    assert.equal(a.get('update-status').textContent,messages[locale]['update.failed']);
+  }
+});
+test('new-version reminders are localized and never initiate a check, download or install',()=>{
+  for(const platform of ['macos','windows'])for(const locale of Object.keys(messages)){
+    const a=app(platform),sent=[];let timeout,expire;
+    a.context.setTimeout=(fn,ms)=>{timeout=ms;expire=fn;return 1;};a.context.clearTimeout=()=>{};
+    a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+    a.window.receiveView({locale,language_preference:locale});
+    a.window.receiveUpdateAvailable('0.2.1');
+    assert.equal(a.get('toast').textContent,createI18n(messages,locale).t('update.found',{version:'0.2.1'}));
+    assert.equal(a.get('toast').hidden,false);assert.equal(timeout,8000);
+    assert.equal(sent.length,0);expire();assert.equal(a.get('toast').hidden,true);
+  }
+});
 test('daily update preference and last attempt survive UI refresh and language changes',()=>{
   for(const platform of ['macos','windows'])for(const locale of Object.keys(messages)){
     const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
@@ -752,6 +775,23 @@ test('daily update preference and last attempt survive UI refresh and language c
     for(const last_update_check of [null,undefined,'invalid',Number.MAX_VALUE]){
       a.window.receiveView({last_update_check});assert.equal(a.get('update-last-checked').hidden,true);
     }
+  }
+});
+test('demo, read-only and independent sessions cannot change the installed app daily check',()=>{
+  for(const locale of Object.keys(messages)){
+    const a=app('macos'),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+    a.window.receiveView({locale,auto_check_updates:true,last_update_check:1794310000});
+    assert.equal(a.get('update-automatic-unavailable').hidden,true);
+    a.window.receiveUpdateState({status:'current',current:'0.2.0',automatic:false});
+    const toggle=a.get('automatic-updates');
+    assert.equal(toggle.checked,false);assert.equal(toggle.disabled,true);
+    assert.equal(a.get('update-automatic-description').hidden,true);
+    assert.equal(a.get('update-automatic-unavailable').hidden,false);
+    assert.equal(a.get('update-last-checked').hidden,true);
+    toggle.checked=true;toggle.fire('change');assert.equal(sent.length,0);
+    // Manual checks stay available in these sessions.
+    a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
+    assert.ok(messages[locale]['update.automatic_unavailable']);
   }
 });
 test('updater progress and data operations exclude concurrent destructive actions',()=>{

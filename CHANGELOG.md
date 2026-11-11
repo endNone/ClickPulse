@@ -3,6 +3,9 @@
 ## Unreleased
 
 - Add explicit update checks and verified in-app updates with saved activity, recovery copies and restart; keep the interface version display concise.
+- Keep background update failures quiet while retaining explicit errors for manual checks, and show a one-time, persistent reminder when a new version is found.
+- Retry a failed daily update check a few times while running, keep an offered update after a failed re-check, and keep demo, read-only and independent sessions from changing the installed app's update schedule.
+- Keep Settings controls at 14px without truncation: long time zones and translated close actions wrap to two centered lines, and section shortcuts wrap in narrow English, French and German windows.
 - Explain how to refresh macOS Input Monitoring when an update leaves an old permission entry ineffective, including guidance in all supported languages.
 - Keep read-only external sources responsive with long histories: calendar views no longer regroup every saved minute on each refresh.
 

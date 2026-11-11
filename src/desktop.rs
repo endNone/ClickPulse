@@ -385,6 +385,7 @@ pub fn run(
                 if updates.receive(event) {
                     *flow = ControlFlow::Exit;
                 }
+                view_changed |= updates.sync_notifications(&mut preferences.update_notifications);
                 if ready {
                     updates.publish(&webview);
                 }
@@ -576,15 +577,27 @@ pub fn run(
                             refresh = true;
                         }
                         Request::CheckUpdates {} => {
-                            if updates.check(snapshot_proxy.clone()) {
-                                preferences.last_update_check =
-                                    Some(chrono::Utc::now().timestamp());
+                            let now = chrono::Utc::now().timestamp();
+                            // Demo, read-only and independent sessions share the
+                            // preferences file but must not move the installed
+                            // app's daily schedule.
+                            if updates.check(
+                                snapshot_proxy.clone(),
+                                now,
+                                updates::CheckSource::Manual,
+                            ) && updates.automatic_allowed()
+                            {
+                                preferences.last_update_check = Some(now);
                                 view_changed = true;
                             }
                             updates.publish(&webview);
                         }
                         Request::AutomaticUpdates { enabled } => {
-                            preferences.auto_check_updates = enabled;
+                            if updates.automatic_allowed() {
+                                preferences.auto_check_updates = enabled;
+                            }
+                            // Always echo the stored value so a rejected toggle
+                            // returns to its actual state.
                             view_changed = true;
                         }
                         Request::InstallUpdate {} => {
@@ -913,7 +926,7 @@ pub fn run(
                         preferences.last_update_check,
                         now,
                     )
-                    && updates.check(snapshot_proxy.clone())
+                    && updates.check(snapshot_proxy.clone(), now, updates::CheckSource::Automatic)
                 {
                     preferences.last_update_check = Some(now);
                     view_changed = true;
@@ -971,6 +984,28 @@ pub fn run(
                 }
                 DataNotice::Failed(error) => data_settings::show_error(&window, locale, &error),
             }
+        }
+        // Do not spend the one-time reminder on a hidden, minimized, inactive
+        // or Mini window. The pending version survives until a full view opens.
+        if ready
+            && visible
+            && !preferences.compact
+            && window.is_visible()
+            && !window.is_minimized()
+            && window.is_focused()
+            && updates.automatic_allowed()
+            && !updates.installing()
+            && data_job.is_none()
+            && !quit_after_data
+            && !matches!(*flow, ControlFlow::ExitWithCode(_))
+            && let Some(version) = preferences.update_notifications.pending()
+            && let Ok(version) = serde_json::to_string(version)
+            && webview
+                .evaluate_script(&format!("window.receiveUpdateAvailable?.({version});"))
+                .is_ok()
+        {
+            preferences.update_notifications.mark_shown();
+            view_changed = true;
         }
         if view_changed {
             if !demo && let Err(e) = preferences.save() {

@@ -57,6 +57,7 @@ pub struct Preferences {
     pub close_action: CloseAction,
     pub auto_check_updates: bool,
     pub last_update_check: Option<i64>,
+    pub update_notifications: crate::updater::UpdateNotifications,
     pub sport_enabled: bool,
     pub sport_visible: bool,
     pub sport_skin: SportSkin,
@@ -72,6 +73,7 @@ impl Default for Preferences {
             close_action: Default::default(),
             auto_check_updates: true,
             last_update_check: None,
+            update_notifications: Default::default(),
             sport_enabled: false,
             sport_visible: false,
             sport_skin: Default::default(),
@@ -193,6 +195,27 @@ mod tests {
             assert_eq!(loaded.last_update_check, prefs.last_update_check);
             assert_eq!(loaded.theme, Theme::Violet);
         }
+    }
+
+    #[test]
+    fn hidden_update_reminders_survive_restart_and_a_shown_version_is_not_repeated() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("presentation.json");
+        let mut prefs = Preferences::default();
+        assert!(prefs.update_notifications.observe(Some("9.9.9")));
+        // A hidden or Mini window keeps the reminder pending when saving.
+        prefs.save_to(&path).unwrap();
+        let mut restarted = Preferences::load_from(&path).unwrap().preferences;
+        assert_eq!(restarted.update_notifications.pending(), Some("9.9.9"));
+        restarted.update_notifications.mark_shown();
+        restarted.save_to(&path).unwrap();
+        let mut again = Preferences::load_from(&path).unwrap().preferences;
+        assert!(!again.update_notifications.observe(Some("9.9.9")));
+        assert_eq!(again.update_notifications.pending(), None);
+        assert!(again.update_notifications.observe(Some("10.0.0")));
+        again.update_notifications.mark_shown();
+        assert!(!again.update_notifications.observe(Some("9.9.9")));
+        assert_eq!(again.update_notifications.pending(), None);
     }
 
     #[test]

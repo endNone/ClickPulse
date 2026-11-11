@@ -29,7 +29,7 @@ const send=(action,values={})=>window.ipc?.postMessage(JSON.stringify({action,..
 let data=null,page='overview',range=14,toastTimer;
 let recordingPaused=null;
 let dataOperationBusy=false;
-let updateState={status:'idle',current:'',version:null,can_install:false,received:0,total:0};
+let updateState={status:'idle',current:'',version:null,can_install:false,automatic:true,received:0,total:0};
 const updateInstalling=()=>['downloading','verifying','preparing','installing'].includes(updateState.status);
 function renderUpdateState(){
   const button=$('check-updates'),status=$('update-status'),details=$('update-details');
@@ -39,10 +39,15 @@ function renderUpdateState(){
   const percent=state.total>0?Math.min(100,Math.floor(state.received/state.total*100)):0;
   const text=state.status==='downloading'?t('update.downloading',{percent}):key?t(key,{version:state.version||state.current}):state.current?t('update.version',{version:state.current}):'';
   setSelectableText(status,text);
+  // Demo, read-only and independent sessions cannot schedule checks or change
+  // the installed app's preference, so show why the switch is unavailable.
+  const scheduled=state.automatic!==false;
   const automatic=$('automatic-updates'),last=$('update-last-checked');
-  if(automatic){automatic.checked=window.presentationView?.auto_check_updates!==false;automatic.disabled=updateInstalling();}
+  if(automatic){automatic.checked=scheduled&&window.presentationView?.auto_check_updates!==false;automatic.disabled=!scheduled||updateInstalling();}
+  const description=$('update-automatic-description'),unavailable=$('update-automatic-unavailable');
+  if(description&&unavailable){description.hidden=!scheduled;unavailable.hidden=scheduled;}
   const checked=window.presentationView?.last_update_check;
-  const valid=Number.isFinite(checked)&&Math.abs(checked)<=8640000000000;
+  const valid=scheduled&&Number.isFinite(checked)&&Math.abs(checked)<=8640000000000;
   if(last){last.hidden=!valid;setSelectableText(last,valid?t('update.last_checked',{time:I.date(checked*1000,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}):'');}
   button.textContent=t(state.status==='checking'?'update.checking':updateInstalling()?'update.updating':available?(state.can_install?'update.install':'update.download'):'update.check');
   button.disabled=dataOperationBusy||state.status==='checking'||updateInstalling();
@@ -51,6 +56,7 @@ function renderUpdateState(){
 }
 window.renderUpdatePreferences=renderUpdateState;
 window.receiveUpdateState=state=>{Object.assign(updateState,state);renderDataOperation();};
+window.receiveUpdateAvailable=version=>window.toast(t('update.found',{version}),8000);
 // An ad-hoc signed update can leave macOS showing a stale, ineffective grant.
 let updatedThisLaunch=false;
 window.receiveUpdateNotice=notice=>{
@@ -64,7 +70,7 @@ $('check-updates')?.addEventListener('click',()=>{
 });
 $('update-details')?.addEventListener('click',event=>{event.preventDefault();send('update_release');});
 $('automatic-updates')?.addEventListener('change',event=>{
-  if(updateInstalling())return;
+  if(updateInstalling()||updateState.automatic===false)return;
   send('automatic_updates',{enabled:event.target.checked});
 });
 
@@ -211,7 +217,7 @@ $('calendar-range-select').addEventListener('change',event=>{calendarRange=event
 $('history-range-select').addEventListener('change',event=>{historyRange=event.target.value;historyPage=0;if(data)renderHistory()});
 $('history-prev').addEventListener('click',()=>{historyPage--;if(data)renderHistory()});
 $('history-next').addEventListener('click',()=>{historyPage++;if(data)renderHistory()});
-window.toast=message=>{$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,4500)};
+window.toast=(message,duration=4500)=>{$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,duration)};
 window.failure=message=>{
   sportView?.receive({available:false});
   $('error-banner').hidden=false;$('error-banner').textContent=message;$('status').className='status error';$('status').lastElementChild.textContent=t('status.unavailable');

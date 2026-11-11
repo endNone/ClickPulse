@@ -28,6 +28,51 @@ pub fn daily_check_due(last_attempt: Option<i64>, now: i64) -> bool {
     last_attempt.is_none_or(|last| now < last || now.saturating_sub(last) >= 24 * 60 * 60)
 }
 
+/// Persist a deferred in-app reminder and the newest version already shown.
+/// A hidden window or restart must not consume the user's one-time reminder.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UpdateNotifications {
+    pending: Option<String>,
+    last_shown: Option<String>,
+}
+impl UpdateNotifications {
+    fn unseen(&self, version: &str) -> bool {
+        let Ok(version) = stable_version(version) else {
+            return false;
+        };
+        version > stable_version(crate::version::PUBLIC).expect("valid app version")
+            && self
+                .last_shown
+                .as_deref()
+                .and_then(|value| stable_version(value).ok())
+                .is_none_or(|shown| version > shown)
+    }
+    /// Call only for a successful release check, including no available update.
+    pub fn observe(&mut self, latest: Option<&str>) -> bool {
+        let next = latest
+            .filter(|version| self.unseen(version))
+            .map(str::to_owned);
+        if self.pending == next {
+            return false;
+        }
+        self.pending = next;
+        true
+    }
+    pub fn pending(&self) -> Option<&str> {
+        self.pending
+            .as_deref()
+            .filter(|version| self.unseen(version))
+    }
+    /// Record only after the reminder has been sent to a visible, focused view.
+    pub fn mark_shown(&mut self) {
+        if let Some(version) = self.pending().map(str::to_owned) {
+            self.last_shown = Some(version);
+        }
+        self.pending = None;
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Target {
     MacArm64,
@@ -103,6 +148,25 @@ pub struct Candidate {
     sums: Asset,
 }
 impl Candidate {
+    /// Offer-only value for desktop state tests. It has no downloadable
+    /// assets, so staging it always fails verification.
+    #[doc(hidden)]
+    pub fn placeholder(version: &str) -> Self {
+        let asset = Asset {
+            name: String::new(),
+            browser_download_url: String::new(),
+            size: 0,
+            digest: None,
+        };
+        Self {
+            version: version.into(),
+            release_url: RELEASES.into(),
+            target: Target::MacArm64,
+            archive: asset.clone(),
+            manifest: asset.clone(),
+            sums: asset,
+        }
+    }
     fn from_release(release: Release, current: &str, target: Target) -> Result<Option<Self>> {
         ensure!(
             !release.draft && !release.prerelease,

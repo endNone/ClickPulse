@@ -210,6 +210,7 @@ button,select,.preference-switch {user-select:none;-webkit-user-select:none}
 /* Expand section shortcuts only while Settings is open. */
 .sidebar {overflow-y:auto}
 .settings-subnav {display:flex;flex-direction:column;gap:2px;margin:0 0 4px 25px;border-left:1px solid var(--nav-line)}
-.sidebar .settings-subnav button {font-size:11px;line-height:1.5;padding:6px 10px;margin-left:8px;white-space:normal;overflow-wrap:anywhere}
+/* :root outranks the per-language `nav button` nowrap rules in themes.css. */
+:root .sidebar .settings-subnav button {font-size:11px;line-height:1.5;padding:6px 10px;margin-left:8px;white-space:normal;overflow-wrap:anywhere}
 .settings-subnav button.current-section {background:var(--nav-hover);color:#fff}
 .settings-card {scroll-margin-top:76px}

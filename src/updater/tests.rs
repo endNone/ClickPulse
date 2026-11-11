@@ -1,6 +1,34 @@
 use super::*;
 
 #[test]
+fn update_reminders_require_a_newer_stable_version_and_clear_withdrawn_offers() {
+    let mut notices = UpdateNotifications::default();
+    for version in [
+        crate::version::PUBLIC,
+        "0.0.1",
+        "invalid",
+        "9.9.9-beta",
+        "9.9.9+build",
+    ] {
+        assert!(!notices.observe(Some(version)), "{version}");
+        assert_eq!(notices.pending(), None);
+    }
+    assert!(notices.observe(Some("9.9.9")));
+    assert!(!notices.observe(Some("9.9.9")));
+    assert!(notices.observe(None));
+    assert_eq!(notices.pending(), None);
+    notices.observe(Some("9.9.9"));
+    notices.mark_shown();
+    assert!(!notices.observe(Some("9.9.9")));
+    // Pending versions from a previously installed build are revalidated.
+    let old: UpdateNotifications = serde_json::from_value(serde_json::json!({
+        "pending": crate::version::PUBLIC, "last_shown": null
+    }))
+    .unwrap();
+    assert_eq!(old.pending(), None);
+}
+
+#[test]
 fn daily_schedule_survives_restarts_failures_and_clock_changes() {
     let now = 1_794_310_000;
     assert!(daily_check_due(None, now));
