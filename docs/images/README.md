@@ -58,11 +58,11 @@ The fixed random seed generates 191 calendar days, ending on 2026-10-08. Daily, 
 
 ## Sport: C to SS on the desktop
 
-The README embeds [sport-desktop-en.webp](sport-desktop-en.webp), a 9-second **C → B → A → S → SS** loop, with a [static SS preview](sport-desktop-ss-en.jpg). It uses the same mountain-lake scenery and fictional notes window as the Mini demonstration above. The Mini iframe renders the production HTML/CSS/fonts, speed meter and Warp effect in English/default blue. SS adds the red accent and particles without shake. No live screen, database, listener or saved preferences are used.
+The README embeds [sport-desktop-en.webp](sport-desktop-en.webp), a 3.6-second **C → B → A → S → SS** loop at 2.5× playback speed, with a [static SS preview](sport-desktop-ss-en.jpg). It uses the same mountain-lake scenery and fictional notes window as the Mini demonstration above. The Mini iframe renders the production HTML/CSS/fonts, speed meter and Warp effect in English/default blue. SS adds the red accent and particles without shake. No live screen, database, listener or saved preferences are used.
 
 Capture at **2160 × 1360** pixels: a 1080 × 680 scene at 2× density. The original 320 × 208 Mini layout occupies 384 × 249.6 logical pixels in this scene, or about 768 × 499 captured pixels. Render the iframe at 3× density and reduce it within the scene so text and canvas remain crisp. This replaces the standalone 640 × 416 Sport showcase; the scenery source itself remains the original 1672 × 941 illustration, not a new high-resolution photograph.
 
-`sport-demo-driver.js` advances the actual meter and canvas through 540 deterministic frames at 60 fps. Frame timestamps are rounded from `frame × 1000 / 60`; WebP delays alternate between 16 and 17 ms without changing the 9-second duration. Rates rise through 1, 3, 6, 10 and 14 combined presses/second. Every fourth input is a click; the other 54 inputs type the visible draft. Counts rise from 18,780 (14,862 keys / 3,918 clicks) to 18,851 (14,916 / 3,935). The loop restarts this fictional session after SS; real application totals never reset this way. Sport remains off by default in the App; the preview opts in explicitly.
+`sport-demo-driver.js` advances the actual meter and canvas through 540 deterministic frames at 60 fps. The source simulation lasts 9 seconds. For the README, select 216 frames at 2.5× speed while keeping 60 fps output: output frame `i` uses source frame `round(i × 2.5)`. WebP delays alternate between 16 and 17 ms, producing a 3.6-second loop. This accelerates only the documentation playback; the App’s Sport timing is unchanged. Rates rise through 1, 3, 6, 10 and 14 combined presses/second. Every fourth input is a click; the other 54 inputs type the visible draft. Counts rise from 18,780 (14,862 keys / 3,918 clicks) to 18,851 (14,916 / 3,935). The loop restarts this fictional session after SS; real application totals never reset this way. Sport remains off by default in the App; the preview opts in explicitly.
 
 To reproduce:
 
@@ -73,14 +73,28 @@ python3 -m http.server 8768 --bind 127.0.0.1 --directory dist/sport-preview
 
 Open `http://127.0.0.1:8768/sport-desktop.html?scale=2` at a 2160 × 1360 viewport. Wait for `data-preview-ready="true"` and `data-frame="0"` on the outer `<html>`. Save the initial **full-page browser JPEG** as `frame-000.jpg`; press Arrow Right and wait for each outer `data-frame` before capturing through `frame-539.jpg`. Home resets the scene. The clock stays frozen between steps. Full-page capture is required because some browser viewport captures clip the right edge despite reporting the correct viewport. Verify every saved image is exactly 2160 × 1360 and contains the complete Mini panel. The capture driver controls are excluded from the scene. Reset the temporary viewport afterwards.
 
-Copy `sport-desktop-manifest.json` from the preview to the frames folder and encode without resizing:
+Copy `sport-desktop-manifest.json` from the preview to the frames folder, then prepare the 2.5× sequence without resizing:
 
 ```bash
-python3 scripts/encode-mini-demo.py /path/to/frames docs/images/sport-desktop-en.webp --manifest sport-desktop-manifest.json
+python3 - /path/to/frames /path/to/frames-2.5x <<'PYTHON'
+import json, shutil, sys
+from pathlib import Path
+source, output = map(Path, sys.argv[1:])
+manifest = json.loads((source / "sport-desktop-manifest.json").read_text())
+assert manifest["frame_count"] == 540 and manifest["duration_ms"] == 9000
+output.mkdir(parents=True, exist_ok=True)
+count = 216
+for i in range(count):
+    shutil.copyfile(source / f"frame-{round(i * 2.5):03}.jpg", output / f"frame-{i:03}.jpg")
+manifest.update(frame_count=count, duration_ms=3600, fps=60,
+    frame_durations_ms=[round((i + 1) * 1000 / 60) - round(i * 1000 / 60) for i in range(count)])
+(output / "sport-desktop-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+PYTHON
+python3 scripts/encode-mini-demo.py /path/to/frames-2.5x docs/images/sport-desktop-en.webp --manifest sport-desktop-manifest.json
 cp /path/to/frames/frame-539.jpg docs/images/sport-desktop-ss-en.jpg
 ```
 
-The encoder checks dimensions, total 9,000 ms duration and infinite looping, including when identical stationary frames coalesce. The manifest stores all 540 frame delays explicitly. With `img2webp` available, encoding consumes the captures sequentially and minimizes repeated static scenery; Pillow remains the fallback. The high-frame-rate Sport animation uses WebP because GIF cannot represent its 16–17 ms delays reliably. Legacy 50/80 ms WebP and GIF manifests remain supported. This synthetic browser example is separate from native GUI or physical-input validation. The fixed-rank preview remains at `app.html?page=mini&locale=en&rank=SS`.
+The encoder checks dimensions, total 3,600 ms duration and infinite looping, including when identical stationary frames coalesce. The output manifest stores all 216 frame delays explicitly. Keep the 16–17 ms delays instead of dividing them by 2.5, which can trigger minimum-delay clamping in image viewers. With `img2webp` available, encoding consumes the captures sequentially and minimizes repeated static scenery; Pillow remains the fallback. The high-frame-rate Sport animation uses WebP because GIF cannot represent its 16–17 ms delays reliably. Legacy 50/80 ms WebP and GIF manifests remain supported. This synthetic browser example is separate from native GUI or physical-input validation. The fixed-rank preview remains at `app.html?page=mini&locale=en&rank=SS`.
 
 ## Scenery provenance
 
