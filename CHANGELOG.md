@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1 · 2026-11-11
+
+- Add **Check for updates** in Settings and a default-on daily check with a saved last-attempt time and an opt-out. Downloading and installation always require **Update & restart**.
+- Verify update packages before saving activity, retaining a recovery copy and restarting. Accept equivalent Windows manifest JSON across line-ending styles without relaxing file checksums.
+- Keep background failures quiet, retry a few times while running, and retain an already offered update after a failed recheck. Save error time, request source and operation in the bounded application log.
+- Show a newer-version reminder once, including across restarts; defer it until the full window is focused. A successful manual check clears duplicate queued reminders.
+- Enlarge and center Settings controls, wrap long translated labels, give system time zones their own translations in all eight languages, and remove the hourly-chart explanatory note.
+- Explain how to refresh macOS Input Monitoring when an updated App's existing permission entry stops working.
+- Keep read-only sources responsive with long histories by caching calendar projections, and render the README Sport demonstration at 60 fps.
+
+Internal build 78. Install 0.2.1 manually when upgrading from the published 0.2.0 or earlier: those packages do not include the updater. History and preferences remain separate from program files. Mac packages are ad-hoc signed without notarization; Windows packages remain unsigned. Automated tests include update validation, recovery and reminder fixtures; real newer-release installation and remaining hardware checks are tracked separately in the [Windows validation guide](docs/windows-testing.md).
+
 ## 0.2.0 · 2026-11-05
 
 - Add optional Mini Sport with combined keyboard/mouse speed ranks C → SS, particles and red SS without window shake; disabled by default.

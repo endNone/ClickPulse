@@ -75,8 +75,8 @@ impl<'de> Deserialize<'de> for TimeZonePreference {
     }
 }
 
-/// Only exclusive app writers use this cache. Read-only external collectors
-/// still query their source on every refresh. Imports/reopens discard the cache.
+/// Only exclusive app writers use this cache; read-only sources use
+/// `SealedProjection`. Imports/reopens discard the cache.
 #[derive(Default)]
 pub(crate) struct ProjectionCache(RefCell<Option<CalendarHistory>>);
 
@@ -110,6 +110,123 @@ impl ProjectionCache {
     }
 }
 
+/// Minutes newer than this lag are rescanned on every read-only refresh.
+const SEAL_LAG_MINUTES: i64 = 2 * 1440;
+/// Deleting old minute details cannot be detected cheaply; rebuild this often.
+const SEAL_REBUILD_MINUTES: i64 = 10;
+
+/// An external collector's writes are not observed, so a read-only source
+/// caches only minutes before a seal and rescans the tail on every refresh.
+/// Lifetime minus the tail must stay constant: a late write or import before
+/// the seal rebuilds at once; pruning is picked up by the periodic rebuild.
+#[derive(Default)]
+pub(crate) struct SealedProjection(RefCell<Option<SealedHistory>>);
+
+struct SealedHistory {
+    key: String,
+    /// Minute bucket of the refresh that built `days`.
+    built: i64,
+    /// First minute bucket not included in `days`.
+    seal: i64,
+    /// Lifetime counts minus every bucket at or after `seal`.
+    older: Counts,
+    days: BTreeMap<String, Counts>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum Projection<'a> {
+    Writer(&'a ProjectionCache),
+    Sealed(&'a SealedProjection),
+}
+
+fn subtract(a: Counts, b: Counts) -> Counts {
+    Counts {
+        keyboard: a.keyboard - b.keyboard,
+        mouse: a.mouse - b.mouse,
+    }
+}
+
+fn scan_minutes(
+    conn: &Connection,
+    minutes_sql: &str,
+    start: i64,
+    end: i64,
+    mut visit: impl FnMut(i64, i64, i64) -> Result<()>,
+) -> Result<()> {
+    let mut stmt = conn.prepare_cached(minutes_sql)?;
+    let rows = stmt.query_map([start, end], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, i64>(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (bucket, dev, count) = row?;
+        visit(bucket, dev, count)?;
+    }
+    Ok(())
+}
+
+impl SealedProjection {
+    /// Returns calendar days for buckets before the seal and fills `tail` with
+    /// every row at or after it, which always includes all of today.
+    #[allow(clippy::too_many_arguments)]
+    fn prefix(
+        &self,
+        conn: &Connection,
+        minutes_sql: &str,
+        zone: TimeZonePreference,
+        key: &str,
+        now_bucket: i64,
+        lifetime: Counts,
+        tail: &mut Vec<(i64, i64, i64)>,
+    ) -> Result<BTreeMap<String, Counts>> {
+        let mut entry = self.0.borrow_mut();
+        // A clock moved back would leave today's rows inside the cached prefix.
+        let previous = entry.take().filter(|c| {
+            c.key == key && (c.built..c.built + SEAL_REBUILD_MINUTES).contains(&now_bucket)
+        });
+        let seal = previous
+            .as_ref()
+            .map_or(now_bucket - SEAL_LAG_MINUTES, |c| c.seal);
+        let mut recent = Counts::default();
+        scan_minutes(conn, minutes_sql, seal, i64::MAX, |bucket, dev, count| {
+            recent.add(dev, count);
+            tail.push((bucket, dev, count));
+            Ok(())
+        })?;
+        let older = subtract(lifetime, recent);
+        let cache = match previous.filter(|c| c.older == older) {
+            Some(cache) => cache,
+            None => {
+                let mut days = BTreeMap::<String, Counts>::new();
+                scan_minutes(
+                    conn,
+                    minutes_sql,
+                    i64::MIN,
+                    seal - 1,
+                    |bucket, dev, count| {
+                        let day = minute_in_zone(bucket, zone)?.date_naive().to_string();
+                        days.entry(day).or_default().add(dev, count);
+                        Ok(())
+                    },
+                )?;
+                SealedHistory {
+                    key: key.to_owned(),
+                    built: now_bucket,
+                    seal,
+                    older,
+                    days,
+                }
+            }
+        };
+        let days = cache.days.clone();
+        *entry = Some(cache);
+        Ok(days)
+    }
+}
+
 fn minute_in_zone(bucket: i64, zone: TimeZonePreference) -> Result<DateTime<FixedOffset>> {
     let instant = Utc
         .timestamp_opt(
@@ -139,14 +256,19 @@ pub(crate) fn project(
     now: DateTime<Local>,
     minutes_sql: &str,
     hourly_tables: &[(&str, Resolution)],
-    cache: Option<&ProjectionCache>,
+    cache: Projection,
 ) -> Result<()> {
     let local_now = zone.at(now);
     let today = local_now.date_naive();
     let today_s = today.to_string();
     let week_s = (today - Days::new(6)).to_string();
     let key = zone.cache_key();
-    let cached = cache.and_then(|cache| {
+    let now_bucket = now.timestamp().div_euclid(60);
+    let writer = match cache {
+        Projection::Writer(cache) => Some(cache),
+        _ => None,
+    };
+    let cached = writer.and_then(|cache| {
         cache
             .0
             .borrow()
@@ -157,44 +279,51 @@ pub(crate) fn project(
     let warm = cached.is_some();
     let mut history = cached.unwrap_or_default();
     let mut hours = vec![Counts::default(); 24];
-    let mut stmt = conn.prepare(minutes_sql)?;
-    // A warm refresh only reads today's hour buckets. All possible zone offsets
-    // fit within a day of UTC midnight; filter the exact local date below.
-    let start = if warm {
-        today
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc()
-            .timestamp()
-            .div_euclid(60)
-            - 1440
-    } else {
-        i64::MIN
-    };
-    let end = if warm {
-        now.timestamp().div_euclid(60)
-    } else {
-        i64::MAX
-    };
-    let rows = stmt.query_map([start, end], |r| {
-        Ok((
-            r.get::<_, i64>(0)?,
-            r.get::<_, i64>(1)?,
-            r.get::<_, i64>(2)?,
-        ))
-    })?;
-    for row in rows {
-        let (bucket, dev, count) = row?;
+    let mut add = |bucket: i64, dev: i64, count: i64, to_history: bool| -> Result<()> {
         let local = minute_in_zone(bucket, zone)?;
         let day = local.date_naive();
-        if !warm {
+        if to_history {
             history.entry(day.to_string()).or_default().add(dev, count);
         }
         if day == today && local.timestamp_millis() <= now.timestamp_millis() {
             hours[local.hour() as usize].add(dev, count);
         }
+        Ok(())
+    };
+    if let Projection::Sealed(sealed) = cache {
+        // The tail starts at least two days back, so it holds all of today.
+        let mut tail = Vec::new();
+        let days = sealed.prefix(
+            conn,
+            minutes_sql,
+            zone,
+            &key,
+            now_bucket,
+            snapshot.lifetime,
+            &mut tail,
+        )?;
+        for (bucket, dev, count) in tail {
+            add(bucket, dev, count, true)?;
+        }
+        for (day, counts) in days {
+            let entry = history.entry(day).or_default();
+            entry.keyboard += counts.keyboard;
+            entry.mouse += counts.mouse;
+        }
+    } else {
+        // A warm refresh only reads today's hour buckets. All possible zone
+        // offsets fit within a day of UTC midnight; filter the exact local date.
+        let (start, end) = if warm {
+            let midnight = today.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
+            (midnight.div_euclid(60) - 1440, now_bucket)
+        } else {
+            (i64::MIN, i64::MAX)
+        };
+        scan_minutes(conn, minutes_sql, start, end, |bucket, dev, count| {
+            add(bucket, dev, count, !warm)
+        })?;
     }
-    if !warm && let Some(cache) = cache {
+    if !warm && let Some(cache) = writer {
         *cache.0.borrow_mut() = Some(CalendarHistory {
             key,
             zone,
@@ -559,6 +688,73 @@ mod tests {
             ),
             calendar(&expected)
         );
+    }
+
+    #[test]
+    fn read_only_sealed_cache_matches_fresh_reads_after_external_writes_pruning_and_zone_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("external.sqlite3");
+        let mut writer = CollectorDb::open(&path).unwrap();
+        // One reader persists across refreshes, as in the read-only source loop.
+        let reader = crate::source::LiveSource::open(&path).unwrap();
+        let mut write = |at: &str, device| {
+            writer
+                .insert(&[InputEvent {
+                    ts_ms: instant(at).timestamp_millis(),
+                    device,
+                    code: 1,
+                }])
+                .unwrap();
+        };
+        let check = |now: &str, name: Option<&str>| {
+            let now = instant(now);
+            let zone = name.map_or(TimeZonePreference::System, zone);
+            let expected = crate::source::LiveSource::open(&path)
+                .unwrap()
+                .snapshot_in_timezone(now, zone)
+                .unwrap();
+            for _ in 0..2 {
+                assert_eq!(
+                    calendar(&reader.snapshot_in_timezone(now, zone).unwrap()),
+                    calendar(&expected),
+                    "{now} {name:?}"
+                );
+            }
+        };
+        let la = Some("America/Los_Angeles");
+        // Old repeated DST hour (cached prefix) and recent tail input.
+        write("2026-11-01T08:15:00Z", Device::Keyboard);
+        write("2026-11-01T09:15:00Z", Device::Keyboard);
+        write("2026-11-05T11:50:00Z", Device::Mouse);
+        check("2026-11-05T12:00:00Z", la);
+        // External appends to the tail are read without rebuilding the prefix.
+        write("2026-11-05T11:55:00Z", Device::Keyboard);
+        check("2026-11-05T12:00:00Z", la);
+        // A late write before the seal changes older totals and rebuilds.
+        write("2026-10-15T10:00:00Z", Device::Mouse);
+        check("2026-11-05T12:00:00Z", la);
+        // Pruned old details keep lifetime totals; the periodic rebuild sees them.
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("DELETE FROM events WHERE dev=0 AND bucket<29880000")
+            .unwrap();
+        check("2026-11-05T12:10:00Z", la);
+        check("2026-11-05T12:10:00Z", Some("Asia/Kathmandu"));
+        check("2026-11-05T12:10:00Z", None);
+        check("2026-11-05T12:10:00Z", la);
+        // Days pass: every row is counted once across prefix rebuilds.
+        for (at, now) in [
+            ("2026-11-06T11:59:00Z", "2026-11-06T12:00:00Z"),
+            ("2026-11-08T11:59:00Z", "2026-11-08T12:00:00Z"),
+            ("2026-11-09T13:00:00Z", "2026-11-09T13:01:00Z"),
+            ("2026-11-14T00:00:00Z", "2026-11-14T00:30:00Z"),
+        ] {
+            write(at, Device::Keyboard);
+            check(now, la);
+        }
+        // A clock moved backwards still reads every row exactly once.
+        check("2026-11-05T12:00:00Z", la);
+        check("2026-11-14T00:30:00Z", la);
     }
 
     #[test]

@@ -21,6 +21,8 @@ mod desktop;
     about = "ClickPulse · Local keyboard and mouse activity statistics"
 )]
 struct Cli {
+    #[arg(long, hide = true)]
+    apply_update: Option<PathBuf>,
     /// Record independently to an explicitly selected database
     #[arg(long, global = true, conflicts_with = "source_db")]
     db: Option<PathBuf>,
@@ -105,7 +107,7 @@ fn main() {
     clickpulse::platform::windows::attach_parent_console();
     let cli = Cli::parse();
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    let desktop_mode = cli.command.is_none();
+    let desktop_mode = cli.command.is_none() && cli.apply_update.is_none();
     if let Err(error) = run(cli) {
         eprintln!("ClickPulse: {error:#}");
         #[cfg(target_os = "windows")]
@@ -125,6 +127,9 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<()> {
+    if let Some(plan) = &cli.apply_update {
+        return clickpulse::updater::apply_update(plan);
+    }
     #[cfg(target_os = "macos")]
     if cli.command.is_none() && !cli.demo {
         clickpulse::handoff::recover_pending()?;

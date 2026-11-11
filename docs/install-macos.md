@@ -1,6 +1,6 @@
 # Manual installation on macOS
 
-For **0.2.0 · macOS 12 or later · Apple Silicon and Intel**. DMG and App ZIP packages for both architectures are available in the [0.2.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.0). Both architectures pass builds and checks on their corresponding GitHub macOS runners. This guide covers first launch, Input Monitoring and updates.
+For **0.2.1 · macOS 12 or later · Apple Silicon and Intel**. DMG and App ZIP packages for both architectures are available in the [0.2.1 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1). Both architectures pass builds and checks on their corresponding GitHub macOS runners. This guide covers first launch, Input Monitoring and updates.
 
 Check Apple menu → About This Mac: choose `macos-arm64` for an Apple M-series chip, or `macos-x64` for an Intel processor.
 
@@ -8,7 +8,7 @@ Using a built App requires no Rust, Python or other developer tools, and no deve
 
 ## 1. Place the App in Applications
 
-1. Open the matching `ClickPulse-0.2.0-macos-arm64.dmg` or `ClickPulse-0.2.0-macos-x64.dmg`, or extract the matching App ZIP and locate `ClickPulse.app`. GitHub Source code downloads and `source-draft.zip` contain source rather than an installable App; see the [development guide](development.md) to build it.
+1. Open the matching `ClickPulse-0.2.1-macos-arm64.dmg` or `ClickPulse-0.2.1-macos-x64.dmg`, or extract the matching App ZIP and locate `ClickPulse.app`. GitHub Source code downloads and `source-draft.zip` contain source rather than an installable App; see the [development guide](development.md) to build it.
 2. In Finder, drag the entire `ClickPulse.app` into Applications (`/Applications`). For your user only, `~/Applications` is also suitable: press `⇧⌘G`, enter `~` to open your home folder, then create or open its `Applications` folder.
 3. Open the App from that location. Keep it there after granting access or enabling launch at login, and avoid opening another copy from Downloads.
 
@@ -43,6 +43,8 @@ After allowing the App to open, grant access for keyboard and mouse statistics:
 The window's close button only hides it; recording continues. Use **Quit ClickPulse** when restarting for access changes. The App stores key/button identities, counts and statistical timestamps, without typed text, pointer positions or screen contents.
 
 ## 4. Update and refresh access
+
+Starting with 0.2.1, use **Settings → Application → Check for updates**, then **Update & restart** when offered. Daily checks are enabled by default and can be turned off. Upgrading from the published 0.2.0 or earlier requires the manual steps below once to obtain the updater.
 
 1. Choose **Quit ClickPulse** from its menu-bar menu, then replace the old App with the complete new `ClickPulse.app` in the same directory.
 2. Open it from that location. If macOS blocks it again, follow section 2. If it does not show Recording, check access as described in section 3.

@@ -29,11 +29,57 @@ const send=(action,values={})=>window.ipc?.postMessage(JSON.stringify({action,..
 let data=null,page='overview',range=14,toastTimer;
 let recordingPaused=null;
 let dataOperationBusy=false;
+let updateState={status:'idle',current:'',version:null,can_install:false,automatic:true,received:0,total:0};
+const updateInstalling=()=>['downloading','verifying','preparing','installing'].includes(updateState.status);
+function renderUpdateState(){
+  const button=$('check-updates'),status=$('update-status'),details=$('update-details');
+  if(!button||!status||!details)return;
+  const state=updateState,available=state.status==='available';
+  const key={checking:'update.checking',current:'update.current',available:state.can_install?'update.available':'update.manual',error:'update.failed',verifying:'update.verifying',preparing:'update.preparing',installing:'update.restarting'}[state.status];
+  const percent=state.total>0?Math.min(100,Math.floor(state.received/state.total*100)):0;
+  const text=state.status==='downloading'?t('update.downloading',{percent}):key?t(key,{version:state.version||state.current}):state.current?t('update.version',{version:state.current}):'';
+  setSelectableText(status,text);
+  // Demo, read-only and independent sessions cannot schedule checks or change
+  // the installed app's preference, so show why the switch is unavailable.
+  const scheduled=state.automatic!==false;
+  const automatic=$('automatic-updates'),last=$('update-last-checked');
+  if(automatic){automatic.checked=scheduled&&window.presentationView?.auto_check_updates!==false;automatic.disabled=!scheduled||updateInstalling();}
+  const description=$('update-automatic-description'),unavailable=$('update-automatic-unavailable');
+  if(description&&unavailable){description.hidden=!scheduled;unavailable.hidden=scheduled;}
+  const checked=window.presentationView?.last_update_check;
+  const valid=scheduled&&Number.isFinite(checked)&&Math.abs(checked)<=8640000000000;
+  if(last){last.hidden=!valid;setSelectableText(last,valid?t('update.last_checked',{time:I.date(checked*1000,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}):'');}
+  button.textContent=t(state.status==='checking'?'update.checking':updateInstalling()?'update.updating':available?(state.can_install?'update.install':'update.download'):'update.check');
+  button.disabled=dataOperationBusy||state.status==='checking'||updateInstalling();
+  button.setAttribute('aria-busy',String(state.status==='checking'||updateInstalling()));
+  details.hidden=!available&&state.status!=='error';
+}
+window.renderUpdatePreferences=renderUpdateState;
+window.receiveUpdateState=state=>{Object.assign(updateState,state);renderDataOperation();};
+window.receiveUpdateAvailable=version=>window.toast(t('update.found',{version}),8000);
+// An ad-hoc signed update can leave macOS showing a stale, ineffective grant.
+let updatedThisLaunch=false;
+window.receiveUpdateNotice=notice=>{
+  updatedThisLaunch=updatedThisLaunch||!!notice.success;
+  window.toast(t(notice.success?'update.installed':'update.failed_last',{version:notice.version}));
+  if(data)renderPermission();
+};
+$('check-updates')?.addEventListener('click',()=>{
+  if(dataOperationBusy||updateInstalling()||updateState.status==='checking')return;
+  send(updateState.status==='available'?(updateState.can_install?'install_update':'update_release'):'check_updates');
+});
+$('update-details')?.addEventListener('click',event=>{event.preventDefault();send('update_release');});
+$('automatic-updates')?.addEventListener('change',event=>{
+  if(updateInstalling()||updateState.automatic===false)return;
+  send('automatic_updates',{enabled:event.target.checked});
+});
+
 function renderDataOperation(){
   $('data-operation-status').hidden=!dataOperationBusy;
   $('data-operation-message').textContent=t('storage.processing');
-  for(const id of ['storage-directory','import-history','reveal'])$(id).disabled=dataOperationBusy||(id==='reveal'&&!!data?.demo);
+  for(const id of ['storage-directory','import-history','reveal'])$(id).disabled=dataOperationBusy||updateInstalling()||(id==='reveal'&&!!data?.demo);
   $('takeover').disabled=dataOperationBusy||!data?.capture?.listening||!!data?.capture?.permission_needed;
+  renderUpdateState();
 }
 window.receiveDataBusy=busy=>{
   dataOperationBusy=!!busy;
@@ -75,7 +121,7 @@ function renderTimeZoneOptions(){
   const select=$('timezone-select'),value=window.presentationView?.timezone||'system';
   const options=['system',...timezoneNames].map(value=>{
     const option=document.createElement('option');option.value=value;
-    option.textContent=value==='system'?t('language.system'):value.replace(/_/g,' ');return option;
+    option.textContent=value==='system'?t('settings.timezone_system'):value.replace(/_/g,' ');return option;
   });
   select.replaceChildren(...options);select.value=value;Dropdowns.sync('timezone-select');
 }
@@ -171,7 +217,7 @@ $('calendar-range-select').addEventListener('change',event=>{calendarRange=event
 $('history-range-select').addEventListener('change',event=>{historyRange=event.target.value;historyPage=0;if(data)renderHistory()});
 $('history-prev').addEventListener('click',()=>{historyPage--;if(data)renderHistory()});
 $('history-next').addEventListener('click',()=>{historyPage++;if(data)renderHistory()});
-window.toast=message=>{$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,4500)};
+window.toast=(message,duration=4500)=>{$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,duration)};
 window.failure=message=>{
   sportView?.receive({available:false});
   $('error-banner').hidden=false;$('error-banner').textContent=message;$('status').className='status error';$('status').lastElementChild.textContent=t('status.unavailable');
@@ -191,7 +237,7 @@ window.receive=snapshot=>{
   const now=new Date(data.now);$('date').textContent=I.date(now,{year:'numeric',month:'long',day:'numeric',weekday:'long'});
   const demo=!!data.demo;$('demo-badge').hidden=!demo;
   renderRecordingState();
-  $('permission-banner').hidden=!data.capture.permission_needed;
+  renderPermission();
   $('error-banner').hidden=!data.capture.error;
   if(data.capture.error)$('error-banner').textContent=t(data.capture.error_code||'error.recording');
   if(page==='settings')renderSettings();
@@ -213,6 +259,10 @@ window.receive=snapshot=>{
     renderChanged('keyboard',data.keyboard_stats||data.top_keys,renderKeyboard);
   }
 };
+function renderPermission(){
+  $('permission-banner').hidden=!data.capture.permission_needed;
+  $('permission-title').hidden=updatedThisLaunch;$('permission-updated-title').hidden=!updatedThisLaunch;
+}
 function renderRecordingState(){
   const demo=!!data.demo;
   const state=demo?'':data.capture.error?'error':data.paused?'paused':data.source_mode||data.capture.listening?'':'error';
@@ -222,6 +272,7 @@ function renderRecordingState(){
 function renderSettings(){
   $('permission-description').textContent=t(onWindows?(data.capture.listening?'settings.windows_capture':'status.unavailable'):data.source_mode && !data.setup_pending?'settings.source_permission':data.capture.listening?'settings.authorized':'settings.permission_description');
   $('permission-row').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
+  $('permission-reset-settings').hidden=$('permission-row').hidden || data.capture.listening;
   $('capture-settings').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
   $('handoff-settings').hidden=!data.setup_pending;
   $('takeover').disabled=dataOperationBusy || !data.capture.listening || data.capture.permission_needed;

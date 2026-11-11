@@ -16,6 +16,7 @@ mod data_settings;
 mod edit_menu;
 mod ipc;
 mod refresh;
+mod updates;
 mod window;
 use ipc::Request;
 use refresh::SnapshotGate;
@@ -38,6 +39,7 @@ use wry::WebViewBuilder;
 
 #[derive(Debug)]
 enum UiEvent {
+    Update(updates::Event),
     Ipc(String),
     Menu(MenuEvent),
     Snapshot {
@@ -206,7 +208,7 @@ pub fn run(
     }
     let proxy = event_loop.create_proxy();
     let html = include_str!("../ui/index.html")
-        .replace("__VERSION__", clickpulse::version::DISPLAY)
+        .replace("__VERSION__", clickpulse::version::PUBLIC)
         .replace("__BRAND_MARK__", &clickpulse::branding::mark_data_url())
         .replace("__LOCALE__", locale.code())
         .replace("__THEME__", preferences.theme.code())
@@ -367,6 +369,8 @@ pub fn run(
     let mut next_data_job = 0u64;
     let mut quit_after_data = false;
     let mut data_notice: Option<DataNotice> = None;
+    let mut updates =
+        updates::Controller::new(options.owned && !demo && !source_mode && !setup_pending);
     let handle_event = move |event: Event<'_, UiEvent>,
                              target: &EventLoopWindowTarget<UiEvent>,
                              flow: &mut ControlFlow| {
@@ -377,6 +381,15 @@ pub fn run(
         let mut refresh = false;
         let mut view_changed = false;
         match event {
+            Event::UserEvent(UiEvent::Update(event)) => {
+                if updates.receive(event) {
+                    *flow = ControlFlow::Exit;
+                }
+                view_changed |= updates.sync_notifications(&mut preferences.update_notifications);
+                if ready {
+                    updates.publish(&webview);
+                }
+            }
             Event::UserEvent(UiEvent::DataFinished { id, result }) => {
                 if let Some(current) = data_job
                     && current == id
@@ -563,8 +576,46 @@ pub fn run(
                             view_changed = true;
                             refresh = true;
                         }
+                        Request::CheckUpdates {} => {
+                            let now = chrono::Utc::now().timestamp();
+                            // Demo, read-only and independent sessions share the
+                            // preferences file but must not move the installed
+                            // app's daily schedule.
+                            if updates.check(
+                                snapshot_proxy.clone(),
+                                now,
+                                updates::CheckSource::Manual,
+                            ) && updates.automatic_allowed()
+                            {
+                                preferences.last_update_check = Some(now);
+                                view_changed = true;
+                            }
+                            updates.publish(&webview);
+                        }
+                        Request::AutomaticUpdates { enabled } => {
+                            if updates.automatic_allowed() {
+                                preferences.auto_check_updates = enabled;
+                            }
+                            // Always echo the stored value so a rejected toggle
+                            // returns to its actual state.
+                            view_changed = true;
+                        }
+                        Request::InstallUpdate {} => {
+                            if data_job.is_some() {
+                                toast(&webview, &locale.text("storage.processing"));
+                            } else if let Err(error) = updates.install(snapshot_proxy.clone()) {
+                                report_error(&webview, locale, "update.failed", &error);
+                            }
+                            updates.publish(&webview);
+                        }
+                        Request::UpdateRelease {} => {
+                            if let Err(error) = updates.open_release() {
+                                report_error(&webview, locale, "update.failed", &error);
+                            }
+                        }
                         Request::Ready {} => {
                             ready = true;
+                            updates.publish(&webview);
                             view_changed = true;
                             refresh = true;
                         }
@@ -783,6 +834,7 @@ pub fn run(
                         }
                         action @ (Request::StorageDirectory {} | Request::ImportHistory {}) => {
                             if data_job.is_none()
+                                && !updates.installing()
                                 && let Some(rt) = &runtime
                                 && rt.can_manage_auto_start()
                             {
@@ -865,14 +917,40 @@ pub fn run(
             Event::MainEventsCleared if Instant::now() >= next_refresh => {
                 refresh = true;
                 next_refresh = Instant::now() + Duration::from_millis(500);
+                let now = chrono::Utc::now().timestamp();
+                if ready
+                    && data_job.is_none()
+                    && !quit_after_data
+                    && updates.automatic_due(
+                        preferences.auto_check_updates,
+                        preferences.last_update_check,
+                        now,
+                    )
+                    && updates.check(snapshot_proxy.clone(), now, updates::CheckSource::Automatic)
+                {
+                    preferences.last_update_check = Some(now);
+                    view_changed = true;
+                    updates.publish(&webview);
+                }
             }
             Event::LoopDestroyed => {
                 #[cfg(target_os = "windows")]
                 drop(activation.take());
-                if let Some(mut rt) = runtime.take()
-                    && let Err(error) = rt.shutdown()
+                let was_paused = runtime.as_ref().is_some_and(|rt| rt.is_paused());
+                let saved = match runtime.take() {
+                    Some(mut rt) => match rt.shutdown() {
+                        Ok(()) => true,
+                        Err(error) => {
+                            eprintln!("退出保存失败：{error:#}");
+                            false
+                        }
+                    },
+                    None => true,
+                };
+                if let Some(guard) = &updates.guard
+                    && let Err(error) = guard.finish_shutdown(saved, was_paused)
                 {
-                    eprintln!("退出保存失败：{error:#}");
+                    eprintln!("Update handoff failed: {error:#}");
                 }
                 #[cfg(target_os = "windows")]
                 {
@@ -907,6 +985,28 @@ pub fn run(
                 DataNotice::Failed(error) => data_settings::show_error(&window, locale, &error),
             }
         }
+        // Do not spend the one-time reminder on a hidden, minimized, inactive
+        // or Mini window. The pending version survives until a full view opens.
+        if ready
+            && visible
+            && !preferences.compact
+            && window.is_visible()
+            && !window.is_minimized()
+            && window.is_focused()
+            && updates.automatic_allowed()
+            && !updates.installing()
+            && data_job.is_none()
+            && !quit_after_data
+            && !matches!(*flow, ControlFlow::ExitWithCode(_))
+            && let Some(version) = preferences.update_notifications.pending()
+            && let Ok(version) = serde_json::to_string(version)
+            && webview
+                .evaluate_script(&format!("window.receiveUpdateAvailable?.({version});"))
+                .is_ok()
+        {
+            preferences.update_notifications.mark_shown();
+            view_changed = true;
+        }
         if view_changed {
             if !demo && let Err(e) = preferences.save() {
                 report_error(&webview, locale, "message.preferences_failed", &e);
@@ -920,7 +1020,7 @@ pub fn run(
             mini.set_text(locale.text("action.mini"));
             hide.set_text(locale.text("native.hide"));
             quit.set_text(locale.text("native.quit"));
-            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible});
+            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
             if ready {
                 let _ = webview.evaluate_script(&format!("window.receiveView({view});"));
                 // Launch-at-login can finish loading while hidden. Keep the

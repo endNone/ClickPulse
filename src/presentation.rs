@@ -55,6 +55,9 @@ pub struct Preferences {
     pub timezone: crate::timezone::TimeZonePreference,
     pub theme: Theme,
     pub close_action: CloseAction,
+    pub auto_check_updates: bool,
+    pub last_update_check: Option<i64>,
+    pub update_notifications: crate::updater::UpdateNotifications,
     pub sport_enabled: bool,
     pub sport_visible: bool,
     pub sport_skin: SportSkin,
@@ -68,6 +71,9 @@ impl Default for Preferences {
             timezone: Default::default(),
             theme: Default::default(),
             close_action: Default::default(),
+            auto_check_updates: true,
+            last_update_check: None,
+            update_notifications: Default::default(),
             sport_enabled: false,
             sport_visible: false,
             sport_skin: Default::default(),
@@ -168,6 +174,49 @@ impl Preferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn daily_checks_migrate_old_preferences_and_retain_opt_out_and_attempt_time() {
+        let old: Preferences = serde_json::from_str(r#"{"theme":"violet"}"#).unwrap();
+        assert!(old.auto_check_updates);
+        assert_eq!(old.last_update_check, None);
+        assert_eq!(old.theme, Theme::Violet);
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("presentation.json");
+        for enabled in [false, true] {
+            let prefs = Preferences {
+                auto_check_updates: enabled,
+                last_update_check: Some(1_794_310_000),
+                ..old.clone()
+            };
+            prefs.save_to(&path).unwrap();
+            let loaded = Preferences::load_from(&path).unwrap().preferences;
+            assert_eq!(loaded.auto_check_updates, enabled);
+            assert_eq!(loaded.last_update_check, prefs.last_update_check);
+            assert_eq!(loaded.theme, Theme::Violet);
+        }
+    }
+
+    #[test]
+    fn hidden_update_reminders_survive_restart_and_a_shown_version_is_not_repeated() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("presentation.json");
+        let mut prefs = Preferences::default();
+        assert!(prefs.update_notifications.observe(Some("9.9.9")));
+        // A hidden or Mini window keeps the reminder pending when saving.
+        prefs.save_to(&path).unwrap();
+        let mut restarted = Preferences::load_from(&path).unwrap().preferences;
+        assert_eq!(restarted.update_notifications.pending(), Some("9.9.9"));
+        restarted.update_notifications.mark_shown();
+        restarted.save_to(&path).unwrap();
+        let mut again = Preferences::load_from(&path).unwrap().preferences;
+        assert!(!again.update_notifications.observe(Some("9.9.9")));
+        assert_eq!(again.update_notifications.pending(), None);
+        assert!(again.update_notifications.observe(Some("10.0.0")));
+        again.update_notifications.mark_shown();
+        assert!(!again.update_notifications.observe(Some("9.9.9")));
+        assert_eq!(again.update_notifications.pending(), None);
+    }
 
     #[test]
     fn damaged_preferences_are_preserved_before_defaults_can_be_saved() {

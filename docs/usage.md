@@ -1,6 +1,6 @@
 # Usage
 
-This guide describes **ClickPulse 0.2.0**. CSV export has been removed; use SQLite backups and history import to manage your data.
+This guide describes **ClickPulse 0.2.1**. CSV export has been removed; use SQLite backups and history import to manage your data.
 
 ## First launch
 
@@ -32,7 +32,7 @@ Rank C is below 2 CPS, B starts at 2, A at 5, S at 8, and red SS at 12. Speed us
 
 Sport uses **Warp**, a projected runway that accelerates through light gates. Red SS retains particles without shaking the window. Turning off **Sport mode** in **Settings → Personalization** hides its Mini switch and disables Sport. Your choice is remembered independently of the ordinary app theme.
 
-Sport stops sampling and animating when disabled, hidden, expanded into the full window, or not visible. System reduced-motion preferences suppress its animation while keeping the rank and speed readable. The lightweight counter feed updates around every 250 ms; ordinary statistics retain their two-second refresh.
+Sport stops sampling and animating when disabled, hidden, expanded into the full window, or not visible. System reduced-motion preferences suppress its animation while keeping the rank and speed readable. The lightweight counter feed updates around every 250 ms; ordinary statistics refresh every 0.5 seconds.
 
 ## Themes and language
 
@@ -42,9 +42,17 @@ Language follows the system by default, unless you have saved a manual choice. E
 
 Dropdown menus are rendered inside the app: use arrow keys to browse, Enter or Space to confirm, Escape to cancel, or Tab to confirm and move to the next control.
 
+## Check for updates
+
+In **Settings → Application → App updates**, click **Check for updates**. When a newer stable release is available, review its release notes and click **Update & restart** to download, verify, save pending activity and relaunch. Checking alone never downloads or installs a package. **Check automatically every day** is enabled by default. While the normal app is running (including in the menu bar or tray), it checks when 24 hours have elapsed since the last attempt. The saved time survives restarts, including failed or offline checks; after a day away, it checks when reopened. If a check fails, for example just after waking before the network is back, the running app retries after 5 minutes, 30 minutes and 2 hours, then waits for the next daily check; restarting does not retry early. Background failures are logged without showing an error in Settings; an update already offered stays available. A failed manual check still shows an error. When an automatic check finds a new version, a brief message says it can be updated in Settings; a manual check shows the result in Settings without the message. Each version is announced once, including across restarts. If the app is hidden, minimized or in Mini mode, the message waits until you return to the full window. Turn the option off to stop automatic checks and pending retries. Demo, read-only and independent-database sessions can still check manually but never change this option or the saved check time. The last check time appears in Settings. Automatic checks never download, install or restart the app.
+
+The updater replaces program files and keeps a recovery copy; history, save-folder settings and preferences stay in place. If saving or verification fails, the update is cancelled. A read-only installation or an independent/demo session offers the release download page instead. On macOS, an ad-hoc signed update usually invalidates the existing Input Monitoring grant even though its switch still appears on. After restarting, ClickPulse shows **Allow Input Monitoring again after the update**: quit ClickPulse, remove its entry in Privacy & Security → Input Monitoring with **−**, add the App again with **+**, then reopen it. See [refreshing the permission entry](install-macos.md#4-update-and-refresh-access). The app shows the public version; `--version` includes its internal build for diagnostics.
+
+The updater is included starting with 0.2.1. Install 0.2.1 manually when upgrading from the published 0.2.0 or earlier; those packages do not include this control.
+
 ## Time zone
 
-In **Settings → Application → Time zone**, **Follow system** is the default. Choose an IANA zone such as **Asia/Shanghai** or **America/Los_Angeles** to use it throughout the desktop statistics. Type a city name while the menu is open to find a zone quickly. The choice is saved independently of language and theme. Choosing a different zone explicitly refreshes a read-only view once, even if its automatic updates are paused.
+In **Settings → Application → Time zone**, **System time zone** is the default. Choose an IANA zone such as **Asia/Shanghai** or **America/Los_Angeles** to use it throughout the desktop statistics. Type a city name while the menu is open to find a zone quickly. The choice is saved independently of language and theme. Choosing a different zone explicitly refreshes a read-only view once, even if its automatic updates are paused.
 
 Today, the seven-day summary, daily trends, history, the calendar and hourly labels use the same selected zone. A zone change can move activity across a date boundary. It does not rewrite timestamps, saved summaries or lifetime counts. System mode follows operating-system time-zone changes. Repeated daylight-saving hours remain separate, and rolling counters still cover the same elapsed intervals. Legacy minute records retain their minute precision.
 
