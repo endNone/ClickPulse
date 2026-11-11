@@ -1,5 +1,5 @@
 (() => {
-  const view={timezone:'system',compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:false};
+  const view={timezone:'system',compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:false,auto_check_updates:true,last_update_check:null};
   window.presentationView=view;
   const put=(id,value)=>window.setSelectableText($(id),value);
   const onWindows=window.clickpulsePlatform==='windows';
@@ -51,6 +51,7 @@
     if(next.locale)window.setInterfaceLanguage(next.locale,next.language_preference);
     if(next.theme)window.setInterfaceTheme(next.theme);
     Object.assign(view,next);
+    window.renderUpdatePreferences?.();
     if(onWindows){
       const key=view.maximized?'window.restore':'window.maximize';
       $('window-maximize').setAttribute('aria-label',t(key));$('window-maximize').title=t(key);

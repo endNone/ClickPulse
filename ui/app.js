@@ -39,11 +39,17 @@ function renderUpdateState(){
   const percent=state.total>0?Math.min(100,Math.floor(state.received/state.total*100)):0;
   const text=state.status==='downloading'?t('update.downloading',{percent}):key?t(key,{version:state.version||state.current}):state.current?t('update.version',{version:state.current}):'';
   setSelectableText(status,text);
+  const automatic=$('automatic-updates'),last=$('update-last-checked');
+  if(automatic){automatic.checked=window.presentationView?.auto_check_updates!==false;automatic.disabled=updateInstalling();}
+  const checked=window.presentationView?.last_update_check;
+  const valid=Number.isFinite(checked)&&Math.abs(checked)<=8640000000000;
+  if(last){last.hidden=!valid;setSelectableText(last,valid?t('update.last_checked',{time:I.date(checked*1000,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}):'');}
   button.textContent=t(state.status==='checking'?'update.checking':updateInstalling()?'update.updating':available?(state.can_install?'update.install':'update.download'):'update.check');
   button.disabled=dataOperationBusy||state.status==='checking'||updateInstalling();
   button.setAttribute('aria-busy',String(state.status==='checking'||updateInstalling()));
   details.hidden=!available&&state.status!=='error';
 }
+window.renderUpdatePreferences=renderUpdateState;
 window.receiveUpdateState=state=>{Object.assign(updateState,state);renderDataOperation();};
 // An ad-hoc signed update can leave macOS showing a stale, ineffective grant.
 let updatedThisLaunch=false;
@@ -57,6 +63,10 @@ $('check-updates')?.addEventListener('click',()=>{
   send(updateState.status==='available'?(updateState.can_install?'install_update':'update_release'):'check_updates');
 });
 $('update-details')?.addEventListener('click',event=>{event.preventDefault();send('update_release');});
+$('automatic-updates')?.addEventListener('change',event=>{
+  if(updateInstalling())return;
+  send('automatic_updates',{enabled:event.target.checked});
+});
 
 function renderDataOperation(){
   $('data-operation-status').hidden=!dataOperationBusy;

@@ -576,8 +576,16 @@ pub fn run(
                             refresh = true;
                         }
                         Request::CheckUpdates {} => {
-                            updates.check(snapshot_proxy.clone());
+                            if updates.check(snapshot_proxy.clone()) {
+                                preferences.last_update_check =
+                                    Some(chrono::Utc::now().timestamp());
+                                view_changed = true;
+                            }
                             updates.publish(&webview);
+                        }
+                        Request::AutomaticUpdates { enabled } => {
+                            preferences.auto_check_updates = enabled;
+                            view_changed = true;
                         }
                         Request::InstallUpdate {} => {
                             if data_job.is_some() {
@@ -896,6 +904,21 @@ pub fn run(
             Event::MainEventsCleared if Instant::now() >= next_refresh => {
                 refresh = true;
                 next_refresh = Instant::now() + Duration::from_millis(500);
+                let now = chrono::Utc::now().timestamp();
+                if ready
+                    && data_job.is_none()
+                    && !quit_after_data
+                    && updates.automatic_due(
+                        preferences.auto_check_updates,
+                        preferences.last_update_check,
+                        now,
+                    )
+                    && updates.check(snapshot_proxy.clone())
+                {
+                    preferences.last_update_check = Some(now);
+                    view_changed = true;
+                    updates.publish(&webview);
+                }
             }
             Event::LoopDestroyed => {
                 #[cfg(target_os = "windows")]
@@ -962,7 +985,7 @@ pub fn run(
             mini.set_text(locale.text("action.mini"));
             hide.set_text(locale.text("native.hide"));
             quit.set_text(locale.text("native.quit"));
-            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible});
+            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
             if ready {
                 let _ = webview.evaluate_script(&format!("window.receiveView({view});"));
                 // Launch-at-login can finish loading while hidden. Keep the

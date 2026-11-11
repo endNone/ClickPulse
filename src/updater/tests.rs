@@ -1,4 +1,23 @@
 use super::*;
+
+#[test]
+fn daily_schedule_survives_restarts_failures_and_clock_changes() {
+    let now = 1_794_310_000;
+    assert!(daily_check_due(None, now));
+    assert!(!daily_check_due(Some(now), now));
+    assert!(!daily_check_due(Some(now), now + 86_399));
+    assert!(daily_check_due(Some(now), now + 86_400));
+    assert!(daily_check_due(Some(now), now + 7 * 86_400));
+    // A backwards clock starts a fresh daily interval instead of suppressing
+    // checks until a stale future timestamp is reached.
+    assert!(daily_check_due(Some(now + 3600), now));
+    assert!(daily_check_due(Some(i64::MIN), i64::MAX));
+    // Persisting either a manual or automatic attempt has the same backoff,
+    // regardless of whether the network result was success or failure.
+    let saved = serde_json::to_string(&Some(now)).unwrap();
+    let reloaded = serde_json::from_str(&saved).unwrap();
+    assert!(!daily_check_due(reloaded, now + 60));
+}
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 fn release(version: &str, target: Target) -> Release {

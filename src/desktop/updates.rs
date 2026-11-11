@@ -26,6 +26,36 @@ pub(super) enum Event {
         result: Result<ApplyGuard, String>,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn automatic_checks_require_normal_enabled_idle_sessions() {
+        // Excluded sessions must not read or consume the installed app's notice.
+        let mut controller = Controller::new(false);
+        assert!(!controller.automatic_due(true, None, 100_000));
+        controller.automatic_allowed = true;
+        assert!(!controller.automatic_due(false, None, 100_000));
+        for status in [
+            "checking",
+            "downloading",
+            "verifying",
+            "preparing",
+            "installing",
+        ] {
+            controller.view.status = status;
+            assert!(!controller.automatic_due(true, None, 100_000), "{status}");
+        }
+        for status in ["idle", "current", "available", "error"] {
+            controller.view.status = status;
+            assert!(controller.automatic_due(true, Some(1), 100_000), "{status}");
+            assert!(!controller.automatic_due(true, Some(99_999), 100_000));
+            assert!(controller.guard.is_none());
+        }
+    }
+}
 #[derive(Serialize)]
 struct View {
     current: &'static str,
@@ -39,6 +69,7 @@ pub(super) struct Controller {
     view: View,
     candidate: Option<Candidate>,
     installation: Result<Installation, String>,
+    automatic_allowed: bool,
     id: u64,
     pub guard: Option<ApplyGuard>,
     notice: Option<updater::Notice>,
@@ -55,6 +86,7 @@ impl Controller {
                 total: 0,
             },
             candidate: None,
+            automatic_allowed: allowed,
             installation: if allowed {
                 updater::installation().map_err(|e| e.to_string())
             } else {
@@ -78,6 +110,12 @@ impl Controller {
     fn busy(&self) -> bool {
         self.installing() || self.view.status == "checking"
     }
+    pub fn automatic_due(&self, enabled: bool, last_attempt: Option<i64>, now: i64) -> bool {
+        self.automatic_allowed
+            && enabled
+            && !self.busy()
+            && updater::daily_check_due(last_attempt, now)
+    }
     pub fn publish(&mut self, webview: &wry::WebView) {
         if let Ok(state) = serde_json::to_string(&self.view) {
             let _ = webview.evaluate_script(&format!("window.receiveUpdateState?.({state});"));
@@ -88,9 +126,9 @@ impl Controller {
             let _ = webview.evaluate_script(&format!("window.receiveUpdateNotice?.({notice});"));
         }
     }
-    pub fn check(&mut self, proxy: EventLoopProxy<super::UiEvent>) {
+    pub fn check(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> bool {
         if self.busy() {
-            return;
+            return false;
         }
         self.id += 1;
         let id = self.id;
@@ -112,6 +150,7 @@ impl Controller {
             eprintln!("Update check failed: {error}");
             self.view.status = "error";
         }
+        true
     }
     pub fn install(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> anyhow::Result<()> {
         anyhow::ensure!(!self.busy(), "Update already in progress");

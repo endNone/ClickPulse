@@ -723,7 +723,7 @@ test('time zone choices persist across locale changes and stale-zone snapshots a
   assert.equal(a.get('timezone-select').value,'system');
 });
 
-test('updates require an explicit user click for both checking and installing',()=>{
+test('manual checks remain available and an offered update never installs without a click',()=>{
   for(const platform of ['macos','windows']){
     const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
     a.window.receiveUpdateState({status:'idle',current:'0.2.0'});assert.equal(sent.length,0);
@@ -733,6 +733,25 @@ test('updates require an explicit user click for both checking and installing',(
     assert.equal(a.get('check-updates').textContent,messages.en['update.install']);
     assert.equal(a.get('update-details').hidden,false);
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'install_update'});
+  }
+});
+test('daily update preference and last attempt survive UI refresh and language changes',()=>{
+  for(const platform of ['macos','windows'])for(const locale of Object.keys(messages)){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+    a.window.receiveView({locale,auto_check_updates:false,last_update_check:1794310000});
+    assert.equal(a.get('automatic-updates').checked,false);
+    assert.equal(a.get('update-last-checked').hidden,false);
+    assert.ok(a.get('update-last-checked').textContent.startsWith(messages[locale]['update.last_checked'].split('{time}')[0]));
+    a.get('automatic-updates').checked=true;a.get('automatic-updates').fire('change');
+    assert.deepEqual(sent.pop(),{action:'automatic_updates',enabled:true});
+    a.window.receiveView({auto_check_updates:true});a.window.receive(snapshot());
+    assert.equal(a.get('automatic-updates').checked,true);assert.equal(sent.length,0);
+    a.window.receiveUpdateState({status:'checking'});assert.equal(a.get('automatic-updates').disabled,false);
+    a.window.receiveUpdateState({status:'downloading'});assert.equal(a.get('automatic-updates').disabled,true);
+    a.get('automatic-updates').fire('change');assert.equal(sent.length,0);
+    for(const last_update_check of [null,undefined,'invalid',Number.MAX_VALUE]){
+      a.window.receiveView({last_update_check});assert.equal(a.get('update-last-checked').hidden,true);
+    }
   }
 });
 test('updater progress and data operations exclude concurrent destructive actions',()=>{

@@ -1,4 +1,4 @@
-//! User-initiated updates from this project's public releases. No startup polling.
+//! Daily or manual release checks; downloading and installing require a user action.
 use anyhow::{Context, Result, bail, ensure};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,12 @@ const API: &str = "https://api.github.com/repos/endNone/ClickPulse/releases/late
 const MAX_ARCHIVE: u64 = 128 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 512 * 1024 * 1024;
 const MAX_FILES: usize = 2048;
+
+/// Persist the last attempt, including failures, so restarts and offline periods
+/// do not turn the desktop's refresh loop into repeated network requests.
+pub fn daily_check_due(last_attempt: Option<i64>, now: i64) -> bool {
+    last_attempt.is_none_or(|last| now < last || now.saturating_sub(last) >= 24 * 60 * 60)
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Target {
