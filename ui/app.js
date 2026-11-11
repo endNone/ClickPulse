@@ -121,7 +121,7 @@ function renderTimeZoneOptions(){
   const select=$('timezone-select'),value=window.presentationView?.timezone||'system';
   const options=['system',...timezoneNames].map(value=>{
     const option=document.createElement('option');option.value=value;
-    option.textContent=value==='system'?t('language.system'):value.replace(/_/g,' ');return option;
+    option.textContent=value==='system'?t('settings.timezone_system'):value.replace(/_/g,' ');return option;
   });
   select.replaceChildren(...options);select.value=value;Dropdowns.sync('timezone-select');
 }

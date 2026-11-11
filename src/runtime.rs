@@ -13,6 +13,10 @@ use chrono::Local;
 use crossbeam_channel::{Receiver, Sender, bounded};
 use serde::Serialize;
 
+#[cfg(test)]
+use crate::logging::{STATUS_LOG_BACKUPS, status_log_archive};
+use crate::logging::{STATUS_LOG_MAX_BYTES, append_status_log};
+
 use crate::{
     collector::CollectorDb,
     db::{EventDb, Snapshot},
@@ -730,82 +734,6 @@ impl Storage {
         }
         Ok(())
     }
-}
-
-const STATUS_LOG_MAX_BYTES: u64 = 10 * 1024 * 1024;
-const STATUS_LOG_BACKUPS: usize = 3;
-
-fn status_log_archive(path: &Path, index: usize) -> PathBuf {
-    let mut name = path.as_os_str().to_os_string();
-    name.push(format!(".{index}"));
-    name.into()
-}
-
-fn bound_status_log(path: &Path, limit: u64) -> Result<u64> {
-    use std::io::{Read, Seek, SeekFrom, Write};
-    let metadata = match std::fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
-        Err(error) => return Err(error.into()),
-    };
-    anyhow::ensure!(metadata.is_file(), "日志路径不是普通文件");
-    if metadata.len() <= limit {
-        return Ok(metadata.len());
-    }
-    // Keep the most recent diagnostics from older, unbounded log versions.
-    // Copy forward with a small buffer; history remains entirely in SQLite.
-    let mut file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(path)?;
-    let start = metadata.len() - limit;
-    let mut copied = 0;
-    let mut buffer = [0_u8; 64 * 1024];
-    while copied < limit {
-        let length = (limit - copied).min(buffer.len() as u64) as usize;
-        file.seek(SeekFrom::Start(start + copied))?;
-        file.read_exact(&mut buffer[..length])?;
-        file.seek(SeekFrom::Start(copied))?;
-        file.write_all(&buffer[..length])?;
-        copied += length as u64;
-    }
-    file.set_len(limit)?;
-    Ok(limit)
-}
-
-fn append_status_log(path: &Path, line: &str, limit: u64) -> Result<()> {
-    use std::io::Write;
-    anyhow::ensure!(line.len() as u64 <= limit, "单条日志超过大小限制");
-    std::fs::create_dir_all(path.parent().context("日志路径无效")?)?;
-    let current_size = bound_status_log(path, limit)?;
-    for index in 1..=STATUS_LOG_BACKUPS {
-        bound_status_log(&status_log_archive(path, index), limit)?;
-    }
-    if current_size + line.len() as u64 > limit {
-        let oldest = status_log_archive(path, STATUS_LOG_BACKUPS);
-        match std::fs::remove_file(oldest) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.into()),
-        }
-        for index in (1..STATUS_LOG_BACKUPS).rev() {
-            match std::fs::rename(
-                status_log_archive(path, index),
-                status_log_archive(path, index + 1),
-            ) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.into()),
-            }
-        }
-        std::fs::rename(path, status_log_archive(path, 1))?;
-    }
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
-    file.write_all(line.as_bytes())?;
-    Ok(())
 }
 
 #[derive(Default)]

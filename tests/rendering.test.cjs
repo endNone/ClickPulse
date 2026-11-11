@@ -721,6 +721,12 @@ test('time zone choices persist across locale changes and stale-zone snapshots a
   assert.deepEqual(sent.pop(),{action:'timezone',timezone:'system'});
   a.window.receiveView({timezone:'system'});a.window.receive(s);
   assert.equal(a.get('timezone-select').value,'system');
+  for(const [locale,label] of [['de','Systemzeitzone'],['es','Zona horaria del sistema']]){
+    a.window.receiveView({locale,language_preference:locale});
+    assert.equal(a.get('timezone-select').children[0].textContent,label);
+    assert.equal(a.get('timezone-select').value,'system');
+    assert.notEqual(label,messages[locale]['language.system']);
+  }
 });
 
 test('manual checks remain available and an offered update never installs without a click',()=>{

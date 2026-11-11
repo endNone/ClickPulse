@@ -2,6 +2,7 @@ use clickpulse::updater::{self, ApplyGuard, Candidate, Installation, Target};
 use serde::Serialize;
 use std::{
     cell::Cell,
+    path::PathBuf,
     process::Command,
     time::{Duration, Instant},
 };
@@ -131,6 +132,49 @@ mod tests {
         });
         assert_eq!(controller.view.status, "error");
         assert!(controller.guard.is_none());
+    }
+
+    #[test]
+    fn update_errors_persist_with_source_and_time_without_changing_ui_behavior() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("logs/clickpulse.log");
+        let mut controller = Controller::new(false);
+        assert!(controller.log_path.is_none());
+        controller.log_path = Some(path.clone());
+        failed(&mut controller, 100_000);
+        assert_eq!(controller.view.status, "idle");
+        assert!(controller.begin_check(100_010, CheckSource::Manual));
+        controller.receive(Event::Checked {
+            id: controller.id,
+            result: Err("http status: 403".into()),
+        });
+        assert_eq!(controller.view.status, "error");
+        // Installation always follows a user action, even after an auto check.
+        controller.check_source = CheckSource::Automatic;
+        controller.receive(Event::Prepared {
+            id: controller.id,
+            result: Err("checksum mismatch".into()),
+        });
+        assert_eq!(controller.view.status, "error");
+        controller.receive(Event::Checked {
+            id: controller.id - 1,
+            result: Err("stale response".into()),
+        });
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(contents.lines().count(), 3);
+        for line in contents.lines() {
+            chrono::DateTime::parse_from_rfc3339(line.split_whitespace().next().unwrap()).unwrap();
+        }
+        assert!(contents.contains("source=Automatic operation=check: offline"));
+        assert!(contents.contains("source=Manual operation=check: http status: 403"));
+        assert!(contents.contains("source=Manual operation=install-prepare: checksum mismatch"));
+        assert!(!contents.contains("stale response"));
+        // An unwritable log must not turn a background failure into a UI error.
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        failed(&mut controller, 100_310);
+        assert_eq!(controller.view.status, "idle");
+        assert!(controller.retry_at.is_some());
     }
 
     #[test]
@@ -267,6 +311,7 @@ struct View {
 /// for the persisted daily window so startup cannot become a request loop.
 const RETRY_DELAYS: [i64; 3] = [5 * 60, 30 * 60, 2 * 60 * 60];
 pub(super) struct Controller {
+    log_path: Option<PathBuf>,
     view: View,
     candidate: Option<Candidate>,
     installation: Result<Installation, String>,
@@ -283,6 +328,9 @@ pub(super) struct Controller {
 impl Controller {
     pub fn new(allowed: bool) -> Self {
         Self {
+            log_path: allowed
+                .then(clickpulse::platform::log_path)
+                .and_then(Result::ok),
             view: View {
                 current: clickpulse::version::PUBLIC,
                 status: "idle",
@@ -399,7 +447,7 @@ impl Controller {
                 let _ = proxy.send_event(super::UiEvent::Update(Event::Checked { id, result }));
             })
         {
-            eprintln!("{source:?} update check failed: {error}");
+            self.log_failure(source, "check-start", &error.to_string());
             self.check_failed();
         }
         true
@@ -418,7 +466,20 @@ impl Controller {
             .get(self.failures - 1)
             .map(|delay| self.attempted_at.saturating_add(*delay));
     }
+    fn log_failure(&self, source: CheckSource, operation: &str, error: &str) {
+        clickpulse::logging::error(
+            self.log_path.as_deref(),
+            &format!("update source={source:?} operation={operation}: {error}"),
+        );
+    }
     pub fn install(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> anyhow::Result<()> {
+        let result = self.start_install(proxy);
+        if let Err(error) = &result {
+            self.log_failure(CheckSource::Manual, "install-start", &format!("{error:#}"));
+        }
+        result
+    }
+    fn start_install(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> anyhow::Result<()> {
         anyhow::ensure!(!self.busy(), "Update already in progress");
         let candidate = self
             .candidate
@@ -475,7 +536,7 @@ impl Controller {
                     self.view.status = "current";
                 }
                 Err(error) => {
-                    eprintln!("{:?} update check failed: {error}", self.check_source);
+                    self.log_failure(self.check_source, "check", &error);
                     self.check_failed();
                 }
             },
@@ -500,7 +561,7 @@ impl Controller {
                     return true;
                 }
                 Err(error) => {
-                    eprintln!("Update preparation failed: {error}");
+                    self.log_failure(CheckSource::Manual, "install-prepare", &error);
                     self.view.status = "error";
                 }
             },

@@ -34,6 +34,9 @@ Verify package SHA256 values and manifest file hashes. Extract the complete pack
 | --- | --- |
 | First launch | Complete main window, correct fonts and tray icon; missing dependencies produce a clear error |
 | Language and theme | Defaults follow the first supported system language; all eight interface languages and four themes switch correctly and survive restart |
+| System time zone label | The default time zone option describes the system time zone, including German `Systemzeitzone` and Spanish `Zona horaria del sistema`; switching language preserves the selected zone |
+| Update error diagnostics | In an isolated normal profile, a failed manual/background check writes UTC time, Manual/Automatic source, operation and error into `logs/clickpulse.log`; manual errors are visible and background errors remain quiet. Check the file, not only stderr |
+| Actual upgrade | With a real newer package, separately verify download, validation, save/exit, replacement, relaunch and preserved history/preferences. An up-to-date result or injected reminder does not pass this check |
 | Physical input | Real keyboard/button presses update counts; holding a key does not repeat the count |
 | Pause/resume | Input while paused adds no counts; recording continues after resuming |
 | Main window | Native title bar is absent; app minimize, maximize/restore, close and header dragging work while scrolling |

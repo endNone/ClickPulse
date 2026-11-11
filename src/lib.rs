@@ -15,6 +15,7 @@ pub mod history_import;
 pub mod hourly;
 pub mod input;
 pub mod localization;
+pub mod logging;
 pub mod platform;
 pub mod presentation;
 pub mod runtime;
