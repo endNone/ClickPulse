@@ -112,10 +112,12 @@ td:first-child,th:first-child {text-align:left}tbody tr:hover {background:#f6f9f
 .empty-state {text-align:center;padding:45px 20px;color:#7186a3;font-size:12px}
 .empty-state strong {font-weight:600;display:block;margin-bottom:10px;color:#3d5f91}.empty-state p {font-size:11px;line-height:1.8}
 .footnote {font-size:10px;color:#7085a3;line-height:1.8;border-top:1px solid var(--line);margin:22px 0 0;padding-top:15px}
-.settings-card {--settings-control-width:160px;--settings-control-height:32px}
+.settings-card {--settings-control-width:216px;--settings-control-height:44px;text-align:left}
 .settings-card h2 {margin-bottom:9px}.setting-row {display:flex;justify-content:space-between;align-items:center;gap:18px;padding:19px 0}
-.setting-row + .setting-row {border-top:1px solid var(--line)}.setting-row:last-child {padding-bottom:2px}.setting-row strong {font-size:12px;font-weight:550;color:#365479}
-.setting-row p {font-size:11px;line-height:1.7;color:#7186a3;margin:6px 0 0}.path {font:10px var(--mono)!important;overflow-wrap:anywhere}.setting-row>div {min-width:0}
+.setting-row + .setting-row {border-top:1px solid var(--line)}.setting-row:last-child {padding-bottom:2px}.setting-row strong {font-size:14px;font-weight:600;color:#365479}
+.setting-row p {font-size:12px;line-height:1.7;color:#7186a3;margin:6px 0 0}.path {font:11px var(--mono)!important;overflow-wrap:anywhere}.setting-row>div {min-width:0}
+.setting-row a {font-size:12px;line-height:1.7;color:var(--blue)}
+.settings-card .button,.settings-card select {font:600 14px/1.4 var(--sans);text-align:center}
 #demo-badge {font-size:10px;color:#497bc1;border:1px solid #bcd2ef;border-radius:4px;padding:4px 7px}
 #toast {position:fixed;bottom:25px;left:50%;transform:translateX(-50%);background:#173b6b;color:#fff;padding:12px 20px;border-radius:7px;font-size:12px;box-shadow:0 5px 24px #17376325;max-width:80%;z-index:10}
 .keyboard-card {font-family:var(--sans)}
@@ -189,6 +191,7 @@ body.compact .close-dialog-actions {margin-top:12px}
 .content,.mini-total,.mini-counts {user-select:text;-webkit-user-select:text}
 button,select,.preference-switch {user-select:none;-webkit-user-select:none}
 .setting-actions {display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:100%}
+.settings-card .setting-actions {flex-direction:column;align-items:flex-end}
 .settings-card .setting-row>.button,.settings-card .setting-actions>.button {width:var(--settings-control-width);height:var(--settings-control-height);flex:none}
 
 .hourly-card .card-heading {align-items:center;margin-bottom:14px}
