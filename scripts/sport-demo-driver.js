@@ -1,8 +1,9 @@
 /* Documentation only: deterministic clock/input for the production Sport view.
- * Arrow Right advances one 50 ms frame; Home reloads the initial state.
+ * Arrow Right advances one capture frame; Home reloads the initial state.
  * No OS events, database connection or saved preferences are involved.
  */
 (() => {
+  const timing=window.clickpulseSportDemoTiming;
   let now=0,nextId=1,frame=0,keyboard=2000,mouse=1000,fraction=0;
   const intervals=new Map(),animations=new Map();
   const realPost=()=>window.ipc.postMessage.bind(window.ipc);
@@ -14,7 +15,7 @@
   const rate=ms=>ms<1500?1:ms<3000?3:ms<4500?6:ms<6000?10:14;
   let inputIndex=0;
   function advance(){
-    const end=now+50;
+    const end=Math.round((frame+1)*1000/timing.fps);
     while(now<end){
       const step=Math.min(10,end-now);now+=step;
       fraction+=rate(now)*step/1000;
@@ -32,7 +33,7 @@
     document.documentElement.dataset.frame=String(frame);
     document.documentElement.dataset.rank=document.getElementById('mini-sport-grade').textContent;
     document.documentElement.dataset.keys=String(keys);document.documentElement.dataset.clicks=String(clicks);
-    if(window.parent!==window)window.parent.postMessage({type:'sport-demo-state',frame,keys,clicks,rank:document.documentElement.dataset.rank},location.origin);
+    if(window.parent!==window)window.parent.postMessage({type:'sport-demo-state',frame,frameCount:timing.frame_count,keys,clicks,rank:document.documentElement.dataset.rank},location.origin);
   }
   window.addEventListener('DOMContentLoaded',async()=>{
     await document.fonts.ready;
@@ -48,11 +49,11 @@
     renderCounters();document.documentElement.dataset.previewReady='true';
     window.addEventListener('message',event=>{
       if(event.origin!==location.origin||event.source!==window.parent)return;
-      if(event.data?.type==='sport-demo-step'&&frame<179)advance();
+      if(event.data?.type==='sport-demo-step'&&frame<timing.frame_count-1)advance();
       if(event.data?.type==='sport-demo-request-state')renderCounters();
     });
     document.addEventListener('keydown',event=>{
-      if(event.key==='ArrowRight'){event.preventDefault();if(frame<179)advance();}
+      if(event.key==='ArrowRight'){event.preventDefault();if(frame<timing.frame_count-1)advance();}
       if(event.key==='Home'){event.preventDefault();location.reload();}
     });
   });

@@ -17,11 +17,11 @@
   });
   window.addEventListener('message',async event=>{
     if(event.origin!==location.origin||event.source!==mini.contentWindow||event.data?.type!=='sport-demo-state')return;
-    const {frame,rank,keys,clicks}=event.data;
+    const {frame,frameCount,rank,keys,clicks}=event.data;
     byId('draft-text').textContent=text.slice(0,keys);
     byId('draft-placeholder').hidden=keys>0;
     byId('caret').style.display=keys>0&&keys<text.length?'inline-block':'none';
-    byId('frame-state').textContent=`Frame ${frame} / 179 · ${rank} · Keys +${keys} · Clicks +${clicks}`;
+    byId('frame-state').textContent=`Frame ${frame} / ${frameCount-1} · ${rank} · Keys +${keys} · Clicks +${clicks}`;
     Object.assign(document.documentElement.dataset,{frame:String(frame),rank,keys:String(keys),clicks:String(clicks)});
     await document.fonts.ready;
     const wallpaper=document.querySelector('.wallpaper');

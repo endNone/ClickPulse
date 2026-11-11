@@ -7,6 +7,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 
 from PIL import Image
@@ -14,25 +16,32 @@ from PIL import Image
 
 def encode(directory, output, manifest_name="mini-demo-manifest.json"):
     manifest = json.loads((directory / manifest_name).read_text(encoding='utf-8'))
-    frame_count, frame_ms = manifest["frame_count"], manifest["frame_ms"]
+    frame_count = manifest["frame_count"]
+    durations = manifest.get("frame_durations_ms", [manifest.get("frame_ms", 0)] * frame_count)
     dimensions = manifest["width"], manifest["height"]
-    if not 1 <= frame_count <= 1000 or frame_ms < 20 or frame_ms % 10:
+    if (not 1 <= frame_count <= 1000 or len(durations) != frame_count
+            or any(type(ms) is not int or ms < 1 for ms in durations)
+            or sum(durations) != manifest["duration_ms"]):
         raise ValueError("Invalid animation timing")
     if dimensions not in {(1080, 680), (1350, 850), (640, 416), (2160, 1360)}:
         raise ValueError("Invalid Mini capture dimensions")
     if output.suffix.lower() not in {".gif", ".webp"}:
         raise ValueError("Output must be GIF or WebP")
+    if output.suffix.lower() == ".gif" and any(ms < 20 or ms % 10 for ms in durations):
+        raise ValueError("GIF needs frame delays in 10 ms steps of at least 20 ms; use WebP for 60 fps")
     paths = [directory / f"frame-{index:03}.jpg" for index in range(frame_count)]
+    streaming = shutil.which("img2webp") if output.suffix.lower() == ".webp" else None
     frames = []
     for path in paths:
         with Image.open(path) as image:
             if image.size != dimensions:
                 raise ValueError(f"Unexpected capture dimensions: {path}: {image.size}")
-            frames.append(image.convert("RGB"))
+            if not streaming:
+                frames.append(image.convert("RGB"))
     if output.suffix.lower() == ".webp":
         # Keep full photographic colors at a moderate size, without a GIF palette.
         encoded_frames = frames
-        options = {"lossless": False, "quality": 90, "method": 4}
+        options = {"lossless": False, "quality": 90, "method": 4, "minimize_size": True}
     else:
         encoded_frames = gif_palette(frames, dimensions)
         options = {"optimize": True, "disposal": 1,
@@ -41,17 +50,25 @@ def encode(directory, output, manifest_name="mini-demo-manifest.json"):
     with tempfile.NamedTemporaryFile(dir=output.parent, suffix=output.suffix, delete=False) as staging:
         temporary = Path(staging.name)
     try:
-        encoded_frames[0].save(
-            temporary, save_all=True, append_images=encoded_frames[1:],
-            duration=frame_ms, loop=0, **options,
-        )
+        if streaming:
+            # Consume one full-resolution capture at a time; static scenery is
+            # shared across frames instead of periodically becoming a keyframe.
+            command = [streaming, "-min_size", "-loop", "0", "-lossy", "-q", "90", "-m", "4"]
+            for path, milliseconds in zip(paths, durations):
+                command.extend(["-d", str(milliseconds), str(path)])
+            subprocess.run([*command, "-o", str(temporary)], check=True)
+        else:
+            encoded_frames[0].save(
+                temporary, save_all=True, append_images=encoded_frames[1:],
+                duration=durations, loop=0, **options,
+            )
         with Image.open(temporary) as result:
             duration = 0
             for index in range(result.n_frames):
                 result.seek(index)
                 result.load()
                 duration += result.info["duration"]
-            if result.size != dimensions or duration != frame_count * frame_ms or duration != manifest["duration_ms"] or result.info.get("loop") != 0:
+            if result.size != dimensions or duration != sum(durations) or result.info.get("loop") != 0:
                 raise ValueError("Unexpected animation dimensions, duration or loop metadata")
             print(f"{output}: {result.size}, {result.n_frames} encoded frames, {duration} ms, {temporary.stat().st_size:,} bytes")
         os.replace(temporary, output)
