@@ -17,6 +17,35 @@ The Linux port targets Ubuntu 22.04 and 24.04. Native desktop validation must be
 
 Wayland controls window placement and always-on-top behavior; requested geometry/pinning may be constrained by the compositor. GNOME's tray requires an enabled AppIndicator extension. The collector reads evdev without grabbing devices and uses the same capture path on X11 and Wayland. Desktop environments other than Ubuntu GNOME, physical special keyboards, fractional scaling/multiple monitors, and suspend/resume need separate validation.
 
-## Local validation record
+## Local validation record — 2026-11-12
 
-Ubuntu 22.04.5 ARM64, GNOME Wayland, UTM on Apple Silicon: Rust unit/CLI checks and the isolated native evdev test passed on 2026-11-12. The actual desktop rendered live counts, daily history, Linux keyboard heatmap and Mini; save-and-quit returned to the desktop. Final portable-package desktop checks and the same-artifact Ubuntu 24.04 run are tracked in the task evidence before acceptance. No x64 desktop or public Linux release is claimed by this record.
+Tested sequentially on Apple Silicon UTM, as the normal desktop user in GNOME Wayland. Each VM has 4 CPUs and 4 GB RAM. Ubuntu 22.04.5 ARM64 (kernel 6.8.0-149) built the package; Ubuntu 24.04.5 ARM64 (kernel 7.0.0-43) installed that exact ZIP without rebuilding it.
+
+- Version: 0.2.1, internal build 78 (local Linux candidate, not a public release).
+- Code revision: `c6c46779cd99a2d03616d8ad89f367585af70add`.
+- Archive: `ClickPulse-0.2.1-linux-arm64.zip`.
+- SHA256: `4d862b9e498d491bbec57cbb4f4801dea56b9138167bfabccfb36eeb96844ced`.
+- Both installations verified every manifest payload hash, executable version and `ldd` with no missing libraries.
+
+| Check | Ubuntu 22.04 ARM64 | Ubuntu 24.04 ARM64 |
+| --- | --- | --- |
+| Normal-user Wayland launch and live keyboard/mouse counts | Pass | Pass |
+| Pause stops counts; resume records again | Pass | Pass |
+| Daily history and Linux keyboard heatmap | Pass | Pass |
+| Mini/full, unmaximize, then re-maximize | Pass after GTK fix | Pass, same fixed package |
+| Hide to tray and reopen | Pass | Pass |
+| Chinese/theme switching | Pass | Pass |
+| Manual update check and daily-check toggle | Pass | Pass |
+| Save and quit | Pass | Pass |
+| Reboot/login autostart and retained history/settings | Pass | Pass |
+| Isolated native evdev integration | Pass (6.14 s) | Pass (5.74 s) |
+
+The native test verifies 4 key presses and 1 mouse click, ignored repeat events, pause/resume, device reconnect and reopened SQLite history. Its temporary exact-name udev rule was removed afterward. Desktop checks separately establish capture under the ordinary user's `input` group.
+
+Both guests were actually rebooted and logged in again: the managed desktop entry started ClickPulse as the normal user with `--background`, the tray reopened its window, and saved Chinese/Teal preferences and existing counts remained. On 24.04, the 58 pre-reboot events were retained and new input raised the displayed total to 63. Test preferences were then restored to Blue/System default, login autostart off, daily update checks on and Sport off. The 22.04 app was saved and quit; the 24.04 app was left open on Overview.
+
+Ubuntu 22.04 automated checks passed: 140 library tests, 23 desktop tests and 8 CLI tests; 3 unrelated opt-in library tests remained ignored. The native test was run explicitly. Clippy with warnings denied and the final release build passed. Host regression checks passed 175 Rust tests, 113 JavaScript tests and 32 Python packaging tests. The last code-only change synchronizes GTK resize state before Tao's delayed maximization; it was compiled/linted and tested through real Mini/full/unmaximize/re-maximize cycles on both guests.
+
+A current-version update response does not validate downloading/installing a newer public Linux release. Linux package/ELF validation and rollback use test fixtures, and the daily schedule is covered by clock/restart tests; no 24-hour soak is claimed. The build manifest's `native_linux_tested` field remains its build-time value; this acceptance record is separate evidence.
+
+No x64 desktop test or remote Linux CI run is claimed. Physical special keys, suspend/resume, fractional scaling/multiple monitors, X11 and other desktop environments remain outside this validation. These VMs use software graphics fallback; successful rendering does not establish physical-GPU performance.
