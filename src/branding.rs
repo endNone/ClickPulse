@@ -94,7 +94,7 @@ pub fn tray_rgba() -> Result<Vec<u8>> {
             let area = (x1 - x0) * (y1 - y0);
             if area > 0 {
                 rgba[(y * size + x) * 4 + 3] = (sum / area as u64) as u8;
-                #[cfg(target_os = "windows")]
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
                 rgba[(y * size + x) * 4..(y * size + x) * 4 + 3].copy_from_slice(&[31, 82, 179]);
             }
         }

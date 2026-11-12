@@ -853,3 +853,21 @@ test('all updater states follow all eight languages without restarting a transfe
     assert.equal(a.get('check-updates').disabled,true);assert.equal(sent.length,0);
   }
 });
+
+test('Linux permission guidance and close decisions remain usable without macOS settings',()=>{
+  const a=app('linux'),s=snapshot(),sent=[];
+  a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+  a.window.receive({...s,capture:{listening:false,permission_needed:true,error:'denied',error_code:'error.linux_permission'}});
+  a.navigate('settings');
+  assert.equal(a.get('capture-settings').hidden,false);
+  assert.equal(a.get('permission-reset').hidden,true);
+  assert.equal(a.get('permission-reset-settings').hidden,true);
+  assert.match(a.get('permission-description').textContent,/usermod -aG input/);
+  assert.equal(a.get('error-banner').textContent,messages.en['error.linux_permission']);
+  a.get('settings-permission').fire();assert.equal(sent.at(-1).action,'permission');
+  a.get('close-overlay').hidden=true;
+  a.window.requestClose();assert.equal(a.get('close-overlay').hidden,false);
+  a.get('close-quit').fire();assert.deepEqual(sent.at(-1),{action:'close_decision',close_action:'quit',remember:false});
+  a.window.receive(s);assert.equal(a.get('permission-banner').hidden,true);
+  assert.equal(a.get('permission-description').textContent,messages.en['settings.authorized.linux']);
+});

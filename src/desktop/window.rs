@@ -57,7 +57,7 @@ pub(super) fn saved_full_position(position: PhysicalPosition<i32>, scale: f64) -
         // different backing scale before we restore the full window position.
         position.to_logical::<f64>(scale).into()
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
         let _ = scale;
         position.into()
@@ -137,7 +137,7 @@ pub(super) fn set_compact(
     } else if !compact && layout.compact {
         window.set_max_inner_size(None::<LogicalSize<f64>>);
         window.set_resizable(true);
-        window.set_decorations(cfg!(target_os = "macos"));
+        window.set_decorations(!cfg!(target_os = "windows"));
         #[cfg(target_os = "windows")]
         {
             use tao::platform::windows::WindowExtWindows;
@@ -246,7 +246,7 @@ pub(super) fn restore_full_window(
             }
         });
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     apply(window);
 }
 

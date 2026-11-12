@@ -2,14 +2,14 @@
   const view={timezone:'system',compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:false,auto_check_updates:true,last_update_check:null};
   window.presentationView=view;
   const put=(id,value)=>window.setSelectableText($(id),value);
-  const onWindows=window.clickpulsePlatform==='windows';
-  if(onWindows||window.clickpulsePlatform==='macos'){
+  const onWindows=window.clickpulsePlatform==='windows',onLinux=window.clickpulsePlatform==='linux';
+  if(onWindows||onLinux||window.clickpulsePlatform==='macos'){
     document.querySelector('header').addEventListener('mousedown',event=>{
       if(event.button!==0||event.target.closest('button,select,input,a,[role="combobox"]'))return;
       event.preventDefault();send('drag');
     });
   }
-  if(onWindows){
+  if(onWindows||onLinux){
     const header=document.querySelector('header');
     header.addEventListener('dblclick',event=>{
       if(event.button===0&&!event.target.closest('button,select,input,a,[role="combobox"]'))send('maximize');
@@ -52,7 +52,7 @@
     if(next.theme)window.setInterfaceTheme(next.theme);
     Object.assign(view,next);
     window.renderUpdatePreferences?.();
-    if(onWindows){
+    if(onWindows||onLinux){
       const key=view.maximized?'window.restore':'window.maximize';
       $('window-maximize').setAttribute('aria-label',t(key));$('window-maximize').title=t(key);
       $('window-maximize-glyph').setAttribute('d',view.maximized?'M5 3h8v8M3 5h8v8H3Z':'M3 3h10v10H3Z');

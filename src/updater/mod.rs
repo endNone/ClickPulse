@@ -79,6 +79,8 @@ pub enum Target {
     MacArm64,
     MacX64,
     WindowsX64,
+    LinuxArm64,
+    LinuxX64,
 }
 impl Target {
     pub fn current() -> Result<Self> {
@@ -86,6 +88,8 @@ impl Target {
             ("macos", "aarch64") => Ok(Self::MacArm64),
             ("macos", "x86_64") => Ok(Self::MacX64),
             ("windows", "x86_64") => Ok(Self::WindowsX64),
+            ("linux", "aarch64") => Ok(Self::LinuxArm64),
+            ("linux", "x86_64") => Ok(Self::LinuxX64),
             _ => bail!("This platform has no compatible update package"),
         }
     }
@@ -94,6 +98,8 @@ impl Target {
             Self::MacArm64 => "macos-arm64",
             Self::MacX64 => "macos-x64",
             Self::WindowsX64 => "windows-x64",
+            Self::LinuxArm64 => "linux-arm64",
+            Self::LinuxX64 => "linux-x64",
         }
     }
     fn triple(self) -> &'static str {
@@ -101,14 +107,21 @@ impl Target {
             Self::MacArm64 => "aarch64-apple-darwin",
             Self::MacX64 => "x86_64-apple-darwin",
             Self::WindowsX64 => "x86_64-pc-windows-msvc",
+            Self::LinuxArm64 => "aarch64-unknown-linux-gnu",
+            Self::LinuxX64 => "x86_64-unknown-linux-gnu",
         }
     }
     fn mac(self) -> bool {
-        self != Self::WindowsX64
+        matches!(self, Self::MacArm64 | Self::MacX64)
+    }
+    fn linux(self) -> bool {
+        matches!(self, Self::LinuxArm64 | Self::LinuxX64)
     }
     fn binary(self) -> &'static str {
         if self.mac() {
             "ClickPulse.app/Contents/MacOS/clickpulse"
+        } else if self.linux() {
+            "clickpulse"
         } else {
             "ClickPulse.exe"
         }
@@ -373,6 +386,19 @@ fn windows_payload(name: &str) -> bool {
         .strip_prefix("Licenses/")
         .is_some_and(|p| !p.contains('/') && p.ends_with(".txt"))
 }
+fn linux_payload(name: &str) -> bool {
+    matches!(
+        name,
+        "clickpulse"
+            | "clickpulse.desktop"
+            | "clickpulse.png"
+            | "README.txt"
+            | "LICENSE.txt"
+            | "THIRD-PARTY-NOTICES.txt"
+    ) || name
+        .strip_prefix("Licenses/")
+        .is_some_and(|p| !p.contains('/') && p.ends_with(".txt"))
+}
 fn hash_bytes(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -456,6 +482,8 @@ fn validate_manifest(manifest: &Manifest, candidate: &Candidate) -> Result<()> {
                 name.starts_with("ClickPulse.app/") || name == "Install Guide.txt",
                 "Unexpected Mac payload"
             );
+        } else if candidate.target.linux() {
+            ensure!(linux_payload(name), "Unexpected Linux program file");
         } else {
             ensure!(windows_payload(name), "Unexpected Windows program file");
         }
@@ -572,7 +600,16 @@ pub fn cache_dir() -> Result<PathBuf> {
     {
         Ok(crate::platform::data_dir()?.join("updates"))
     }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(target_os = "linux")]
+    {
+        Ok(crate::platform::linux::xdg_dir(
+            std::env::var_os("XDG_CACHE_HOME"),
+            std::env::var_os("HOME"),
+            ".cache",
+        )?
+        .join("ClickPulse/updates"))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         Ok(std::env::temp_dir().join("clickpulse-updates"))
     }

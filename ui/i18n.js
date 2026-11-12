@@ -28,8 +28,8 @@ function createClickPulseI18n(messages, initialLocale='en',platform='macos') {
     },
     setLocale(value){locale=resolveLocale(value);numbers=new Intl.NumberFormat(locale);percents.clear();dates.clear();decimals.clear();},
     t(key,values={}) {
-      const variant=key+'.windows';
-      const platformKey=platform==='windows'&&(messages[locale]?.[variant]||messages.en?.[variant])?variant:key;
+      const variant=key+'.'+platform;
+      const platformKey=['windows','linux'].includes(platform)&&(messages[locale]?.[variant]||messages.en?.[variant])?variant:key;
       const message=messages[locale]?.[platformKey]??messages.en?.[platformKey]??messages.en?.[key]??key;
       return message.replace(/\{([a-zA-Z_]+)\}/g,(match,name)=>Object.prototype.hasOwnProperty.call(values,name)?String(values[name]):match);
     },

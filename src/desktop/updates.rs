@@ -627,6 +627,8 @@ impl Controller {
                 .creation_flags(0x08000000)
                 .spawn()?;
         }
+        #[cfg(target_os = "linux")]
+        Command::new("xdg-open").arg(url).spawn()?;
         Ok(())
     }
 }

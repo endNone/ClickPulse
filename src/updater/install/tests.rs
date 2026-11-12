@@ -472,3 +472,74 @@ fn helper_process_waits_for_saved_parent_and_preserves_profile_files() {
         b"preferences must never change"
     );
 }
+
+#[test]
+fn linux_elf_architecture_version_and_payload_scope_are_verified() {
+    let temp = tempfile::tempdir().unwrap();
+    for (target, machine) in [(Target::LinuxArm64, 183u16), (Target::LinuxX64, 62u16)] {
+        let mut bytes = vec![0u8; 64];
+        bytes[..6].copy_from_slice(b"\x7fELF\x02\x01");
+        bytes[16..18].copy_from_slice(&3u16.to_le_bytes());
+        bytes[18..20].copy_from_slice(&machine.to_le_bytes());
+        bytes.extend_from_slice(b"1.2.3 (78)");
+        let binary = temp.path().join("clickpulse");
+        fs::write(&binary, &bytes).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        assert!(validate_program(temp.path(), target, "1.2.3", 78).is_ok());
+        assert!(validate_program(temp.path(), target, "1.2.4", 78).is_err());
+        bytes[18..20].copy_from_slice(&0x8664u16.to_le_bytes());
+        fs::write(&binary, bytes).unwrap();
+        assert!(validate_program(temp.path(), target, "1.2.3", 78).is_err());
+    }
+    assert!(linux_payload("clickpulse"));
+    for name in [
+        "events.sqlite3",
+        "prefs.json",
+        "../../clickpulse",
+        "WebView2Loader.dll",
+    ] {
+        assert!(!linux_payload(name));
+    }
+}
+
+#[test]
+fn linux_portable_replacement_preserves_data_and_refuses_foreign_manifest_paths() {
+    let (temp, mut install, payload, mut manifest) = windows_fixture();
+    install.target = Target::LinuxArm64;
+    manifest.target = install.target.triple().into();
+    manifest.files = BTreeMap::from([("clickpulse".into(), hash_bytes(b"new linux"))]);
+    fs::write(install.root.join("clickpulse"), b"old linux").unwrap();
+    fs::write(install.root.join("events.sqlite3"), b"history").unwrap();
+    fs::write(payload.join("clickpulse"), b"new linux").unwrap();
+    fs::write(
+        install.root.join("build-manifest.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        payload.join("build-manifest.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    let backup = replace_windows(&install, &payload, &manifest, "linux-test").unwrap();
+    assert_eq!(fs::read(install.executable()).unwrap(), b"new linux");
+    assert_eq!(fs::read(backup.join("clickpulse")).unwrap(), b"old linux");
+    assert_eq!(
+        fs::read(install.root.join("events.sqlite3")).unwrap(),
+        b"history"
+    );
+    manifest
+        .files
+        .insert("events.sqlite3".into(), hash_bytes(b"history"));
+    fs::write(
+        install.root.join("build-manifest.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    assert!(replace_windows(&install, &payload, &manifest, "reject-test").is_err());
+    assert!(temp.path().is_dir());
+}

@@ -50,6 +50,8 @@ impl Installation {
     fn executable(&self) -> PathBuf {
         self.root.join(if self.target.mac() {
             "Contents/MacOS/clickpulse"
+        } else if self.target.linux() {
+            "clickpulse"
         } else {
             "ClickPulse.exe"
         })
@@ -77,6 +79,17 @@ impl Installation {
                 plist_value(&info, "CFBundleIdentifier") == Some("app.clickpulse.desktop"),
                 "Wrong application identity"
             );
+        } else if self.target.linux() {
+            let manifest: Manifest = serde_json::from_slice(&read_limited(
+                File::open(self.root.join("build-manifest.json"))?,
+                1024 * 1024,
+            )?)?;
+            ensure!(
+                manifest.target == self.target.triple()
+                    && manifest.files.contains_key("clickpulse")
+                    && manifest.files.keys().all(|name| linux_payload(name)),
+                "Use the complete Linux portable application folder"
+            );
         } else {
             ensure!(
                 self.root.join("WebView2Loader.dll").is_file(),
@@ -102,6 +115,14 @@ pub fn installation() -> Result<Installation> {
             .and_then(Path::parent)
             .and_then(Path::parent)
             .context("Missing App bundle")?
+            .to_path_buf()
+    } else if target.linux() {
+        ensure!(
+            exe.file_name().is_some_and(|v| v == "clickpulse"),
+            "Updates require the Linux portable App"
+        );
+        exe.parent()
+            .context("Missing program folder")?
             .to_path_buf()
     } else {
         ensure!(
@@ -176,6 +197,38 @@ pub(super) fn validate_program(
                 .success(),
             "Mac App signature is invalid"
         );
+    } else if target.linux() {
+        ensure!(
+            bytes.len() >= 64 && &bytes[..4] == b"\x7fELF" && bytes[4] == 2 && bytes[5] == 1,
+            "Invalid Linux ELF executable"
+        );
+        let machine = u16::from_le_bytes(bytes[18..20].try_into()?);
+        let kind = u16::from_le_bytes(bytes[16..18].try_into()?);
+        ensure!(
+            matches!(kind, 2 | 3)
+                && machine
+                    == if target == Target::LinuxArm64 {
+                        183
+                    } else {
+                        62
+                    },
+            "Linux executable architecture mismatch"
+        );
+        let identity = format!("{version} ({build})");
+        ensure!(
+            bytes
+                .windows(identity.len())
+                .any(|part| part == identity.as_bytes()),
+            "Linux executable version mismatch"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            ensure!(
+                fs::metadata(&executable)?.permissions().mode() & 0o111 != 0,
+                "Linux program is not executable"
+            );
+        }
     } else {
         ensure!(
             bytes.len() >= 64 && &bytes[..2] == b"MZ",
@@ -254,17 +307,20 @@ pub fn launch_installer(update: StagedUpdate, installation: Installation) -> Res
         "Update must run from this installation"
     );
     let previous_hash = hash_file(&current)?;
-    let helper = update.directory.path().join(if update.target.mac() {
-        "update-helper"
-    } else {
-        "update-helper.exe"
-    });
+    let helper = update
+        .directory
+        .path()
+        .join(if update.target != Target::WindowsX64 {
+            "update-helper"
+        } else {
+            "update-helper.exe"
+        });
     fs::copy(&current, &helper)?;
     ensure!(
         hash_file(&helper)? == previous_hash,
         "Could not stage updater helper"
     );
-    if !update.target.mac() {
+    if update.target == Target::WindowsX64 {
         fs::copy(
             installation.root.join("WebView2Loader.dll"),
             update.directory.path().join("WebView2Loader.dll"),
@@ -435,7 +491,11 @@ fn replace_windows(
         for name in old.files.keys() {
             safe_relative(name)?;
             ensure!(
-                windows_payload(name),
+                if install.target.linux() {
+                    linux_payload(name)
+                } else {
+                    windows_payload(name)
+                },
                 "Previous manifest contains a non-program path"
             );
             files.insert(name.clone());
@@ -532,7 +592,7 @@ fn restart(install: &Installation, paused: bool) -> Result<()> {
         }
         command.spawn()?;
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
         let mut command = Command::new(install.executable());
         command.current_dir(&install.root);
@@ -541,7 +601,7 @@ fn restart(install: &Installation, paused: bool) -> Result<()> {
         }
         command.spawn()?;
     }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = (install, paused);
         bail!("Restart unsupported on this platform");

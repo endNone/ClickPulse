@@ -7,6 +7,8 @@ pub fn name() -> &'static str {
         "windows"
     } else if cfg!(target_os = "macos") {
         "macos"
+    } else if cfg!(target_os = "linux") {
+        "linux"
     } else {
         "other"
     }
@@ -20,7 +22,14 @@ pub fn data_dir() -> Result<PathBuf> {
         PathBuf::from(std::env::var_os("HOME").context("无法确定用户目录")?)
             .join("Library/Application Support/ClickPulse"),
     );
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    return Ok(linux::xdg_dir(
+        std::env::var_os("XDG_DATA_HOME"),
+        std::env::var_os("HOME"),
+        ".local/share",
+    )?
+    .join("ClickPulse"));
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         let base = std::env::var_os("XDG_DATA_HOME")
             .map(PathBuf::from)
@@ -54,7 +63,9 @@ pub fn auto_start_enabled() -> bool {
     return crate::handoff::auto_start_enabled();
     #[cfg(target_os = "windows")]
     return crate::platform::windows::auto_start_enabled();
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(target_os = "linux")]
+    return linux::auto_start_enabled();
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     false
 }
 
@@ -63,7 +74,9 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
     return crate::handoff::set_auto_start(enabled);
     #[cfg(target_os = "windows")]
     return windows::set_auto_start(enabled);
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(target_os = "linux")]
+    return linux::set_auto_start(enabled);
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = enabled;
         anyhow::bail!("Desktop startup is unsupported on this platform")
@@ -80,12 +93,16 @@ pub fn reveal(path: &Path) -> Result<()> {
     std::process::Command::new("explorer.exe")
         .arg(path.parent().context("Data directory is unavailable")?)
         .spawn()?;
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open")
+        .arg(path.parent().context("Data directory is unavailable")?)
+        .spawn()?;
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = path;
         anyhow::bail!("Desktop file browser is unsupported on this platform")
     }
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     Ok(())
 }
 
@@ -119,3 +136,7 @@ mod tests {
         assert!(!base.exists(), "resolving a path must not create user data");
     }
 }
+
+#[cfg(any(target_os = "linux", test))]
+#[path = "platform_linux.rs"]
+pub mod linux;

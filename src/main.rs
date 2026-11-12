@@ -12,7 +12,7 @@ use clickpulse::{
     source::LiveSource,
 };
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod desktop;
 
 #[derive(Parser)]
@@ -106,7 +106,7 @@ fn main() {
     #[cfg(target_os = "windows")]
     clickpulse::platform::windows::attach_parent_console();
     let cli = Cli::parse();
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     let desktop_mode = cli.command.is_none() && cli.apply_update.is_none();
     if let Err(error) = run(cli) {
         eprintln!("ClickPulse: {error:#}");
@@ -114,7 +114,7 @@ fn main() {
         if desktop_mode {
             clickpulse::platform::windows::show_startup_error(&error);
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         if desktop_mode {
             rfd::MessageDialog::new()
                 .set_title("ClickPulse")
@@ -199,7 +199,7 @@ fn run(cli: Cli) -> Result<()> {
         }
         return Ok(());
     }
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     return desktop::run(
         &path,
         cli.legacy_db.as_deref(),
@@ -213,7 +213,7 @@ fn run(cli: Cli) -> Result<()> {
             mini: cli.mini,
         },
     );
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     bail!(
         "The desktop application requires macOS or Windows; use stats, import or migrate instead"
     );

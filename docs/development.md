@@ -8,6 +8,8 @@ macOS packaging needs Xcode Command Line Tools and the system `ditto`, `sips`, `
 
 Native Windows builds need the Rust MSVC toolchain, Visual Studio C++ Build Tools and Windows SDK. Windows packaging produces the portable ZIP.
 
+Linux builds need `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev`. Build native ARM64 or x64 packages on Ubuntu 22.04 to retain the older glibc baseline, then test the same package on Ubuntu 24.04. When using a VM shared checkout, keep `CARGO_TARGET_DIR` on the guest’s own filesystem. The Linux packager supports Python 3.10, as shipped by Ubuntu 22.04.
+
 ## Common build entry point
 
 On macOS:
@@ -29,6 +31,7 @@ These commands only generate artifacts in `dist/`. They do not install or start 
 | macOS arm64 | `ClickPulse.app`, `ClickPulse-0.2.1-macos-arm64.dmg`, matching ZIP, SHA256 files and manifest |
 | macOS Intel x64 | `ClickPulse-macos-x64.app`, `ClickPulse-0.2.1-macos-x64.dmg`, matching ZIP, SHA256 files and manifest |
 | Windows | `ClickPulse-0.2.1-windows-x64.zip`, SHA256 file and manifest |
+| Ubuntu ARM64 / x64 | `ClickPulse-0.2.1-linux-arm64.zip` / `ClickPulse-0.2.1-linux-x64.zip`, SHA256 file and manifest |
 
 Mac builds default to the host architecture. To cross-build Intel packages on an Apple Silicon Mac:
 
@@ -50,6 +53,8 @@ python3 scripts/build.py --platform windows
 
 The existing `package-macos.sh` and `package-windows.ps1` wrappers use this same entry point. `package_windows.py` remains available for lower-level portable builds.
 
+On Linux, run `python3 scripts/build.py`. A shared Git worktree whose `.git` path only resolves on the host can use `python3 scripts/package_linux.py --source-revision FULL_COMMIT_SHA`; supply the actual revision from the host. Linux package generation is local; it does not add assets to an existing public release. See [Linux validation](linux-testing.md) for the distinction between unit, native-input and desktop checks.
+
 ## Checks and isolated previews
 
 ```sh
@@ -65,7 +70,7 @@ Demo mode does not open a statistics database or capture input. Its metrics, dai
 
 Desktop refresh requests a snapshot every 500 ms without waiting on the interface thread, with at most one in flight. Additional requests are coalesced; slow completed results are still delivered. Pause/Resume is acknowledged independently of those statistics. Exclusive app writers cache calendar totals by timezone and apply committed input deltas, including late input. Imports invalidate the cache; reopening, relocation and timezone changes rebuild it. Hour and rolling windows remain fresh bounded reads. Read-only external sources cannot see each write, so they cache only minutes older than two days and rescan that tail on every refresh. A late write or import before that point changes lifetime-minus-tail totals and rebuilds immediately; deleted old details are picked up by a rebuild at least every 10 minutes. Hidden windows do not request full snapshots. Full-history payloads are still sent while visible, so incremental history delivery remains a future optimization.
 
-`.github/workflows/ci.yml` checks macOS/Windows code. Packages reuses those checks before building CI artifacts. Release candidate runs the same pipeline for a version tag, verifies corresponding source and complete packages, then retains a candidate artifact. The maintainer creates and publishes the Release through the personal `endNone` account. See [Builds and releases](releases.md). The initial preview passes the GitHub checks and complete packaging/release workflow on Apple Silicon, Intel Mac and Windows x64.
+`.github/workflows/ci.yml` checks macOS/Windows code and Ubuntu 22.04/24.04 x64 code. The Linux matrix is configured here; a local ARM64 VM pass does not mean that the hosted x64 jobs have run. Packages reuses those checks before building CI artifacts. Release candidate runs the same pipeline for a version tag, verifies corresponding source and complete packages, then retains a candidate artifact. The maintainer creates and publishes the Release through the personal `endNone` account. See [Builds and releases](releases.md). The initial preview passes the GitHub checks and complete packaging/release workflow on Apple Silicon, Intel Mac and Windows x64.
 
 For an interactive Mini Sport preview, run `node scripts/prepare-sport-preview.cjs` and serve `dist/sport-preview/` locally. The preview shows the production Warp Mini window using simulated click counts. Try C/B/A/S/SS, the Mini lightning switch, or the link to the actual Personalization settings. This does not open a database or start a capture listener.
 

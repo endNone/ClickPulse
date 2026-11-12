@@ -54,11 +54,11 @@ impl Locale {
             serde_json::from_str(include_str!("../ui/locales.json"))
                 .expect("invalid translation catalog")
         });
-        let key = if cfg!(target_os = "windows")
-            && (messages[self.code()][format!("{key}.windows")].is_string()
-                || messages["en"][format!("{key}.windows")].is_string())
+        let variant = format!("{key}.{}", crate::platform::name());
+        let key = if messages[self.code()][&variant].is_string()
+            || messages["en"][&variant].is_string()
         {
-            format!("{key}.windows")
+            variant
         } else {
             key.to_string()
         };

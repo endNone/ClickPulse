@@ -142,7 +142,7 @@ $('timezone-select').addEventListener('change',event=>send('timezone',{timezone:
 $('language-select').addEventListener('change',event=>send('language',{language:event.target.value}));
 $('theme-select').addEventListener('change',event=>send('theme',{theme:event.target.value}));
 const K=ClickPulseKeyboard;
-const onWindows=window.clickpulsePlatform==='windows';
+const onWindows=window.clickpulsePlatform==='windows',onLinux=window.clickpulsePlatform==='linux';
 const keyboardCells=new Map();
 let keyboardLayoutSignature='';
 let keyboardView='layout',keyboardDistribution=null;
@@ -262,8 +262,10 @@ window.receive=snapshot=>{
   }
 };
 function renderPermission(){
+  if(onLinux)$('permission-reset').hidden=true;
   $('permission-banner').hidden=!data.capture.permission_needed;
-  $('permission-title').hidden=updatedThisLaunch;$('permission-updated-title').hidden=!updatedThisLaunch;
+  const needsMacUpdatePermission=updatedThisLaunch&&!onWindows&&!onLinux;
+  $('permission-title').hidden=needsMacUpdatePermission;$('permission-updated-title').hidden=!needsMacUpdatePermission;
 }
 function renderRecordingState(){
   const demo=!!data.demo;
@@ -272,9 +274,9 @@ function renderRecordingState(){
   $('pause').textContent=t(data.source_mode?(data.paused?'action.resume_refresh':'action.pause_refresh'):(data.paused?'action.resume':'action.pause'));
 }
 function renderSettings(){
-  $('permission-description').textContent=t(onWindows?(data.capture.listening?'settings.windows_capture':'status.unavailable'):data.source_mode && !data.setup_pending?'settings.source_permission':data.capture.listening?'settings.authorized':'settings.permission_description');
+  $('permission-description').textContent=t(onLinux?(data.capture.listening&&!data.capture.permission_needed?'settings.authorized':'settings.permission_description'):onWindows?(data.capture.listening?'settings.windows_capture':'status.unavailable'):data.source_mode && !data.setup_pending?'settings.source_permission':data.capture.listening?'settings.authorized':'settings.permission_description');
   $('permission-row').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
-  $('permission-reset-settings').hidden=$('permission-row').hidden || data.capture.listening;
+  $('permission-reset-settings').hidden=onLinux || $('permission-row').hidden || data.capture.listening;
   $('capture-settings').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
   $('handoff-settings').hidden=!data.setup_pending;
   $('takeover').disabled=dataOperationBusy || !data.capture.listening || data.capture.permission_needed;

@@ -281,16 +281,22 @@ impl Runtime {
                 }
                 result
             })?;
-        #[cfg(all(any(target_os = "macos", target_os = "windows"), not(test)))]
+        #[cfg(all(
+            any(target_os = "macos", target_os = "windows", target_os = "linux"),
+            not(test)
+        ))]
         let capture = Some(crate::capture::spawn(
             tx.clone(),
             paused.clone(),
             stop_capture.clone(),
             status.clone(),
         )?);
-        #[cfg(all(any(target_os = "macos", target_os = "windows"), test))]
+        #[cfg(all(
+            any(target_os = "macos", target_os = "windows", target_os = "linux"),
+            test
+        ))]
         let capture = None; // Unit tests never listen to the user's desktop input.
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         let capture = {
             status.lock().unwrap().error_code = Some("error.platform");
             status.lock().unwrap().error =

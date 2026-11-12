@@ -40,7 +40,7 @@ function createClickPulseKeyboard(platform='macos') {
     [key('fn','Fn',63,'',1,[63]),key('control','Ctrl',[59,62],'',1.05,[59,62]),key('option-left','⌥',58,'',1.1,[58]),key('command-left','⌘',55,'',1.3,[55]),key('space','Space',49,'  ',5,[49,32]),key('command-right','⌘',54,'',1.3,[54]),key('option-right','⌥',61,'',1.1,[61]),key('left','←',123,'',1,[123]),key('down','↓',125,'',1,[125]),key('up','↑',126,'',1,[126]),key('right','→',124,'',1,[124])]
   ];
   const windowsSupplemental=[];
-  if(platform==='windows') {
+  if(platform==='windows'||platform==='linux') {
     for(const row of rows)for(const k of row){if(k.id.startsWith('command-'))k.label='Win';if(k.id.startsWith('option-'))k.label='Alt';if(k.id==='return')k.label='Enter';}
     rows[0].push(key('print-screen','PrtSc',[0x10137,0x10054]),key('scroll-lock','Scroll',0x10046),key('pause-break','Pause',[0x10245,0x10146]));
     rows[5]=[key('control-left','Ctrl',59,'',1.3),key('command-left','Win',55,'',1.1),key('option-left','Alt',58,'',1.1),key('space','Space',49,'  ',5,[49,32]),key('option-right','Alt',61,'',1.1),key('command-right','Win',54,'',1.1),key('menu','Menu',63,'',1.1),key('control-right','Ctrl',62,'',1.3),key('left','←',123),key('down','↓',125),key('up','↑',126),key('right','→',124)];
@@ -60,6 +60,7 @@ function createClickPulseKeyboard(platform='macos') {
     key('menu','Menu',110),key('iso-section','§',10,'§±'),key('jis-yen','¥',93),
     key('jis-underscore','JIS _',94),key('jis-eisu','Eisu',102),key('jis-kana','Kana',104)
   ] : windowsSupplemental;
+  if(platform==='linux')for(const row of rows)for(const k of row)if(k.id.startsWith('command-'))k.label='Super';
   const all = [...rows.flat(), ...supplemental];
   // Both keyboard views describe the same visible keys. Keep supplemental
   // history in ranked/totals without including it in this display scope.

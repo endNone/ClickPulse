@@ -167,3 +167,11 @@ test('App physical records extend the historical total once across the handoff',
   assert.equal(view.total,130);
   assert.equal(view.mapped,130);
 });
+
+test('Linux uses PC physical identities and Super labels',()=>{
+  const linux=require('../ui/keyboard.js').create('linux');
+  const distribution=linux.distribution({physical:[{code:0,count:3},{code:55,count:2},{code:62,count:1},{code:0x10137,count:1},{code:0x200e0,count:1}]});
+  assert.equal(distribution.total,8);assert.equal(distribution.mapped,7);assert.equal(distribution.unmapped,1);
+  assert.equal(linux.byId.get('command-left').label,'Super');
+  assert.equal(linux.byId.get('control-right').vk[0],62);
+});

@@ -1,5 +1,5 @@
 //! Explicit payloads reject unknown actions and incomplete or invalid options.
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use clickpulse::presentation::CloseAction;
 use clickpulse::{localization::LanguagePreference, presentation::Theme};
 use serde::Deserialize;
@@ -46,15 +46,15 @@ pub(super) enum Request {
     Close {},
     #[cfg(target_os = "macos")]
     Takeover {},
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     Minimize {},
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     Maximize {},
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     ClosePreference {
         close_action: CloseAction,
     },
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     CloseDecision {
         close_action: CloseAction,
         #[serde(default)]
@@ -115,7 +115,7 @@ mod tests {
         }
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     #[test]
     fn close_choices_require_a_known_choice_and_boolean_remember_flag() {
         assert!(matches!(

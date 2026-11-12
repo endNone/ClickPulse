@@ -8,16 +8,16 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--platform', choices=['auto', 'macos', 'windows'], default='auto')
+    parser.add_argument('--platform', choices=['auto', 'macos', 'windows', 'linux'], default='auto')
     parser.add_argument('--target', help='Rust target for the selected platform; macOS supports aarch64-apple-darwin and x86_64-apple-darwin')
     parser.add_argument('--portable-only', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--skip-build', action='store_true', help='Package an already built matching release binary')
     args = parser.parse_args()
     platform = args.platform
     if platform == 'auto':
-        platform = {'darwin': 'macos', 'win32': 'windows'}.get(sys.platform)
+        platform = {'darwin': 'macos', 'win32': 'windows', 'linux':'linux'}.get(sys.platform)
     if platform is None:
-        parser.error('Desktop packages require macOS or Windows; choose --platform windows for a configured cross-build.')
+        parser.error('Desktop packages require macOS, Windows or Linux; choose --platform windows for a configured cross-build.')
     root = Path(__file__).resolve().parent.parent
     if platform == 'macos':
         if args.portable_only:
@@ -26,6 +26,12 @@ def main():
         if args.target:
             if args.target not in {'aarch64-apple-darwin', 'x86_64-apple-darwin'}:
                 parser.error('Select a macOS Rust target for --platform macos.')
+            command.extend(['--target', args.target])
+    elif platform == 'linux':
+        command = [sys.executable, str(root/'scripts/package_linux.py')]
+        if args.target:
+            if args.target not in {'aarch64-unknown-linux-gnu', 'x86_64-unknown-linux-gnu'}:
+                parser.error('Select a Linux Rust target for --platform linux.')
             command.extend(['--target', args.target])
     else:
         target = args.target or ('x86_64-pc-windows-msvc' if sys.platform == 'win32' else 'x86_64-pc-windows-gnu')

@@ -1,4 +1,4 @@
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 pub mod branding;
 #[cfg(target_os = "macos")]
 #[cfg_attr(test, allow(dead_code))]
@@ -26,3 +26,9 @@ pub mod timezone;
 pub mod updater;
 pub mod version;
 pub mod windows_input;
+
+#[cfg(target_os = "linux")]
+#[path = "capture_linux.rs"]
+#[cfg_attr(test, allow(dead_code))]
+pub mod capture;
+pub mod linux_input;

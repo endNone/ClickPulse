@@ -6,6 +6,7 @@
 | --- | --- |
 | [macOS installation](install-macos.md) | Applications, first launch, Input Monitoring, updates and uninstalling |
 | [Windows installation](install-windows.md) | Portable ZIP, WebView2, directories, updates and removal |
+| [Ubuntu installation](install-linux.md) | Linux development packages, input permissions, dependencies and storage |
 | [Usage](usage.md) | Overview, history, keyboard views, themes, language, mini mode and close behavior |
 | [Data and privacy](data-and-privacy.md) | What is recorded, retention, storage, backups and migration |
 
@@ -22,5 +23,6 @@
 | [Package managers](package-managers.md) | First-party Homebrew Cask and Scoop installation, updates and limitations |
 | [Screenshot assets](images/README.md) | Capture app screenshots and the mini desktop animation |
 | [Windows validation checklist](windows-testing.md) | Maintainer checklist for installation and native behavior |
+| [Linux validation](linux-testing.md) | Ubuntu versions, architecture coverage and native input checks |
 
 Current packages target macOS 12+ on Apple Silicon/Intel and Windows 10/11 x64. Version 0.2.1 is available as a [release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1). Automated checks and packaging pass for all three targets. The Windows validation guide records hardware-specific test coverage.

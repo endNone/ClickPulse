@@ -158,7 +158,7 @@ pub fn run(
 
     let builder = WindowBuilder::new()
         .with_title(locale.text("native.full_title"))
-        .with_transparent(cfg!(target_os = "macos"))
+        .with_transparent(cfg!(any(target_os = "macos", target_os = "linux")))
         .with_inner_size(LogicalSize::new(1160.0, 840.0))
         .with_min_inner_size(LogicalSize::new(900.0, 680.0))
         .with_visible(!options.background && !preferences.compact);
@@ -171,14 +171,13 @@ pub fn run(
             .with_fullsize_content_view(true)
     };
     #[cfg(target_os = "windows")]
-    let builder =
-        builder
-            .with_decorations(false)
-            .with_window_icon(Some(tao::window::Icon::from_rgba(
-                clickpulse::branding::tray_rgba()?,
-                clickpulse::branding::TRAY_SIZE,
-                clickpulse::branding::TRAY_SIZE,
-            )?));
+    let builder = builder.with_decorations(false);
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    let builder = builder.with_window_icon(Some(tao::window::Icon::from_rgba(
+        clickpulse::branding::tray_rgba()?,
+        clickpulse::branding::TRAY_SIZE,
+        clickpulse::branding::TRAY_SIZE,
+    )?));
     let window = Arc::new(builder.build(&event_loop)?);
     let mut layout = WindowLayout {
         full_size: window.inner_size().to_logical(window.scale_factor()),
@@ -279,10 +278,10 @@ pub fn run(
                 .expect("static resource response")
         })
         .with_url("clickpulse://localhost/index.html");
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let builder = WebViewBuilder::new().with_html(html);
-    let webview = builder
-        .with_transparent(cfg!(target_os = "macos"))
+    let builder = builder
+        .with_transparent(cfg!(any(target_os = "macos", target_os = "linux")))
         .with_navigation_handler(|url| {
             url == "about:blank"
                 || url.starts_with("about:blank#")
@@ -296,8 +295,15 @@ pub fn run(
         .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
         .with_ipc_handler(move |req| {
             let _ = proxy.send_event(UiEvent::Ipc(req.body().clone()));
-        })
-        .build(window.as_ref())?;
+        });
+    #[cfg(not(target_os = "linux"))]
+    let webview = builder.build(window.as_ref())?;
+    #[cfg(target_os = "linux")]
+    let webview = {
+        use tao::platform::unix::WindowExtUnix;
+        use wry::WebViewBuilderExtUnix;
+        builder.build_gtk(window.default_vbox().expect("Tao GTK container"))?
+    };
     let menu = Menu::new();
     let show = MenuItem::new(locale.text("native.open"), true, None);
     let mini = MenuItem::new(locale.text("action.mini"), true, None);
@@ -498,7 +504,7 @@ pub fn run(
                 if demo {
                     *flow = ControlFlow::Exit;
                 } else {
-                    #[cfg(target_os = "windows")]
+                    #[cfg(any(target_os = "windows", target_os = "linux"))]
                     match preferences.close_action {
                         clickpulse::presentation::CloseAction::Ask => {
                             let _ = webview.evaluate_script("window.requestClose();");
@@ -634,23 +640,23 @@ pub fn run(
                         Request::Drag {} => {
                             window.drag_window().ok();
                         }
-                        #[cfg(target_os = "windows")]
+                        #[cfg(any(target_os = "windows", target_os = "linux"))]
                         Request::Minimize {} => window.set_minimized(true),
-                        #[cfg(target_os = "windows")]
+                        #[cfg(any(target_os = "windows", target_os = "linux"))]
                         Request::Maximize {} => {
                             if !layout.compact {
                                 window.set_maximized(!window.is_maximized());
                                 view_changed = true;
                             }
                         }
-                        #[cfg(target_os = "windows")]
+                        #[cfg(any(target_os = "windows", target_os = "linux"))]
                         Request::ClosePreference {
                             close_action: action,
                         } => {
                             preferences.close_action = action;
                             view_changed = true;
                         }
-                        #[cfg(target_os = "windows")]
+                        #[cfg(any(target_os = "windows", target_os = "linux"))]
                         Request::CloseDecision {
                             close_action: action,
                             remember,
@@ -742,8 +748,15 @@ pub fn run(
                             }
                             refresh = true;
                         }
-                        Request::Permission {} =>
-                        {
+                        Request::Permission {} => {
+                            #[cfg(target_os = "linux")]
+                            if !demo && !source_mode {
+                                rfd::MessageDialog::new()
+                                    .set_title("ClickPulse")
+                                    .set_description(locale.text("settings.permission_description"))
+                                    .set_level(rfd::MessageLevel::Info)
+                                    .show();
+                            }
                             #[cfg(target_os = "macos")]
                             if !demo && (!source_mode || setup_pending) {
                                 clickpulse::capture::request_permission();
@@ -892,7 +905,7 @@ pub fn run(
                             }
                         }
                         Request::Quit {} | Request::Close {} => {
-                            #[cfg(target_os = "windows")]
+                            #[cfg(any(target_os = "windows", target_os = "linux"))]
                             match preferences.close_action {
                                 clickpulse::presentation::CloseAction::Ask if !demo => {
                                     let _ = webview.evaluate_script("window.requestClose();");
@@ -1086,7 +1099,7 @@ pub fn run(
         event_loop.run_return(handle_event);
         Ok(())
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     event_loop.run(handle_event)
 }
 
@@ -1424,7 +1437,7 @@ mod window_tests {
                 tao::dpi::LogicalPosition::new(324.0, 43.0)
             );
         }
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         for scale in [1.0, 1.5, 2.0] {
             assert_eq!(saved.to_physical::<i32>(scale), physical);
         }
