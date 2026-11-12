@@ -103,8 +103,9 @@ jobs:
             $actual = (Get-FileHash (Join-Path $package $file.Name) -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($actual -ne $file.Value) { throw "Payload hash mismatch: $($file.Name)" }
           }
-          $version = & (Join-Path $package 'ClickPulse.exe') --version
-          if ($LASTEXITCODE -ne 0 -or $version -ne "clickpulse $expected ($($manifest.internal_build))") { throw 'Executable version mismatch' }
+          # Wait and capture explicit pipes for the Windows GUI-subsystem executable.
+          $version = python -c "import subprocess, sys; print(subprocess.run([sys.argv[1], '--version'], check=True, capture_output=True, text=True, timeout=30).stdout.strip())" (Join-Path $package 'ClickPulse.exe')
+          if ($LASTEXITCODE -ne 0 -or $version -ne "clickpulse $expected ($($manifest.internal_build))") { throw "Executable version mismatch: [$version]" }
           $shortcut = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs/Scoop Apps/ClickPulse.lnk'
           if (!(Test-Path $shortcut)) { throw 'Start menu shortcut missing' }
           $data = Join-Path $env:LOCALAPPDATA 'ClickPulse'
