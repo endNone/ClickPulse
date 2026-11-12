@@ -66,8 +66,6 @@ jobs:
     name: Scoop (Windows x64)
     runs-on: windows-2025
     timeout-minutes: 15
-    env:
-      SCOOP: ${{ runner.temp }}/scoop
     defaults:
       run:
         shell: pwsh
@@ -84,11 +82,13 @@ jobs:
       - name: Bootstrap Scoop from the pinned official installer
         run: |
           $ErrorActionPreference = 'Stop'
+          $env:SCOOP = Join-Path $env:RUNNER_TEMP 'scoop'
           & ./.distribution-test/scoop-install/install.ps1 -ScoopDir $env:SCOOP
           if ($LASTEXITCODE -ne 0) { throw 'Scoop bootstrap failed' }
       - name: Install and validate the actual Scoop package
         run: |
           $ErrorActionPreference = 'Stop'
+          $env:SCOOP = Join-Path $env:RUNNER_TEMP 'scoop'
           $scoop = Join-Path $env:SCOOP 'shims/scoop.ps1'
           & $scoop bucket add clickpulse $env:GITHUB_WORKSPACE
           if ($LASTEXITCODE -ne 0) { throw 'Bucket registration failed' }
