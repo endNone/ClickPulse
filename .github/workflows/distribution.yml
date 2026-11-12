@@ -90,7 +90,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $env:SCOOP = Join-Path $env:RUNNER_TEMP 'scoop'
           $scoop = Join-Path $env:SCOOP 'shims/scoop.ps1'
-          & $scoop bucket add clickpulse $env:GITHUB_WORKSPACE
+          $bucketUrl = 'file:///' + ($env:GITHUB_WORKSPACE -replace '\\', '/')
+          & $scoop bucket add clickpulse $bucketUrl
           if ($LASTEXITCODE -ne 0) { throw 'Bucket registration failed' }
           & $scoop install clickpulse/clickpulse
           if ($LASTEXITCODE -ne 0) { throw 'ClickPulse installation failed' }
