@@ -327,6 +327,7 @@ dependencies = [
  "crossbeam-channel",
  "dispatch2",
  "evdev",
+ "gtk",
  "iana-time-zone",
  "libc",
  "png",

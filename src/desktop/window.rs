@@ -145,12 +145,17 @@ pub(super) fn set_compact(
             window.set_undecorated_shadow(true);
         }
         restore_full_window(window, layout.full_size, layout.full_position);
+        #[cfg(target_os = "linux")]
+        {
+            use gtk::prelude::GtkWindowExt;
+            use tao::platform::unix::WindowExtUnix;
+            // Tao snapshots GTK's current resizable flag and restores it from
+            // a later idle callback after maximizing. Its queued resize request
+            // has not run yet, so update GTK on this UI thread before snapshotting.
+            window.gtk_window().set_resizable(true);
+        }
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         window.set_maximized(layout.full_maximized);
-        // Tao's GTK maximize request snapshots the pre-request resizable flag.
-        // Reapply it after that request, or returning from Mini disables resize.
-        #[cfg(target_os = "linux")]
-        window.set_resizable(true);
     }
     layout.compact = compact;
     #[cfg(target_os = "windows")]

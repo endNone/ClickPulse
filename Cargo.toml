@@ -39,4 +39,5 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globali
 
 [target.'cfg(target_os = "linux")'.dependencies]
 evdev = "0.13.2"
+gtk = "0.18"
 libc = "0.2"
