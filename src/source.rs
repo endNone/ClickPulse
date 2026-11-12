@@ -34,6 +34,20 @@ impl LiveSource {
         }
     }
 
+    /// Mini needs only today's two counters, not historical or keyboard distributions.
+    pub fn today_in_timezone(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<Counts> {
+        crate::timezone::today_counts(
+            &self.conn,
+            now,
+            zone,
+            "SELECT bucket,dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY bucket,dev",
+        )
+    }
+
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .with_context(|| format!("无法读取实时数据库 {}", path.display()))?;
@@ -258,8 +272,12 @@ impl LiveSource {
         if !table_exists(&self.conn, "clickpulse_metadata")? {
             return Ok(false);
         }
-        Ok(metadata_int(&self.conn, "heartbeat_ms")?
-            .is_some_and(|heartbeat| (now_ms - heartbeat).abs() < 10000))
+        Ok(
+            metadata_int(&self.conn, "heartbeat_ms")?.is_some_and(|heartbeat| {
+                heartbeat > 0
+                    && now_ms.abs_diff(heartbeat) < crate::collector::HEARTBEAT_TIMEOUT_MS as u64
+            }),
+        )
     }
 }
 
@@ -366,6 +384,22 @@ fn counts(conn: &Connection, sql: &str, values: impl rusqlite::Params) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recording_grace_covers_a_delayed_minute_heartbeat_but_expires() {
+        let temp = tempfile::tempdir().unwrap();
+        let db =
+            crate::collector::CollectorDb::open(&temp.path().join("heartbeat.sqlite3")).unwrap();
+        let now = 1_800_000_000_000;
+        db.heartbeat(now).unwrap();
+        let source = LiveSource::open(&temp.path().join("heartbeat.sqlite3")).unwrap();
+        assert!(source.is_recording(now + 60_000).unwrap());
+        assert!(source.is_recording(now + 179_999).unwrap());
+        assert!(!source.is_recording(now + 180_000).unwrap());
+        assert!(!source.is_recording(i64::MIN).unwrap());
+        db.heartbeat(0).unwrap();
+        assert!(!source.is_recording(now).unwrap());
+    }
 
     #[test]
     fn hourly_matches_the_rolling_day_for_precise_and_minute_sources() {

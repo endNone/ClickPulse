@@ -26,6 +26,7 @@ for(const option of $('theme-select').options)option.dataset.swatch=T.get(option
 const Dropdowns=ClickPulseDropdowns.create(document,window);
 const total=c=>(c?.keyboard||0)+(c?.mouse||0);
 const send=(action,values={})=>window.ipc?.postMessage(JSON.stringify({action,...values}));
+let miniData=null;
 let data=null,page='overview',range=14,toastTimer;
 let recordingPaused=null;
 let dataOperationBusy=false;
@@ -95,7 +96,10 @@ const sportView=typeof ClickPulseSport==='undefined'?null:ClickPulseSport.create
 window.receiveSport=sample=>sportView?.receive(recordingPaused===null?sample:{...sample,paused:recordingPaused});
 window.receivePaused=paused=>{
   const changed=recordingPaused!==paused;recordingPaused=paused;
-  if(data){data={...data,paused};renderRecordingState();window.presentationStats?.(data);}
+  if(miniData)miniData={...miniData,paused};
+  if(data){data={...data,paused};renderRecordingState();}
+  if(window.presentationView?.compact&&miniData)window.presentationStats?.(miniData);
+  else if(data)window.presentationStats?.(data);
   else{
     $('pause').textContent=t(paused?'action.resume':'action.pause');
     window.presentationRecordingState?.({paused,capture:{listening:!paused}});
@@ -223,19 +227,30 @@ window.toast=(message,duration=4500)=>{$('toast').textContent=message;$('toast')
 window.failure=message=>{
   sportView?.receive({available:false});
   $('error-banner').hidden=false;$('error-banner').textContent=message;$('status').className='status error';$('status').lastElementChild.textContent=t('status.unavailable');
-  if(data){
-    data={...data,capture:{...data.capture,listening:false,error:message,error_code:'error.stats'}};
-    window.presentationStats?.(data);
+  const failed=snapshot=>({...snapshot,capture:{...snapshot.capture,listening:false,error:message,error_code:'error.stats'}});
+  if(data)data=failed(data);
+  if(miniData)miniData=failed(miniData);
+  const current=window.presentationView?.compact?(miniData||data):data;
+  if(current){
+    window.presentationStats?.(current);
   }else{
     $('mini-status').textContent=t('status.unavailable');$('mini-status').classList.toggle('error',true);
   }
+};
+window.receiveMini=snapshot=>{
+  if(!window.presentationView?.compact||snapshot.timezone!==(window.presentationView?.timezone||'system'))return;
+  miniData=recordingPaused===null?snapshot:{...snapshot,paused:recordingPaused};
+  window.presentationStats?.(miniData);
+};
+window.renderMiniSnapshot=()=>{
+  if(miniData&&miniData.timezone===(window.presentationView?.timezone||'system'))window.presentationStats?.(miniData);
 };
 window.receive=snapshot=>{
   if(snapshot.timezone && snapshot.timezone!==(window.presentationView?.timezone||'system'))return;
   if(!window.setInterfaceTimeZone(snapshot.timezone||window.presentationView?.timezone||'system'))return;
   data=recordingPaused===null?snapshot:{...snapshot,paused:recordingPaused};
   window.presentationStats?.(data);
-  if(window.presentationView?.compact)return;
+  if(window.presentationView?.compact){miniData={...data,timezone:data.timezone||'system'};return;}
   const now=new Date(data.now);$('date').textContent=I.date(now,{year:'numeric',month:'long',day:'numeric',weekday:'long'});
   const demo=!!data.demo;$('demo-badge').hidden=!demo;
   renderRecordingState();

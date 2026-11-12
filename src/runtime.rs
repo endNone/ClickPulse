@@ -28,6 +28,7 @@ pub(crate) enum Command {
     Input(InputEvent),
     Snapshot(Sender<Result<Snapshot>>),
     SnapshotAsync(SnapshotDelivery),
+    MiniSnapshot(SnapshotDelivery),
     SportSample(SportDelivery),
     Import(
         PathBuf,
@@ -161,6 +162,28 @@ pub(crate) struct SnapshotDelivery {
 }
 
 impl SnapshotDelivery {
+    fn complete_mini(mut self, today: Result<crate::db::Counts>) {
+        let result = (|| {
+            let today = today?;
+            let capture = self
+                .capture
+                .lock()
+                .map_err(|_| anyhow!("Capture status is unavailable"))?
+                .clone();
+            Ok(serde_json::to_string(&serde_json::json!({
+                "today": today,
+                "timezone": self.timezone,
+                "capture": capture,
+                "paused": self.paused.load(Ordering::Relaxed),
+                "source_mode": self.source_mode,
+                "demo": false,
+            }))?)
+        })();
+        if let Some(reply) = self.reply.take() {
+            reply(result);
+        }
+    }
+
     fn complete(mut self, stats: Result<Snapshot>) {
         let result = (|| {
             let snapshot = AppSnapshot {
@@ -418,17 +441,39 @@ impl Runtime {
         timezone: crate::timezone::TimeZonePreference,
         reply: impl FnOnce(Result<String>) + Send + 'static,
     ) -> Result<()> {
+        self.queue_snapshot(timezone, false, reply)
+    }
+
+    pub fn request_mini_snapshot(
+        &self,
+        timezone: crate::timezone::TimeZonePreference,
+        reply: impl FnOnce(Result<String>) + Send + 'static,
+    ) -> Result<()> {
+        self.queue_snapshot(timezone, true, reply)
+    }
+
+    fn queue_snapshot(
+        &self,
+        timezone: crate::timezone::TimeZonePreference,
+        mini: bool,
+        reply: impl FnOnce(Result<String>) + Send + 'static,
+    ) -> Result<()> {
+        let delivery = SnapshotDelivery {
+            timezone,
+            capture: self.status.clone(),
+            paused: self.paused.clone(),
+            path: self.path.clone(),
+            source_mode: self.source_mode,
+            setup_pending: self.setup_pending,
+            database_mode: self.database_mode,
+            reply: Some(Box::new(reply)),
+        };
         self.tx
-            .try_send(Command::SnapshotAsync(SnapshotDelivery {
-                timezone,
-                capture: self.status.clone(),
-                paused: self.paused.clone(),
-                path: self.path.clone(),
-                source_mode: self.source_mode,
-                setup_pending: self.setup_pending,
-                database_mode: self.database_mode,
-                reply: Some(Box::new(reply)),
-            }))
+            .try_send(if mini {
+                Command::MiniSnapshot(delivery)
+            } else {
+                Command::SnapshotAsync(delivery)
+            })
             .map_err(|_| anyhow!("Snapshot request queue is unavailable"))?;
         Ok(())
     }
@@ -620,9 +665,47 @@ fn source_loop_inner(
     probe: bool,
 ) -> Result<()> {
     let mut cached: Option<(String, Snapshot)> = None;
+    let mut mini_cached: Option<(String, crate::db::Counts)> = None;
     while let Ok(command) = rx.recv() {
         match command {
             Command::SportSample(delivery) => delivery.complete(source.lifetime()),
+            Command::MiniSnapshot(delivery) => {
+                let now = Local::now();
+                let key = delivery.timezone.cache_key();
+                let paused_counts = if paused.load(Ordering::Relaxed) {
+                    mini_cached
+                        .as_ref()
+                        .filter(|(zone, _)| *zone == key)
+                        .map(|(_, counts)| *counts)
+                } else {
+                    None
+                };
+                let result = paused_counts
+                    .map(Ok)
+                    .unwrap_or_else(|| source.today_in_timezone(now, delivery.timezone));
+                if let Ok(counts) = result.as_ref() {
+                    mini_cached = Some((key, *counts));
+                    if !paused.load(Ordering::Relaxed) {
+                        cached = None;
+                    }
+                }
+                let mut current = status
+                    .lock()
+                    .map_err(|_| anyhow!("Source status is unavailable"))?;
+                if !probe {
+                    current.listening =
+                        source.is_recording(now.timestamp_millis()).unwrap_or(false);
+                }
+                if !probe || result.is_err() {
+                    current.error_code = result.as_ref().err().map(|_| "error.source");
+                    current.error = result
+                        .as_ref()
+                        .err()
+                        .map(|e| format!("Live data read failed: {e:#}"));
+                }
+                drop(current);
+                delivery.complete_mini(result);
+            }
             Command::Snapshot(_) | Command::SnapshotAsync(_) => {
                 let now = Local::now();
                 let timezone = match &command {
@@ -639,6 +722,7 @@ fn source_loop_inner(
                     source.snapshot_in_timezone(now, timezone)
                 };
                 if let Ok(stats) = &result {
+                    mini_cached = Some((cache_key.clone(), stats.today));
                     cached = Some((cache_key, stats.clone()));
                 }
                 let mut current = status.lock().map_err(|_| anyhow!("同步状态不可用"))?;
@@ -686,6 +770,16 @@ enum Storage {
     App(CollectorDb),
 }
 impl Storage {
+    fn today_in_timezone(
+        &self,
+        now: chrono::DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<crate::db::Counts> {
+        match self {
+            Self::Independent(db) => db.today_in_timezone(now, zone),
+            Self::App(db) => db.today_in_timezone(now, zone),
+        }
+    }
     fn lifetime(&self) -> Result<crate::db::Counts> {
         match self {
             Self::Independent(db) => db.lifetime(),
@@ -796,10 +890,45 @@ pub fn auto_start_enabled() -> bool {
 /// A finished data job returns the connection plus its deferred reply.
 type FinishedJob = (Storage, Box<dyn FnOnce() + Send>);
 
+type DataJob = Box<dyn FnOnce(&mut Storage) -> Box<dyn FnOnce() + Send> + Send>;
+type QueuedJob = (Storage, DataJob, Sender<FinishedJob>);
+
+/// One reusable helper per runtime; dropping it drains its current job and joins.
+struct DataWorker {
+    tx: Option<Sender<QueuedJob>>,
+    thread: Option<JoinHandle<()>>,
+}
+impl DataWorker {
+    fn new() -> Result<Self> {
+        let (tx, rx) = bounded::<QueuedJob>(1);
+        let thread = thread::Builder::new()
+            .name("clickpulse-data-job".into())
+            .spawn(move || {
+                while let Ok((mut db, run, reply)) = rx.recv() {
+                    let finish = run(&mut db);
+                    let _ = reply.send((db, finish));
+                }
+            })?;
+        Ok(Self {
+            tx: Some(tx),
+            thread: Some(thread),
+        })
+    }
+}
+impl Drop for DataWorker {
+    fn drop(&mut self) {
+        self.tx.take();
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
 /// Data operations own the connection on a helper thread. The worker keeps
 /// draining capture into memory, so a slow copy cannot fill the bounded input
 /// queue and stop recording. Other requests wait until the connection returns.
 struct StorageWorker {
+    helper: DataWorker,
     db: Option<Storage>,
     job: Option<Receiver<FinishedJob>>,
     deferred: std::collections::VecDeque<Command>,
@@ -819,14 +948,14 @@ impl StorageWorker {
         &mut self,
         run: impl FnOnce(&mut Storage) -> Box<dyn FnOnce() + Send> + Send + 'static,
     ) -> Result<()> {
-        let mut db = self.db.take().context("Storage is unavailable")?;
+        let db = self.db.take().context("Storage is unavailable")?;
         let (tx, rx) = bounded(1);
-        thread::Builder::new()
-            .name("clickpulse-data-job".into())
-            .spawn(move || {
-                let finish = run(&mut db);
-                let _ = tx.send((db, finish));
-            })?;
+        self.helper
+            .tx
+            .as_ref()
+            .context("Data worker is unavailable")?
+            .send((db, Box::new(run), tx))
+            .map_err(|_| anyhow!("Data worker stopped"))?;
         self.job = Some(rx);
         Ok(())
     }
@@ -847,6 +976,10 @@ impl StorageWorker {
             Command::SnapshotAsync(delivery) => self.spawn_job(move |db| {
                 let result = db.snapshot_in_timezone(Local::now(), delivery.timezone);
                 Box::new(move || delivery.complete(result))
+            })?,
+            Command::MiniSnapshot(delivery) => self.spawn_job(move |db| {
+                let result = db.today_in_timezone(Local::now(), delivery.timezone);
+                Box::new(move || delivery.complete_mini(result))
             })?,
             Command::SportSample(delivery) => delivery.complete(db.lifetime()),
             Command::Import(source, current, reply) => self.spawn_job(move |db| {
@@ -899,6 +1032,7 @@ impl StorageWorker {
 
 fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
     let mut worker = StorageWorker {
+        helper: DataWorker::new()?,
         db: Some(db),
         job: None,
         deferred: Default::default(),
@@ -909,18 +1043,35 @@ fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
     let mut cache_cleanup = Instant::now();
     let mut log = Instant::now();
     let mut status_log = StatusLog::for_runtime();
+    worker
+        .db
+        .as_ref()
+        .context("Storage is unavailable")?
+        .log_status(&mut status_log)?;
     loop {
         let job = worker.job.clone().unwrap_or_else(|| idle.clone());
         let mut select = crossbeam_channel::Select::new();
         let command_index = select.recv(&rx);
         select.recv(&job);
-        match select.select_timeout(Duration::from_millis(100)) {
+        let mut wait = crate::collector::HEARTBEAT_INTERVAL
+            .saturating_sub(log.elapsed())
+            .min(Duration::from_secs(3600).saturating_sub(cache_cleanup.elapsed()));
+        if worker.job.is_some() {
+            // Completion/input channels wake us; database deadlines wait for the job.
+            wait = crate::collector::HEARTBEAT_INTERVAL;
+        } else if !worker.batch.is_empty() {
+            wait = wait.min(Duration::from_millis(200).saturating_sub(flush.elapsed()));
+        }
+        match select.select_timeout(wait) {
             Ok(operation) if operation.index() == command_index => match operation.recv(&rx) {
                 Ok(Command::Input(event)) => worker.batch.push(event),
                 Ok(Command::Stop) | Err(_) => {
                     // Requests queued before Stop still complete, as before.
                     worker.wait_for_job()?;
                     worker.flush()?;
+                    if let Some(Storage::App(db)) = &worker.db {
+                        db.heartbeat(0)?;
+                    }
                     break;
                 }
                 Ok(command) => worker.handle(command)?,
@@ -947,7 +1098,7 @@ fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
             db.prune_rolling_cache(Local::now().timestamp_millis())?;
             cache_cleanup = Instant::now();
         }
-        if log.elapsed() >= Duration::from_secs(2) {
+        if log.elapsed() >= crate::collector::HEARTBEAT_INTERVAL {
             db.log_status(&mut status_log)?;
             log = Instant::now();
         }
@@ -958,6 +1109,76 @@ fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mini_snapshot_flushes_counts_without_history_and_heartbeat_clears_on_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("mini.sqlite3");
+        let mut runtime = Runtime::start_owned(&path, false).unwrap();
+        let now = Local::now();
+        runtime
+            .tx
+            .send(Command::Input(InputEvent {
+                ts_ms: now.timestamp_millis(),
+                device: crate::input::Device::Keyboard,
+                code: 4,
+            }))
+            .unwrap();
+        // Establish startup completion before reading the external heartbeat.
+        assert_eq!(runtime.snapshot().unwrap().stats.today.keyboard, 1);
+        let reader = LiveSource::open(&path).unwrap();
+        assert!(reader.is_recording(now.timestamp_millis()).unwrap());
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("DROP TABLE daily_totals; DROP TABLE native_key_totals; DROP TABLE historical_key_totals;").unwrap();
+        let (tx, rx) = bounded(1);
+        runtime
+            .request_mini_snapshot(Default::default(), move |r| {
+                tx.send(r).unwrap();
+            })
+            .unwrap();
+        let json = rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["today"]["keyboard"], 1);
+        assert!(value.get("history_days").is_none());
+        assert!(value.get("keyboard_stats").is_none());
+        assert!(value.get("auto_start").is_none());
+        assert!(json.len() < 1024);
+        runtime.shutdown().unwrap();
+        assert!(
+            !reader
+                .is_recording(Local::now().timestamp_millis())
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn consecutive_data_jobs_reuse_one_thread_and_return_the_connection() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut worker = StorageWorker {
+            helper: DataWorker::new().unwrap(),
+            db: Some(Storage::Independent(
+                EventDb::open(&temp.path().join("jobs.sqlite3")).unwrap(),
+            )),
+            job: None,
+            deferred: Default::default(),
+            batch: Vec::new(),
+        };
+        let mut ids = Vec::new();
+        for _ in 0..5 {
+            let (tx, rx) = bounded(1);
+            worker
+                .spawn_job(move |db| {
+                    assert_eq!(db.lifetime().unwrap().total(), 0);
+                    let id = thread::current().id();
+                    Box::new(move || tx.send(id).unwrap())
+                })
+                .unwrap();
+            worker.wait_for_job().unwrap();
+            ids.push(rx.recv_timeout(Duration::from_secs(1)).unwrap());
+        }
+        assert!(ids.iter().all(|id| *id == ids[0]));
+        assert_ne!(ids[0], thread::current().id());
+    }
 
     #[test]
     fn queued_sample_and_shutdown_wait_for_import_and_all_accepted_input() {
@@ -1048,6 +1269,7 @@ mod tests {
             let _ = tx.send(result);
         });
         let mut worker = StorageWorker {
+            helper: DataWorker::new().expect("create data worker"),
             db: None,
             job: None,
             deferred: Default::default(),

@@ -75,6 +75,28 @@ impl<'de> Deserialize<'de> for TimeZonePreference {
     }
 }
 
+/// Bound Mini reads to at most two days of minute buckets, then apply the
+/// selected calendar date exactly (including offset changes at DST boundaries).
+pub(crate) fn today_counts(
+    conn: &Connection,
+    now: DateTime<Local>,
+    zone: TimeZonePreference,
+    sql: &str,
+) -> Result<Counts> {
+    let today = zone.at(now).date_naive();
+    let midnight = today.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
+    let start = midnight.div_euclid(60) - 1440;
+    let end = now.timestamp().div_euclid(60);
+    let mut today_counts = Counts::default();
+    scan_minutes(conn, sql, start, end, |bucket, dev, count| {
+        if minute_in_zone(bucket, zone)?.date_naive() == today {
+            today_counts.add(dev, count);
+        }
+        Ok(())
+    })?;
+    Ok(today_counts)
+}
+
 /// Only exclusive app writers use this cache; read-only sources use
 /// `SealedProjection`. Imports/reopens discard the cache.
 #[derive(Default)]
@@ -377,6 +399,49 @@ mod tests {
     fn zone(name: &str) -> TimeZonePreference {
         TimeZonePreference::Named(name.parse().unwrap())
     }
+    #[test]
+    fn mini_today_matches_full_counts_across_timezones_and_dst() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("today.sqlite3");
+        let mut owned = CollectorDb::open(&path).unwrap();
+        let mut independent = EventDb::open(&temp.path().join("independent.sqlite3")).unwrap();
+        // UTC range spanning the 25-hour Los Angeles DST fallback day.
+        let end = instant("2026-11-02T07:59:30Z");
+        let events: Vec<_> = (0..72)
+            .map(|h| InputEvent {
+                ts_ms: (end - chrono::Duration::hours(h)).timestamp_millis(),
+                device: if h % 2 == 0 {
+                    Device::Keyboard
+                } else {
+                    Device::Mouse
+                },
+                code: 1,
+            })
+            .collect();
+        owned.insert(&events).unwrap();
+        independent.insert(&events).unwrap();
+        let source = crate::source::LiveSource::open(&path).unwrap();
+        for zone in [
+            Default::default(),
+            zone("America/Los_Angeles"),
+            zone("Asia/Shanghai"),
+            zone("Pacific/Kiritimati"),
+            zone("Pacific/Pago_Pago"),
+        ] {
+            let expected = owned.snapshot_in_timezone(end, zone).unwrap().today;
+            assert_eq!(owned.today_in_timezone(end, zone).unwrap(), expected);
+            assert_eq!(source.today_in_timezone(end, zone).unwrap(), expected);
+            assert_eq!(independent.today_in_timezone(end, zone).unwrap(), expected);
+        }
+        assert_eq!(
+            owned
+                .today_in_timezone(end, zone("America/Los_Angeles"))
+                .unwrap()
+                .total(),
+            25
+        );
+    }
+
     fn events() -> Vec<InputEvent> {
         [
             ("2026-11-03T16:00:00Z", Device::Keyboard, 2),

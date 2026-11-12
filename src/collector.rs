@@ -15,6 +15,9 @@ use std::{
 // Above all Unicode, old special namespaces, and the old 32-bit hash fallback.
 pub const PHYSICAL_CODE_BASE: i64 = 1 << 40;
 
+pub(crate) const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
+pub(crate) const HEARTBEAT_TIMEOUT_MS: i64 = 3 * HEARTBEAT_INTERVAL.as_millis() as i64;
+
 pub fn data_path() -> Result<PathBuf> {
     crate::storage::database_path()
 }
@@ -45,7 +48,7 @@ impl CollectorDb {
         }
         let mut conn = Connection::open(path)?;
         initialize(&mut conn)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;")?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
         let reader = LiveSource::open(path)?;
         Ok(Self {
             conn,
@@ -176,6 +179,13 @@ impl CollectorDb {
             crate::timezone::Projection::Writer(&self.projection),
         )
     }
+    pub fn today_in_timezone(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<crate::db::Counts> {
+        self.reader.today_in_timezone(now, zone)
+    }
     pub fn lifetime(&self) -> Result<crate::db::Counts> {
         self.reader.lifetime()
     }
@@ -285,6 +295,23 @@ pub(crate) fn initialize(conn: &mut Connection) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn collector_uses_wal_with_normal_synchronization() {
+        let temp = tempfile::tempdir().unwrap();
+        let db = super::CollectorDb::open(&temp.path().join("normal.sqlite3")).unwrap();
+        assert_eq!(
+            db.conn
+                .query_row("PRAGMA synchronous", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            db.conn
+                .query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))
+                .unwrap(),
+            "wal"
+        );
+    }
     use super::*;
     #[test]
     fn failed_schema_upgrade_rolls_back_new_tables_and_version() {

@@ -65,7 +65,8 @@
     $('mini-pin').setAttribute('aria-pressed',String(view.pinned));
     $('mini-pin').setAttribute('aria-label',t(view.pinned?'mini.unpin':'mini.pin'));
     $('mini-pin').title=t(view.pinned?'mini.unpin':'mini.pin');
-    if(data)window.receive(data);
+    if(view.compact)window.renderMiniSnapshot?.();
+    else if(data)window.receive(data);
   };
   window.presentationRecordingState=snapshot=>{
     const caption=t(snapshot.demo?'common.demo':snapshot.capture.error?'status.recording_error':snapshot.paused?'status.paused':snapshot.source_mode?'status.history':snapshot.capture.listening?'status.recording':'status.permission');

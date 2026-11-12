@@ -431,7 +431,10 @@ impl Controller {
             && (updater::daily_check_due(last_attempt, now)
                 || self.retry_at.is_some_and(|at| now >= at))
     }
-    pub fn publish(&mut self, webview: &wry::WebView) {
+    pub fn publish(&mut self, webview: &super::webview::VisibleWebView) {
+        if !webview.is_active() {
+            return;
+        }
         if let Ok(state) = serde_json::to_string(&self.view) {
             let _ = webview.evaluate_script(&format!("window.receiveUpdateState?.({state});"));
         }

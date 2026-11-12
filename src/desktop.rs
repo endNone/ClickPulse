@@ -17,6 +17,7 @@ mod edit_menu;
 mod ipc;
 mod refresh;
 mod updates;
+mod webview;
 mod window;
 use ipc::Request;
 use refresh::SnapshotGate;
@@ -30,6 +31,7 @@ use tray_icon::{
     Icon, TrayIconBuilder,
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
 };
+use webview::VisibleWebView;
 #[cfg(target_os = "windows")]
 use window::update_windows_region;
 use window::{
@@ -44,6 +46,7 @@ enum UiEvent {
     Menu(MenuEvent),
     Snapshot {
         id: u64,
+        compact: bool,
         result: std::result::Result<String, String>,
     },
     SportSample {
@@ -311,6 +314,7 @@ pub fn run(
         use wry::WebViewBuilderExtUnix;
         builder.build_gtk(window.default_vbox().expect("Tao GTK container"))?
     };
+    let webview = VisibleWebView::new(webview, !options.background);
     let menu = Menu::new();
     let show = MenuItem::new(locale.text("native.open"), true, None);
     let mini = MenuItem::new(locale.text("action.mini"), true, None);
@@ -391,8 +395,11 @@ pub fn run(
         if !matches!(*flow, ControlFlow::ExitWithCode(_)) {
             *flow = ControlFlow::WaitUntil(next_refresh);
         }
-        let mut refresh = false;
-        let mut view_changed = false;
+        let previous_compact = preferences.compact;
+        let previously_active = webview.is_active();
+        webview.set_active(visible && window.is_visible() && !window.is_minimized());
+        let mut refresh = !previously_active && webview.is_active();
+        let mut view_changed = refresh;
         match event {
             Event::UserEvent(UiEvent::Update(event)) => {
                 if updates.receive(event) {
@@ -452,14 +459,22 @@ pub fn run(
                     let _ = webview.evaluate_script(&script);
                 }
             }
-            Event::UserEvent(UiEvent::Snapshot { id, result }) => {
+            Event::UserEvent(UiEvent::Snapshot {
+                id,
+                compact,
+                result,
+            }) => {
                 if let Some(rerun) = snapshots.complete(id) {
                     refresh = rerun;
-                    if ready && visible {
+                    if compact != preferences.compact {
+                        refresh = true;
+                    } else if ready && webview.is_active() {
                         match result {
                             Ok(json) => {
-                                let _ =
-                                    webview.evaluate_script(&format!("window.receive({json});"));
+                                let _ = webview.evaluate_script(&format!(
+                                    "window.{}({json});",
+                                    if compact { "receiveMini" } else { "receive" }
+                                ));
                             }
                             Err(error) => {
                                 eprintln!("error.stats: {error}");
@@ -518,6 +533,7 @@ pub fn run(
                         }
                         clickpulse::presentation::CloseAction::Quit => *flow = ControlFlow::Exit,
                         clickpulse::presentation::CloseAction::Hide => {
+                            webview.suspend();
                             window.set_visible(false);
                             visible = false;
                             view_changed = true;
@@ -525,6 +541,7 @@ pub fn run(
                     }
                     #[cfg(target_os = "macos")]
                     {
+                        webview.suspend();
                         window.set_visible(false);
                         visible = false;
                         view_changed = true;
@@ -556,6 +573,7 @@ pub fn run(
                     view_changed = true;
                     refresh = true;
                 } else if event.id == hide.id() {
+                    webview.suspend();
                     window.set_visible(false);
                     visible = false;
                     view_changed = true;
@@ -648,7 +666,10 @@ pub fn run(
                             window.drag_window().ok();
                         }
                         #[cfg(any(target_os = "windows", target_os = "linux"))]
-                        Request::Minimize {} => window.set_minimized(true),
+                        Request::Minimize {} => {
+                            webview.suspend();
+                            window.set_minimized(true);
+                        }
                         #[cfg(any(target_os = "windows", target_os = "linux"))]
                         Request::Maximize {} => {
                             if !layout.compact {
@@ -683,6 +704,7 @@ pub fn run(
                                 if action == clickpulse::presentation::CloseAction::Quit {
                                     *flow = ControlFlow::Exit;
                                 } else {
+                                    webview.suspend();
                                     window.set_visible(false);
                                     visible = false;
                                     view_changed = true;
@@ -695,6 +717,7 @@ pub fn run(
                             view_changed = true;
                         }
                         Request::Hide {} => {
+                            webview.suspend();
                             window.set_visible(false);
                             visible = false;
                             view_changed = true;
@@ -918,6 +941,7 @@ pub fn run(
                                     let _ = webview.evaluate_script("window.requestClose();");
                                 }
                                 clickpulse::presentation::CloseAction::Hide if !demo => {
+                                    webview.suspend();
                                     window.set_visible(false);
                                     visible = false;
                                     view_changed = true;
@@ -936,7 +960,8 @@ pub fn run(
             }
             Event::MainEventsCleared if Instant::now() >= next_refresh => {
                 refresh = true;
-                next_refresh = Instant::now() + Duration::from_millis(500);
+                next_refresh =
+                    Instant::now() + refresh::interval(webview.is_active(), preferences.compact);
                 let now = chrono::Utc::now().timestamp();
                 if ready
                     && data_job.is_none()
@@ -978,11 +1003,25 @@ pub fn run(
                     // Close the renderer after pending input has been saved.
                     // The controller/environment then drop on normal return.
                     unsafe {
-                        webview.controller().Close().ok();
+                        webview.inner.controller().Close().ok();
                     }
                 }
             }
             _ => {}
+        }
+        // Reopening restores the latest state once, including results received hidden.
+        let active = visible && window.is_visible() && !window.is_minimized();
+        if active && !webview.is_active() {
+            view_changed = true;
+            refresh = true;
+        }
+        webview.set_active(active);
+        if preferences.compact != previous_compact {
+            snapshots.invalidate();
+            sport_samples.invalidate();
+        }
+        if view_changed {
+            next_refresh = Instant::now() + refresh::interval(active, preferences.compact);
         }
         // A requested Quit waits for a definite commit/rollback without blocking
         // the event loop or dropping the operation's destination lock.
@@ -1042,7 +1081,11 @@ pub fn run(
             quit.set_text(locale.text("native.quit"));
             let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
             if ready {
-                let _ = webview.evaluate_script(&format!("window.receiveView({view});"));
+                let _ = webview.evaluate_script(&format!(
+                    "window.receiveView({view});window.receiveDataBusy?.({});",
+                    data_job.is_some()
+                ));
+                updates.publish(&webview);
                 // Launch-at-login can finish loading while hidden. Keep the
                 // recovery notice until the user actually opens a window.
                 if visible && let Some(path) = preferences_recovery.take() {
@@ -1064,16 +1107,24 @@ pub fn run(
             {
                 update_status(&tray, &pause, locale, source_mode, rt.is_paused(), &capture);
             }
-            if visible && data_job.is_none() {
+            if webview.is_active() && data_job.is_none() {
                 if let Some(rt) = &runtime {
                     if let Some(id) = snapshots.begin() {
                         let proxy = snapshot_proxy.clone();
-                        match rt.request_snapshot_in_timezone(preferences.timezone, move |result| {
+                        let compact = preferences.compact;
+                        let reply = move |result: anyhow::Result<String>| {
                             let _ = proxy.send_event(UiEvent::Snapshot {
                                 id,
+                                compact,
                                 result: result.map_err(|error| format!("{error:#}")),
                             });
-                        }) {
+                        };
+                        let result = if compact {
+                            rt.request_mini_snapshot(preferences.timezone, reply)
+                        } else {
+                            rt.request_snapshot_in_timezone(preferences.timezone, reply)
+                        };
+                        match result {
                             Ok(()) => {}
                             Err(error) => {
                                 snapshots.complete(id);
@@ -1096,6 +1147,9 @@ pub fn run(
                     }
                 }
             }
+        }
+        if !matches!(*flow, ControlFlow::ExitWithCode(_)) {
+            *flow = ControlFlow::WaitUntil(next_refresh);
         }
     };
     #[cfg(target_os = "windows")]
@@ -1151,12 +1205,12 @@ fn pause_label(locale: Locale, source_mode: bool, paused: bool) -> String {
         "action.pause"
     })
 }
-fn report_error(webview: &wry::WebView, locale: Locale, key: &str, error: &anyhow::Error) {
+fn report_error(webview: &VisibleWebView, locale: Locale, key: &str, error: &anyhow::Error) {
     eprintln!("{key}: {error:#}");
     toast(webview, &locale.text(key));
 }
 
-fn toast(webview: &wry::WebView, message: &str) {
+fn toast(webview: &VisibleWebView, message: &str) {
     if let Ok(json) = serde_json::to_string(message) {
         let _ = webview.evaluate_script(&format!("window.toast({json});"));
     }

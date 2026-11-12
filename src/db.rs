@@ -252,6 +252,19 @@ impl EventDb {
         Ok(counts)
     }
 
+    pub fn today_in_timezone(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<Counts> {
+        crate::timezone::today_counts(
+            &self.conn,
+            now,
+            zone,
+            "SELECT bucket,dev,cnt FROM minutes WHERE bucket>=?1 AND bucket<=?2 UNION ALL SELECT bucket,dev,cnt FROM legacy_minutes WHERE bucket>=?1 AND bucket<=?2",
+        )
+    }
+
     pub fn lifetime(&self) -> Result<Counts> {
         self.query_counts("SELECT dev,cnt FROM totals", [])
     }

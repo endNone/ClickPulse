@@ -61,6 +61,32 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   return {window,get,root,context,intervals,settingsLinks,jumpTo(id){settingsLinks.find(b=>b.dataset.settingsSection===id).fire();},setTime(value){now=value;},selectRange(days){ranges.find(button=>Number(button.dataset.range)===days).fire();},navigate(page){nav.find(button=>button.dataset.page===page).fire();}};
 }
 
+test('Mini-only startup accepts counts without history and preserves the full snapshot across expansion',()=>{
+  const a=app();a.window.receiveView({compact:true});
+  const mini={timezone:'system',today:{keyboard:12,mouse:3},capture:{listening:true},paused:false,source_mode:false,demo:false};
+  a.window.receiveMini(mini);
+  assert.equal(a.get('mini-today').textContent,'15');
+  a.window.receivePaused(true);assert.equal(a.get('mini-pause-label').textContent,'Resume');
+  a.window.receiveView({compact:false});
+  const full=snapshot();a.window.receive(full);
+  const today=a.get('today').textContent;
+  a.window.receiveView({compact:true});a.window.receiveMini({...mini,today:{keyboard:100,mouse:2}});
+  assert.equal(a.get('mini-today').textContent,'102');
+  a.window.receiveView({compact:false});
+  assert.equal(a.get('today').textContent,today);
+  a.window.receiveMini({...mini,today:{keyboard:999,mouse:2}});
+  assert.equal(a.get('today').textContent,today);
+});
+
+test('Mini ignores stale timezone results and needs no full snapshot to show errors',()=>{
+  const a=app();a.window.receiveView({compact:true,timezone:'Asia/Shanghai'});
+  const mini={timezone:'Asia/Shanghai',today:{keyboard:7,mouse:1},capture:{listening:false,error:'capture failed'},paused:false};
+  a.window.receiveMini(mini);assert.equal(a.get('mini-today').textContent,'8');
+  a.window.receiveMini({...mini,timezone:'system',today:{keyboard:999,mouse:0}});
+  assert.equal(a.get('mini-today').textContent,'8');
+  assert.equal(a.get('mini-status').textContent,messages.en['status.recording_error']);
+});
+
 test('Sport polls only in enabled visible Mini windows and discards historical or resume bursts',()=>{
   const a=app(),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
   a.window.receive(snapshot());assert.equal(a.intervals.size,0);
