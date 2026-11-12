@@ -135,7 +135,14 @@ pub fn run(
         preferences.compact = false;
     }
     #[allow(unused_mut)]
-    let mut event_loop = EventLoopBuilder::<UiEvent>::with_user_event().build();
+    let mut event_builder = EventLoopBuilder::<UiEvent>::with_user_event();
+    #[cfg(target_os = "linux")]
+    if profile_lock.is_some() {
+        use tao::platform::unix::EventLoopBuilderExtUnix;
+        event_builder.with_app_id("app.clickpulse.desktop");
+    }
+    #[allow(unused_mut)]
+    let mut event_loop = event_builder.build();
     #[cfg(target_os = "windows")]
     event_loop.set_device_event_filter(tao::event_loop::DeviceEventFilter::Always);
     #[cfg(target_os = "windows")]
