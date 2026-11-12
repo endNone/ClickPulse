@@ -147,6 +147,10 @@ pub(super) fn set_compact(
         restore_full_window(window, layout.full_size, layout.full_position);
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         window.set_maximized(layout.full_maximized);
+        // Tao's GTK maximize request snapshots the pre-request resizable flag.
+        // Reapply it after that request, or returning from Mini disables resize.
+        #[cfg(target_os = "linux")]
+        window.set_resizable(true);
     }
     layout.compact = compact;
     #[cfg(target_os = "windows")]
