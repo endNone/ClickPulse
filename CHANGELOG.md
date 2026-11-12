@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Keep daily/manual update checks for Scoop installations, but direct installation through `scoop update clickpulse` and reject in-app replacement of Scoop-managed program files, including custom roots and `current` junctions.
+- Add Scoop `autoupdate` rules backed by published checksums and verify their output with Scoop's actual update engine. The existing release-to-manifest script preserves these rules.
+
 ## 0.2.1 · 2026-11-11
 
 - Add **Check for updates** in Settings and a default-on daily check with a saved last-attempt time and an opt-out. Downloading and installation always require **Update & restart**.

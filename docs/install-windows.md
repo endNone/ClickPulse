@@ -38,6 +38,8 @@ After startup, check the recording status and tray icon. Use the physical keyboa
 
 Starting with 0.2.1, use **Settings → Application → Check for updates**, then **Update & restart** when offered. Daily checks are enabled by default and can be turned off. Upgrading from the published 0.2.0 or earlier requires the manual steps below once to obtain the updater.
 
+For a Scoop installation, quit ClickPulse and use `scoop update clickpulse` instead. The next App release enforces this in Settings and the installer, while retaining daily/manual checks; published 0.2.1 does not yet enforce it. See [package-manager updates](package-managers.md#windows-scoop-bucket).
+
 Check the running build before testing a fix with `ClickPulse.exe --version`, for example **clickpulse 0.2.1 (78)**. The number in parentheses is the internal build. The sidebar shows only the public version. Different preview builds can share the public version and ZIP filename.
 
 Older builds only show `0.1.0` in the app. For those builds, inspect **ClickPulse.exe → Properties → Details → File version** (for example `0.1.0.49`), or read `internal_build` and `source_revision` in the adjacent `build-manifest.json`. Confirm the executable belongs to the folder you just extracted; downloading a package or merging a source fix does not update an already running copy.

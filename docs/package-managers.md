@@ -27,6 +27,8 @@ brew uninstall --cask endnone/clickpulse/clickpulse
 
 `--greedy` includes this Cask even though the App also offers its own updater. Prefer Homebrew updates for a Homebrew installation so its recorded version stays consistent. Updates can require refreshing the existing Input Monitoring grant.
 
+The Cask's `auto_updates true` declares that the App supports its own updater; it does not synchronize Homebrew's installed-version receipt after an in-app update.
+
 ## Windows: Scoop bucket
 
 With [Scoop](https://scoop.sh) installed, run this in PowerShell:
@@ -52,6 +54,10 @@ scoop uninstall clickpulse
 
 Prefer Scoop updates for a Scoop installation so its version directory and metadata stay consistent. If you change the installed program location, re-enable Launch at login from the new copy.
 
+The commands and in-app guidance assume the usual per-user Scoop installation. If you installed globally with `--global`, update from an elevated terminal with `scoop update clickpulse --global` instead.
+
+The next App release detects Scoop-owned installations, including custom roots and `current` junctions. Daily and manual checks remain available, but Settings instructs you to quit ClickPulse and run `scoop update clickpulse`; the App cannot download or replace its own Scoop-managed files. The already published 0.2.1 package predates this protection: use Scoop for its updates as described above.
+
 ## Maintainer: keep the channels current
 
 After publishing a new stable Release, download and validate its complete candidate, then update both manifests from those verified files:
@@ -62,6 +68,8 @@ python3 scripts/update_distribution.py --version X.Y.Z --packages /path/to/candi
 
 Review `Casks/clickpulse.rb` and `bucket/clickpulse.json`, verify the versioned downloads are public, and commit/push under the maintainer's personal identity. The script checks all three package hashes before changing either manifest and never publishes automatically. Package-manager versions follow the latest **published** stable release, which can differ from development source versions.
 
-The **Package manager installation** workflow tests actual Homebrew installation/removal on Apple Silicon and Intel runners, plus Scoop installation, payload hashes, command, shortcut and removal on Windows x64. It does not disable system protection or claim Gatekeeper/Smart App Control approval.
+The Scoop manifest also supplies `checkver` and `autoupdate` rules for bucket-maintenance tools such as Extras' Excavator. These derive the versioned ZIP URL and extraction directory, then read the matching hash from the release's `SHA256SUMS.txt`. They update package metadata, not the running App, and do not schedule a bot in this personal bucket. The verified release-sync script above remains the maintainer's publication workflow and preserves these rules.
+
+The **Package manager installation** workflow tests actual Homebrew installation/removal on Apple Silicon and Intel runners, plus Scoop installation, payload hashes, command, shortcut and removal on Windows x64. It also runs Scoop's real autoupdate engine on a stale temporary manifest and compares the generated URL, hash and extraction directory with the verified public release. It does not disable system protection or claim Gatekeeper/Smart App Control approval.
 
 Official Homebrew inclusion requires passing its [Gatekeeper requirements](https://docs.brew.sh/Acceptable-Casks). Broader Windows trust needs a [trusted code signature](https://learn.microsoft.com/windows/apps/develop/smart-app-control/code-signing-for-smart-app-control). Signing and Apple notarization remain separate release work; package-manager distribution alone does not provide them.

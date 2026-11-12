@@ -3,6 +3,12 @@
     "description": "Local keyboard and mouse activity statistics",
     "homepage": "https://github.com/endNone/ClickPulse",
     "license": "GPL-3.0-or-later",
+    "notes": [
+        "Microsoft Edge WebView2 Runtime is required: https://developer.microsoft.com/microsoft-edge/webview2/",
+        "ClickPulse is unsigned. Scoop does not bypass Smart App Control or error 4551.",
+        "Quit ClickPulse before scoop update clickpulse. User data is kept outside the package folder.",
+        "Installation guide: https://github.com/endNone/ClickPulse/blob/main/docs/install-windows.md"
+    ],
     "architecture": {
         "64bit": {
             "url": "https://github.com/endNone/ClickPulse/releases/download/v0.2.1/ClickPulse-0.2.1-windows-x64.zip",
@@ -25,10 +31,15 @@
     "checkver": {
         "github": "https://github.com/endNone/ClickPulse"
     },
-    "notes": [
-        "Microsoft Edge WebView2 Runtime is required: https://developer.microsoft.com/microsoft-edge/webview2/",
-        "ClickPulse is unsigned. Scoop does not bypass Smart App Control or error 4551.",
-        "Quit ClickPulse before scoop update clickpulse. User data is kept outside the package folder.",
-        "Installation guide: https://github.com/endNone/ClickPulse/blob/main/docs/install-windows.md"
-    ]
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/endNone/ClickPulse/releases/download/v$version/ClickPulse-$version-windows-x64.zip",
+                "extract_dir": "ClickPulse-$version-windows-x64"
+            }
+        },
+        "hash": {
+            "url": "$baseurl/SHA256SUMS.txt"
+        }
+    }
 }

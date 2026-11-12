@@ -1,6 +1,46 @@
 use super::*;
 use std::{process::Command, time::Instant};
 
+const SCOOP_UPDATE: &str = "scoop update clickpulse";
+
+/// Resolve `current` junctions before inspecting ownership. Scoop permits custom
+/// roots (including global installs), so a substring containing `scoop` is not
+/// sufficient. Its version directory also carries two manager-owned receipts.
+fn is_scoop_installation(root: &Path) -> bool {
+    let named = |path: &Path, name: &str| {
+        path.file_name()
+            .is_some_and(|part| part.to_string_lossy().eq_ignore_ascii_case(name))
+    };
+    let Some(app) = root.parent() else {
+        return false;
+    };
+    let Some(apps) = app.parent() else {
+        return false;
+    };
+    if !named(app, "clickpulse") || !named(apps, "apps") {
+        return false;
+    }
+    if apps.parent().is_some_and(|parent| named(parent, "scoop")) {
+        return true;
+    }
+    let receipt = |name: &str| -> Option<serde_json::Value> {
+        let bytes = read_limited(File::open(root.join(name)).ok()?, 65536).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    };
+    receipt("install.json").is_some_and(|value| value["architecture"] == "64bit")
+        && receipt("manifest.json")
+            .is_some_and(|value| value["homepage"] == "https://github.com/endNone/ClickPulse")
+}
+
+/// UI guidance is independent of whether the installation is writable.
+pub fn package_update_command() -> Option<&'static str> {
+    if std::env::consts::OS != "windows" {
+        return None;
+    }
+    let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
+    is_scoop_installation(exe.parent()?).then_some(SCOOP_UPDATE)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Installation {
     pub root: PathBuf,
@@ -18,6 +58,10 @@ impl Installation {
         ensure!(
             self.root.is_absolute() && self.root.canonicalize()? == self.root,
             "Invalid installation path"
+        );
+        ensure!(
+            self.target != Target::WindowsX64 || !is_scoop_installation(&self.root),
+            "This installation is managed by Scoop; run {SCOOP_UPDATE}"
         );
         ensure!(
             self.executable().is_file(),

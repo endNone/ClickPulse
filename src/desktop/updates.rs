@@ -38,6 +38,37 @@ pub(super) enum CheckSource {
 mod tests {
     use super::*;
 
+    #[test]
+    fn scoop_updates_keep_checks_and_reminders_but_reject_install_requests() {
+        let mut controller = Controller::new(false);
+        controller.automatic_allowed = true;
+        controller.view.update_command = Some("scoop update clickpulse");
+        // Even a stale installable result must not override package ownership.
+        controller.installation = Ok(Installation {
+            root: PathBuf::from("unused"),
+            target: Target::WindowsX64,
+        });
+        assert!(controller.automatic_due(true, None, 100_000));
+        assert!(controller.begin_check(100_000, CheckSource::Automatic));
+        controller.receive(Event::Checked {
+            id: controller.id,
+            result: Ok(Some(Box::new(Candidate::placeholder("9.9.9")))),
+        });
+        assert_eq!(controller.view.status, "available");
+        assert!(!controller.view.can_install);
+        assert!(
+            controller
+                .install_target()
+                .unwrap_err()
+                .to_string()
+                .contains("Scoop")
+        );
+        let mut notices = updater::UpdateNotifications::default();
+        assert!(controller.sync_notifications(&mut notices));
+        assert_eq!(notices.pending(), Some("9.9.9"));
+        assert!(controller.guard.is_none());
+    }
+
     fn failed(controller: &mut Controller, now: i64) {
         assert!(controller.begin_check(now, CheckSource::Automatic));
         controller.receive(Event::Checked {
@@ -302,6 +333,7 @@ struct View {
     status: &'static str,
     version: Option<String>,
     can_install: bool,
+    update_command: Option<&'static str>,
     /// False in demo, read-only source and independent sessions.
     automatic: bool,
     received: u64,
@@ -336,6 +368,7 @@ impl Controller {
                 status: "idle",
                 version: None,
                 can_install: false,
+                update_command: allowed.then(updater::package_update_command).flatten(),
                 automatic: allowed,
                 received: 0,
                 total: 0,
@@ -479,13 +512,20 @@ impl Controller {
         }
         result
     }
+    fn install_target(&self) -> anyhow::Result<Installation> {
+        anyhow::ensure!(
+            self.view.update_command.is_none(),
+            "Use Scoop to update this installation"
+        );
+        self.installation.clone().map_err(anyhow::Error::msg)
+    }
     fn start_install(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> anyhow::Result<()> {
         anyhow::ensure!(!self.busy(), "Update already in progress");
+        let installation = self.install_target()?;
         let candidate = self
             .candidate
             .clone()
             .ok_or_else(|| anyhow::anyhow!("Check for an update first"))?;
-        let installation = self.installation.clone().map_err(anyhow::Error::msg)?;
         self.id += 1;
         let id = self.id;
         self.view.status = "downloading";
@@ -526,7 +566,8 @@ impl Controller {
                     (self.failures, self.retry_at) = (0, None);
                     self.view.version = Some(candidate.version.clone());
                     self.view.status = "available";
-                    self.view.can_install = self.installation.is_ok();
+                    self.view.can_install =
+                        self.installation.is_ok() && self.view.update_command.is_none();
                     self.candidate = Some(candidate);
                 }
                 Ok(None) => {

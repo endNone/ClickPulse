@@ -262,7 +262,10 @@
     "update.updating": "正在更新…",
     "update.failed": "更新失败，请检查网络后重试。",
     "update.installed": "已更新至 {version}",
-    "update.failed_last": "上次更新未完成，请重试。"
+    "update.failed_last": "上次更新未完成，请重试。",
+    "update.scoop": "由 Scoop 管理。请退出 ClickPulse，然后运行：{command}",
+    "update.automatic_scoop": "App 运行时每 24 小时检查一次，请通过 Scoop 安装更新。",
+    "update.found_scoop": "发现新版本 {version}。请退出 ClickPulse，然后运行：{command}"
   },
   "en": {
     "nav.main": "Main navigation",
@@ -527,7 +530,10 @@
     "update.updating": "Updating…",
     "update.failed": "Could not update. Check your connection and try again.",
     "update.installed": "Updated to {version}",
-    "update.failed_last": "The last update did not finish. Please try again."
+    "update.failed_last": "The last update did not finish. Please try again.",
+    "update.scoop": "Managed by Scoop. Quit ClickPulse, then run: {command}",
+    "update.automatic_scoop": "Check every 24 hours while the app is running. Install updates through Scoop.",
+    "update.found_scoop": "Version {version} is available. Quit ClickPulse, then run: {command}"
   },
   "zh-TW": {
     "nav.main": "主導覽",
@@ -792,7 +798,10 @@
     "update.updating": "正在更新…",
     "update.failed": "更新失敗，請檢查網路後重試。",
     "update.installed": "已更新至 {version}",
-    "update.failed_last": "上次更新未完成，請重試。"
+    "update.failed_last": "上次更新未完成，請重試。",
+    "update.scoop": "由 Scoop 管理。請結束 ClickPulse，然後執行：{command}",
+    "update.automatic_scoop": "App 執行時每 24 小時檢查一次，請透過 Scoop 安裝更新。",
+    "update.found_scoop": "發現新版本 {version}。請結束 ClickPulse，然後執行：{command}"
   },
   "ja": {
     "nav.main": "メインナビゲーション",
@@ -1057,7 +1066,10 @@
     "update.updating": "更新中…",
     "update.failed": "更新できませんでした。接続を確認して再試行してください。",
     "update.installed": "{version} に更新しました",
-    "update.failed_last": "前回の更新が完了していません。再試行してください。"
+    "update.failed_last": "前回の更新が完了していません。再試行してください。",
+    "update.scoop": "Scoop で管理されています。ClickPulse を終了してから実行してください：{command}",
+    "update.automatic_scoop": "アプリの起動中に24時間ごとに確認します。更新は Scoop でインストールしてください。",
+    "update.found_scoop": "新しいバージョン {version} があります。ClickPulse を終了してから実行してください：{command}"
   },
   "ko": {
     "nav.main": "기본 탐색",
@@ -1322,7 +1334,10 @@
     "update.updating": "업데이트 중…",
     "update.failed": "업데이트하지 못했습니다. 연결을 확인하고 다시 시도하세요.",
     "update.installed": "{version}(으)로 업데이트했습니다",
-    "update.failed_last": "지난 업데이트가 완료되지 않았습니다. 다시 시도하세요."
+    "update.failed_last": "지난 업데이트가 완료되지 않았습니다. 다시 시도하세요.",
+    "update.scoop": "Scoop에서 관리합니다. ClickPulse를 종료한 후 실행하세요: {command}",
+    "update.automatic_scoop": "앱 실행 중 24시간마다 확인합니다. 업데이트는 Scoop으로 설치하세요.",
+    "update.found_scoop": "새 버전 {version}이 있습니다. ClickPulse를 종료한 후 실행하세요: {command}"
   },
   "fr": {
     "nav.main": "Navigation principale",
@@ -1587,7 +1602,10 @@
     "update.updating": "Mise à jour…",
     "update.failed": "Échec de la mise à jour. Vérifiez la connexion puis réessayez.",
     "update.installed": "Mise à jour vers {version} effectuée",
-    "update.failed_last": "La dernière mise à jour ne s’est pas terminée. Réessayez."
+    "update.failed_last": "La dernière mise à jour ne s’est pas terminée. Réessayez.",
+    "update.scoop": "Géré par Scoop. Quittez ClickPulse, puis exécutez : {command}",
+    "update.automatic_scoop": "Vérification toutes les 24 heures pendant l’exécution de l’application. Installez les mises à jour avec Scoop.",
+    "update.found_scoop": "La version {version} est disponible. Quittez ClickPulse, puis exécutez : {command}"
   },
   "de": {
     "nav.main": "Hauptnavigation",
@@ -1852,7 +1870,10 @@
     "update.updating": "Update läuft…",
     "update.failed": "Update fehlgeschlagen. Verbindung prüfen und erneut versuchen.",
     "update.installed": "Auf {version} aktualisiert",
-    "update.failed_last": "Das letzte Update wurde nicht abgeschlossen. Bitte erneut versuchen."
+    "update.failed_last": "Das letzte Update wurde nicht abgeschlossen. Bitte erneut versuchen.",
+    "update.scoop": "Von Scoop verwaltet. Beende ClickPulse und führe dann aus: {command}",
+    "update.automatic_scoop": "Prüfung alle 24 Stunden, während die App läuft. Installiere Updates über Scoop.",
+    "update.found_scoop": "Version {version} ist verfügbar. Beende ClickPulse und führe dann aus: {command}"
   },
   "es": {
     "nav.main": "Navegación principal",
@@ -2117,6 +2138,9 @@
     "update.updating": "Actualizando…",
     "update.failed": "No se pudo actualizar. Comprueba la conexión e inténtalo de nuevo.",
     "update.installed": "Actualizado a {version}",
-    "update.failed_last": "La última actualización no terminó. Inténtalo de nuevo."
+    "update.failed_last": "La última actualización no terminó. Inténtalo de nuevo.",
+    "update.scoop": "Administrado por Scoop. Cierra ClickPulse y ejecuta: {command}",
+    "update.automatic_scoop": "Se comprueba cada 24 horas mientras la aplicación está abierta. Instala las actualizaciones con Scoop.",
+    "update.found_scoop": "La versión {version} está disponible. Cierra ClickPulse y ejecuta: {command}"
   }
 }

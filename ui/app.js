@@ -29,34 +29,36 @@ const send=(action,values={})=>window.ipc?.postMessage(JSON.stringify({action,..
 let data=null,page='overview',range=14,toastTimer;
 let recordingPaused=null;
 let dataOperationBusy=false;
-let updateState={status:'idle',current:'',version:null,can_install:false,automatic:true,received:0,total:0};
+let updateState={status:'idle',current:'',version:null,can_install:false,update_command:null,automatic:true,received:0,total:0};
 const updateInstalling=()=>['downloading','verifying','preparing','installing'].includes(updateState.status);
 function renderUpdateState(){
   const button=$('check-updates'),status=$('update-status'),details=$('update-details');
   if(!button||!status||!details)return;
-  const state=updateState,available=state.status==='available';
-  const key={checking:'update.checking',current:'update.current',available:state.can_install?'update.available':'update.manual',error:'update.failed',verifying:'update.verifying',preparing:'update.preparing',installing:'update.restarting'}[state.status];
+  const state=updateState,available=state.status==='available',managed=!!state.update_command;
+  const key={checking:'update.checking',current:'update.current',available:managed||state.can_install?'update.available':'update.manual',error:'update.failed',verifying:'update.verifying',preparing:'update.preparing',installing:'update.restarting'}[state.status];
   const percent=state.total>0?Math.min(100,Math.floor(state.received/state.total*100)):0;
   const text=state.status==='downloading'?t('update.downloading',{percent}):key?t(key,{version:state.version||state.current}):state.current?t('update.version',{version:state.current}):'';
   setSelectableText(status,text);
+  const managedHint=$('update-managed');
+  if(managedHint){managedHint.hidden=!managed;setSelectableText(managedHint,managed?t('update.scoop',{command:state.update_command}):'');}
   // Demo, read-only and independent sessions cannot schedule checks or change
   // the installed app's preference, so show why the switch is unavailable.
   const scheduled=state.automatic!==false;
   const automatic=$('automatic-updates'),last=$('update-last-checked');
   if(automatic){automatic.checked=scheduled&&window.presentationView?.auto_check_updates!==false;automatic.disabled=!scheduled||updateInstalling();}
   const description=$('update-automatic-description'),unavailable=$('update-automatic-unavailable');
-  if(description&&unavailable){description.hidden=!scheduled;unavailable.hidden=scheduled;}
+  if(description&&unavailable){description.hidden=!scheduled;unavailable.hidden=scheduled;description.textContent=t(managed?'update.automatic_scoop':'update.automatic_description');}
   const checked=window.presentationView?.last_update_check;
   const valid=scheduled&&Number.isFinite(checked)&&Math.abs(checked)<=8640000000000;
   if(last){last.hidden=!valid;setSelectableText(last,valid?t('update.last_checked',{time:I.date(checked*1000,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}):'');}
-  button.textContent=t(state.status==='checking'?'update.checking':updateInstalling()?'update.updating':available?(state.can_install?'update.install':'update.download'):'update.check');
+  button.textContent=t(state.status==='checking'?'update.checking':updateInstalling()?'update.updating':available&&!managed?(state.can_install?'update.install':'update.download'):'update.check');
   button.disabled=dataOperationBusy||state.status==='checking'||updateInstalling();
   button.setAttribute('aria-busy',String(state.status==='checking'||updateInstalling()));
   details.hidden=!available&&state.status!=='error';
 }
 window.renderUpdatePreferences=renderUpdateState;
 window.receiveUpdateState=state=>{Object.assign(updateState,state);renderDataOperation();};
-window.receiveUpdateAvailable=version=>window.toast(t('update.found',{version}),8000);
+window.receiveUpdateAvailable=version=>window.toast(t(updateState.update_command?'update.found_scoop':'update.found',{version,command:updateState.update_command}),8000);
 // An ad-hoc signed update can leave macOS showing a stale, ineffective grant.
 let updatedThisLaunch=false;
 window.receiveUpdateNotice=notice=>{
@@ -66,7 +68,7 @@ window.receiveUpdateNotice=notice=>{
 };
 $('check-updates')?.addEventListener('click',()=>{
   if(dataOperationBusy||updateInstalling()||updateState.status==='checking')return;
-  send(updateState.status==='available'?(updateState.can_install?'install_update':'update_release'):'check_updates');
+  send(updateState.status==='available'&&!updateState.update_command?(updateState.can_install?'install_update':'update_release'):'check_updates');
 });
 $('update-details')?.addEventListener('click',event=>{event.preventDefault();send('update_release');});
 $('automatic-updates')?.addEventListener('change',event=>{

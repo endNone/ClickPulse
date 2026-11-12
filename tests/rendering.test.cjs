@@ -741,6 +741,27 @@ test('manual checks remain available and an offered update never installs withou
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'install_update'});
   }
 });
+test('Scoop-managed updates keep checks and localized guidance without sending install requests',()=>{
+  for(const locale of Object.keys(messages)){
+    const a=app('windows'),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+    a.window.receiveView({locale,language_preference:locale});
+    a.window.receiveUpdateState({status:'available',current:'0.2.1',version:'9.9.9',can_install:true,update_command:'scoop update clickpulse'});
+    assert.equal(a.get('check-updates').textContent,messages[locale]['update.check']);
+    assert.equal(a.get('update-managed').hidden,false);
+    assert.ok(a.get('update-managed').textContent.includes('scoop update clickpulse'));
+    assert.equal(a.get('update-automatic-description').textContent,messages[locale]['update.automatic_scoop']);
+    assert.equal(a.get('automatic-updates').disabled,false);
+    a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
+    a.get('update-details').fire();assert.deepEqual(sent.pop(),{action:'update_release'});
+    a.window.receiveUpdateAvailable('9.9.9');assert.ok(a.get('toast').textContent.includes('scoop update clickpulse'));
+    assert.equal(sent.length,0);
+    a.window.receiveUpdateState({status:'current'});assert.equal(a.get('update-managed').hidden,false);
+    a.window.receiveUpdateState({status:'available',can_install:true,update_command:null});
+    assert.equal(a.get('update-managed').hidden,true);
+    assert.equal(a.get('update-automatic-description').textContent,messages[locale]['update.automatic_description']);
+    a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'install_update'});
+  }
+});
 test('background failure keeps version copy and only explicit error states show failures',()=>{
   for(const locale of Object.keys(messages)){
     const a=app();a.window.receiveView({locale,language_preference:locale});

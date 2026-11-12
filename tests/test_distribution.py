@@ -43,6 +43,11 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(arch['extract_dir'], 'ClickPulse-9.8.7-windows-x64')
         self.assertTrue(arch['url'].endswith('/v9.8.7/ClickPulse-9.8.7-windows-x64.zip'))
         self.assertEqual(arch['hash'], hashes['windows-x64'])
+        original = json.loads(self.before[self.root/'bucket/clickpulse.json'])
+        self.assertEqual(scoop['autoupdate'], original['autoupdate'])
+        template = scoop['autoupdate']['architecture']['64bit']
+        for field in ['url', 'extract_dir']:
+            self.assertEqual(template[field].replace('$version', '9.8.7'), arch[field])
 
     def test_corrupt_package_changes_neither_manifest(self):
         (self.packages/'ClickPulse-9.8.7-windows-x64.zip').write_bytes(b'corrupt')

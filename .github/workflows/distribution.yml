@@ -85,6 +85,29 @@ jobs:
           $env:SCOOP = Join-Path $env:RUNNER_TEMP 'scoop'
           & ./.distribution-test/scoop-install/install.ps1 -ScoopDir $env:SCOOP
           if ($LASTEXITCODE -ne 0) { throw 'Scoop bootstrap failed' }
+      - name: Regenerate the Scoop manifest with its actual autoupdate engine
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:SCOOP = Join-Path $env:RUNNER_TEMP 'scoop'
+          $expected = Get-Content bucket/clickpulse.json -Raw | ConvertFrom-Json
+          $testDir = Join-Path $env:RUNNER_TEMP 'scoop-autoupdate'
+          New-Item -ItemType Directory -Force $testDir | Out-Null
+          $testFile = Join-Path $testDir 'clickpulse.json'
+          $stale = Get-Content bucket/clickpulse.json -Raw | ConvertFrom-Json
+          $stale.version = '0.0.0'
+          $stale.architecture.'64bit'.url = 'https://example.invalid/old.zip'
+          $stale.architecture.'64bit'.hash = '0' * 64
+          $stale.architecture.'64bit'.extract_dir = 'old'
+          $stale | ConvertTo-Json -Depth 20 | Set-Content $testFile
+          & (Join-Path $env:SCOOP 'apps/scoop/current/bin/checkver.ps1') -App clickpulse -Dir $testDir -Version $expected.version -Update -ThrowError
+          $actual = Get-Content $testFile -Raw | ConvertFrom-Json
+          if ($actual.version -ne $expected.version) { throw 'Autoupdate did not update the version' }
+          foreach ($field in @('url', 'hash', 'extract_dir')) {
+            if ($actual.architecture.'64bit'.$field -ne $expected.architecture.'64bit'.$field) {
+              throw "Autoupdate mismatch: $field"
+            }
+          }
+          Write-Output 'Scoop regenerated the current release URL, published checksum and extraction directory.'
       - name: Install and validate the actual Scoop package
         run: |
           $ErrorActionPreference = 'Stop'

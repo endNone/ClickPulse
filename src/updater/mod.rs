@@ -13,7 +13,8 @@ use std::{
 
 mod install;
 pub use install::{
-    ApplyGuard, Installation, Notice, apply_update, installation, launch_installer, take_notice,
+    ApplyGuard, Installation, Notice, apply_update, installation, launch_installer,
+    package_update_command, take_notice,
 };
 
 pub const RELEASES: &str = "https://github.com/endNone/ClickPulse/releases";

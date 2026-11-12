@@ -1,5 +1,91 @@
 use super::*;
 
+#[test]
+fn scoop_owned_version_and_current_directories_reject_in_app_replacement() {
+    let temp = tempfile::tempdir().unwrap();
+    for directory in [
+        "scoop/apps/clickpulse/0.2.1",
+        "SCOOP/APPS/ClickPulse/current",
+    ] {
+        let root = temp.path().join(directory);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("ClickPulse.exe"), b"original program").unwrap();
+        fs::write(root.join("WebView2Loader.dll"), b"loader").unwrap();
+        let install = Installation {
+            root: root.canonicalize().unwrap(),
+            target: Target::WindowsX64,
+        };
+        assert!(is_scoop_installation(&install.root));
+        assert!(
+            install
+                .check()
+                .unwrap_err()
+                .to_string()
+                .contains(SCOOP_UPDATE)
+        );
+        assert_eq!(
+            fs::read(root.join("ClickPulse.exe")).unwrap(),
+            b"original program"
+        );
+    }
+}
+
+#[test]
+fn custom_scoop_roots_are_identified_by_receipts_without_blocking_portable_copies() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("custom-tools/apps/clickpulse/0.2.1");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("ClickPulse.exe"), b"program").unwrap();
+    fs::write(root.join("WebView2Loader.dll"), b"loader").unwrap();
+    let install = Installation {
+        root: root.canonicalize().unwrap(),
+        target: Target::WindowsX64,
+    };
+    assert!(install.check().is_ok());
+    fs::write(
+        root.join("install.json"),
+        br#"{"architecture":"64bit","bucket":"extras"}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("manifest.json"),
+        br#"{"homepage":"https://github.com/endNone/ClickPulse"}"#,
+    )
+    .unwrap();
+    assert!(
+        install
+            .check()
+            .unwrap_err()
+            .to_string()
+            .contains(SCOOP_UPDATE)
+    );
+    // Scoop's current path resolves to the same version directory, including
+    // when the custom root itself contains no literal "scoop" component.
+    let current = root.parent().unwrap().join("current");
+    #[cfg(windows)]
+    {
+        let status = Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&current)
+            .arg(&root)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&root, &current).unwrap();
+    assert!(is_scoop_installation(&current.canonicalize().unwrap()));
+    fs::write(root.join("manifest.json"), b"invalid receipt").unwrap();
+    assert!(!is_scoop_installation(&install.root));
+    for directory in [
+        "scoop-downloads/ClickPulse",
+        "scoop/apps/another-app/0.2.1",
+        "Downloads/scoop/ClickPulse",
+    ] {
+        assert!(!is_scoop_installation(&temp.path().join(directory)));
+    }
+}
+
 fn windows_fixture() -> (tempfile::TempDir, Installation, PathBuf, Manifest) {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("installed");
