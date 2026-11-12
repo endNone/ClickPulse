@@ -2,6 +2,8 @@
 
 For **0.2.1 release · Windows 10/11 x64**. Download the portable ZIP from the [0.2.1 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1). No Setup installer is offered.
 
+Using Scoop? [Install from the maintainer's bucket](package-managers.md#windows-scoop-bucket) to download, verify, extract and add a Start menu shortcut in one command. WebView2 and Windows security requirements still apply.
+
 Ready-to-run packages need no Rust, Python, development tools or developer account. The Windows C runtime is included in the program; no separate Visual C++ package is needed. This package is unsigned. Use a complete package from a trusted source and compare it with `SHA256SUMS.txt`.
 
 ## Portable ZIP

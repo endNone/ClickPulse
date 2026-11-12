@@ -1,0 +1,116 @@
+name: Package manager installation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Casks/**'
+      - 'bucket/**'
+      - 'scripts/update_distribution.py'
+      - '.github/workflows/distribution.yml'
+  pull_request:
+    paths:
+      - 'Casks/**'
+      - 'bucket/**'
+      - 'scripts/update_distribution.py'
+      - '.github/workflows/distribution.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew:
+    name: Homebrew (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_ANALYTICS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install from the exact checked-out tap
+        run: |
+          brew tap endnone/clickpulse "$GITHUB_WORKSPACE"
+          brew style "$GITHUB_WORKSPACE/Casks/clickpulse.rb"
+          mkdir -p "$RUNNER_TEMP/ClickPulseApps"
+          brew install --cask --appdir="$RUNNER_TEMP/ClickPulseApps" endnone/clickpulse/clickpulse
+      - name: Verify installed version, architecture and signature
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, plistlib, platform, subprocess
+          app = pathlib.Path(os.environ['RUNNER_TEMP']) / 'ClickPulseApps/ClickPulse.app'
+          expected = json.loads(pathlib.Path('bucket/clickpulse.json').read_text())['version']
+          info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+          assert info['CFBundleShortVersionString'] == expected
+          arch = subprocess.check_output(['lipo', '-archs', str(app / 'Contents/MacOS/clickpulse')], text=True).strip()
+          assert arch == platform.machine(), arch
+          subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
+          print('Installed', expected, arch, 'with normal Homebrew quarantine behavior; GUI trust is not asserted.')
+          PY
+      - name: Uninstall without touching user data
+        run: |
+          mkdir -p "$HOME/Library/Application Support/ClickPulse"
+          echo keep > "$HOME/Library/Application Support/ClickPulse/distribution-test.txt"
+          brew uninstall --cask endnone/clickpulse/clickpulse
+          test -f "$HOME/Library/Application Support/ClickPulse/distribution-test.txt"
+          test ! -d "$RUNNER_TEMP/ClickPulseApps/ClickPulse.app"
+
+  scoop:
+    name: Scoop (Windows x64)
+    runs-on: windows-2025
+    timeout-minutes: 15
+    env:
+      SCOOP: ${{ runner.temp }}/scoop
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ScoopInstaller/Install
+          ref: 1e2f334083d609986d8c8bc9e31ae8e87c39fab4
+          path: .distribution-test/scoop-install
+          persist-credentials: false
+      - name: Bootstrap Scoop from the pinned official installer
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./.distribution-test/scoop-install/install.ps1 -ScoopDir $env:SCOOP
+          if ($LASTEXITCODE -ne 0) { throw 'Scoop bootstrap failed' }
+      - name: Install and validate the actual Scoop package
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scoop = Join-Path $env:SCOOP 'shims/scoop.ps1'
+          & $scoop bucket add clickpulse $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) { throw 'Bucket registration failed' }
+          & $scoop install clickpulse/clickpulse
+          if ($LASTEXITCODE -ne 0) { throw 'ClickPulse installation failed' }
+          $package = Join-Path $env:SCOOP 'apps/clickpulse/current'
+          $manifest = Get-Content (Join-Path $package 'build-manifest.json') -Raw | ConvertFrom-Json
+          $expected = (Get-Content bucket/clickpulse.json -Raw | ConvertFrom-Json).version
+          if ($manifest.version -ne $expected) { throw 'Version mismatch' }
+          foreach ($file in $manifest.files.PSObject.Properties) {
+            $actual = (Get-FileHash (Join-Path $package $file.Name) -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $file.Value) { throw "Payload hash mismatch: $($file.Name)" }
+          }
+          $version = & (Join-Path $package 'ClickPulse.exe') --version
+          if ($LASTEXITCODE -ne 0 -or $version -ne "clickpulse $expected ($($manifest.internal_build))") { throw 'Executable version mismatch' }
+          $shortcut = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs/Scoop Apps/ClickPulse.lnk'
+          if (!(Test-Path $shortcut)) { throw 'Start menu shortcut missing' }
+          $data = Join-Path $env:LOCALAPPDATA 'ClickPulse'
+          New-Item -ItemType Directory -Force $data | Out-Null
+          Set-Content (Join-Path $data 'distribution-test.txt') 'keep'
+          & $scoop uninstall clickpulse
+          if ($LASTEXITCODE -ne 0) { throw 'Uninstall failed' }
+          if (!(Test-Path (Join-Path $data 'distribution-test.txt'))) { throw 'Uninstall removed user data' }
+          if (Test-Path $package) { throw 'Package remained after uninstall' }
+          Write-Output 'Scoop install, payload hashes, command, shortcut and uninstall passed. Smart App Control approval and GUI rendering are separate.'

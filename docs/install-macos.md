@@ -1,8 +1,10 @@
-# Manual installation on macOS
+# macOS installation and updates
 
 For **0.2.1 · macOS 12 or later · Apple Silicon and Intel**. DMG and App ZIP packages for both architectures are available in the [0.2.1 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1). Both architectures pass builds and checks on their corresponding GitHub macOS runners. This guide covers first launch, Input Monitoring and updates.
 
 Check Apple menu → About This Mac: choose `macos-arm64` for an Apple M-series chip, or `macos-x64` for an Intel processor.
+
+Using Homebrew? [Install from the maintainer's Cask](package-managers.md#macos-homebrew-cask) to select your architecture and verify the download automatically. The first-launch and Input Monitoring steps below still apply.
 
 Using a built App requires no Rust, Python or other developer tools, and no developer account or membership purchase. The App is locally ad-hoc signed; it has not been signed with Apple Developer ID or notarized.
 

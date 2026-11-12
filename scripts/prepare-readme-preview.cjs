@@ -6,6 +6,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
+const packageSection = fs.readFileSync(path.join(root, 'Cargo.toml'), 'utf8')
+  .split(/^\[package\]\s*$/m)[1]?.split(/^\[/m)[0] || '';
+const version = packageSection.match(/^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$/m)?.[1];
+assert(version, 'Cargo.toml must declare a stable package version for screenshots');
 const output = path.resolve(process.argv[2] || path.join(root, 'dist', 'readme-preview'));
 const K = require('../ui/keyboard.js');
 let seed = 0xC11C2026;
@@ -131,7 +135,7 @@ const boot = `(() => {
   document.fonts.ready.then(() => document.documentElement.dataset.previewReady='true');
 })();`;
 let html = fs.readFileSync(path.join(root,'ui/index.html'),'utf8')
-  .replaceAll('__LOCALE__','en').replaceAll('__PLATFORM__','macos').replaceAll('__THEME__','blue').replaceAll('__VERSION__','0.1.0')
+  .replaceAll('__LOCALE__','en').replaceAll('__PLATFORM__','macos').replaceAll('__THEME__','blue').replaceAll('__VERSION__',version)
   .replaceAll('__BRAND_MARK__','data:image/png;base64,'+fs.readFileSync(path.join(root,'assets/clickpulse-mark-blue-transparent-v1-1024.png')).toString('base64'))
   .replace('/*__MESSAGES__*/',fs.readFileSync(path.join(root,'ui/locales.json'),'utf8'))
   .replace('/*__STYLE__*/',fontCSS+'\n'+styles.map(name=>fs.readFileSync(path.join(root,'ui',name),'utf8')).join('\n')+'\n'+captureCSS)

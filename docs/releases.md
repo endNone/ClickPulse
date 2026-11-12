@@ -1,6 +1,6 @@
 # Builds and releases
 
-GitHub Actions checks and packages ClickPulse on hosted Mac and Windows machines. The release workflow creates an **unpublished preview draft** for maintainer review. Publishing is a separate manual step. The [0.2.1 release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1) uses internal build **78**. Source, binaries and checksums identify the same tagged revision. Check the running app's complete version and package manifest when testing a fix. Every candidate runs checks and packaging on hosted Apple Silicon, Intel Mac and Windows x64 runners. Hardware-specific validation is recorded separately in the Windows checklist and roadmap.
+GitHub Actions checks and packages ClickPulse on hosted Mac and Windows machines. The release workflow produces a **verified candidate artifact** for maintainer review. Wuhan Zhang (`endNone`) creates and publishes Releases with the personal GitHub account; automation never creates a bot-authored Release. The [0.2.1 release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1) uses internal build **78**. Source, binaries and checksums identify the same tagged revision. Check the running app's complete version and package manifest when testing a fix. Every candidate runs checks and packaging on hosted Apple Silicon, Intel Mac and Windows x64 runners. Hardware-specific validation is recorded separately in the Windows checklist and roadmap.
 
 ## Release download layout
 
@@ -17,28 +17,51 @@ This is the layout used by the release-note generator. The main download table c
 | Workflow | Trigger | Result |
 | --- | --- | --- |
 | **Checks** | Push to `main`, pull request, manual run, or another workflow | Rust tests, formatting, Clippy, interface tests, packaging/release tests and release build |
-| **Packages** | Manual run, or Release draft | Checks first, then Mac arm64/Intel x64 and Windows x64 packages saved as Actions artifacts |
-| **Release draft** | Push a `vX.Y.Z` tag, or manually select an existing tag | Validate versions, run Packages, verify all assets, assemble corresponding source and create a preview draft |
+| **Packages** | Manual run, or Release candidate | Checks first, then Mac arm64/Intel x64 and Windows x64 packages saved as Actions artifacts |
+| **Release candidate** | Push a `vX.Y.Z` tag, or manually select an existing tag | Validate versions, run Packages, verify all assets, assemble corresponding source and retain a candidate artifact |
 
-Checks is reused by the other workflows. Every release stage uses the exact tagged commit. Only the final draft job receives repository write permission; build jobs have read-only access. The built-in GitHub token is used, with no personal token or signing certificate required for the unsigned preview.
+Checks is reused by the other workflows. Every release stage uses the exact tagged commit. All workflow jobs have read-only repository access. The built-in GitHub token is used only for read access, with no personal token stored in Actions. Signing certificates are not configured.
 
 Actions artifacts are retained for **14 days**; Release attachments are separate. Current targets are Apple Silicon, Intel Mac and Windows x64. No Windows ARM or Linux package is generated.
 
-## Prepare a preview
+## Prepare and publish a release
 
 1. Push the reviewed source, including `.github/workflows/`, to `main` when ready. Select a new public version for each release before tagging.
 2. Confirm **Checks** succeeds. **Packages → Run workflow** rehearses packaging without creating a Release.
-3. Confirm `Cargo.toml`, `Cargo.lock`, `assets/Info.plist` and `assets/windows/app.rc` agree on the public version. Both internal build numbers must also match.
+3. Confirm `Cargo.toml`, `Cargo.lock`, `assets/Info.plist`, `assets/windows/app.rc` and `assets/windows/ClickPulse.manifest` agree on the public version. Both internal build numbers must also match.
 4. Create and push a new `vX.Y.Z` tag at the reviewed commit, replacing `X.Y.Z` with the version in project metadata. `v0.1.0` identifies the first public preview; never move or reuse a published tag.
 
-5. Follow **Actions → Release draft** through version resolution, checks, packaging, verification and draft creation. Manual runs also require an existing version tag.
-6. Review the draft under **Releases**, including downloads, release notes and limitations, then publish the preview manually when ready. Record the [Windows validation checklist](windows-testing.md), Intel Mac desktop coverage, signing status and the [security-reporting channel](../SECURITY.md) alongside the release. Do not describe unperformed hardware checks as passed.
+5. Follow **Actions → Release candidate** through version resolution, checks, packaging and verification. Download `Release-candidate-X.Y.Z` before its 14-day retention period ends. Manual runs also require an existing version tag.
+6. Verify the candidate checksums, source revision and current remote tag. Review release notes, downloads and limitations, then create a draft with the personal account as described below. Publish only after confirming every attachment uploaded. Record the [Windows validation checklist](windows-testing.md), Intel Mac desktop coverage, signing status and the [security-reporting channel](../SECURITY.md) alongside the release. Do not describe unperformed hardware checks as passed.
 
-A version tag starts the draft workflow. Use manual Packages for ordinary test builds. Existing releases, including drafts, are never edited or overwritten by this workflow.
+A version tag starts the candidate workflow. Use manual Packages for ordinary test builds. Existing releases, including drafts, are never edited or overwritten by this workflow.
+
+## Publish under the maintainer’s personal identity
+
+Future maintainer commits use `Wuhan Zhang <122805853+endNone@users.noreply.github.com>`. Use the authenticated `endNone` GitHub CLI session to **create** the Release, not an Actions token. Editing a bot-created draft does not change its author. Existing published releases and tags are retained unchanged.
+
+After downloading and verifying the candidate, substitute the reviewed tag, revision and candidate path below. Run from the repository and review the final release notes before publication:
+
+```sh
+release_tag=vX.Y.Z
+source_revision=REPLACE_WITH_VERIFIED_40_CHARACTER_REVISION
+candidate=/path/to/candidate
+test "$(gh api user --jq .login)" = endNone &&
+test "$(gh api "repos/endNone/ClickPulse/commits/$release_tag" --jq .sha)" = "$source_revision" &&
+gh release create "$release_tag" "$candidate"/release/* --repo endNone/ClickPulse --verify-tag --draft --title "ClickPulse ${release_tag#v}" --notes-file "$candidate/release-notes.md"
+```
+
+Verify the draft's author is `endNone`, all ten expected assets and hashes match the candidate, and the notes contain download links, changes, upgrade instructions and known limitations. Then publish the reviewed stable version:
+
+```sh
+gh release edit "$release_tag" --repo endNone/ClickPulse --draft=false --prerelease=false --latest
+```
+
+Do not delete/recreate a published release to change attribution. Do not store personal authentication tokens in source or workflow files. Public downloads, version tags and old release checksums must be checked after publishing. Finally update the [Homebrew and Scoop manifests](package-managers.md#maintainer-keep-the-channels-current) for the newly published version.
 
 ## Download assets
 
-The 0.2.1 release package set contains ten attachments. Windows releases contain the portable ZIP; the former Setup download has been withdrawn. Versions in filenames come from project metadata; the workflow verifies the complete set before creating a draft.
+The 0.2.1 release package set contains ten attachments. Windows releases contain the portable ZIP; the former Setup download has been withdrawn. Versions in filenames come from project metadata; the workflow verifies the complete set before retaining the candidate.
 
 | Asset | Purpose |
 | --- | --- |

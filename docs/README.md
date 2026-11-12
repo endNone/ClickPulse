@@ -19,6 +19,7 @@
 | [Changelog](../CHANGELOG.md) | Features and known limits in the initial preview |
 | [Roadmap](roadmap.md) | Release preparation and possible future work |
 | [Security policy](../SECURITY.md) | Sensitive reports and the reporting channel’s current status |
+| [Package managers](package-managers.md) | First-party Homebrew Cask and Scoop installation, updates and limitations |
 | [Screenshot assets](images/README.md) | Capture app screenshots and the mini desktop animation |
 | [Windows validation checklist](windows-testing.md) | Maintainer checklist for installation and native behavior |
 

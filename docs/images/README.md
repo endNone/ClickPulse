@@ -1,6 +1,6 @@
 # Screenshot assets
 
-README.md uses English-interface screenshots, a Mini desktop demonstration and a Sport rank animation. Public project images must use English, regardless of the surrounding documentation language. Every showcase uses the default deep blue theme; other color themes remain an App feature described in text.
+README.md uses English-interface screenshots, a Mini desktop demonstration and a Sport rank animation. Public project images must use English, regardless of the surrounding documentation language. Every showcase uses the default deep blue theme; other color themes remain an App feature described in text. The overview was refreshed from the 0.2.1 interface, including the current hourly chart and no CSV export control. The preview reads its version from `Cargo.toml`; never hard-code an older release in the capture script.
 
 | Mini mode asset | Format |
 | --- | --- |

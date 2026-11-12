@@ -61,7 +61,7 @@ jobs:
       - name: Clippy
         run: cargo +stable clippy --all-targets --locked -- -D warnings
       - name: Portable interface tests
-        run: node --test tests/history.test.cjs tests/i18n.test.cjs tests/keyboard.test.cjs tests/rendering.test.cjs tests/dropdown.test.cjs tests/themes.test.cjs tests/sport.test.cjs
+        run: node --test tests/history.test.cjs tests/i18n.test.cjs tests/keyboard.test.cjs tests/rendering.test.cjs tests/dropdown.test.cjs tests/themes.test.cjs tests/sport.test.cjs tests/readme-preview.test.cjs
       - name: Packaging boundaries
         run: python -m unittest discover -s tests -p 'test_*.py'
       - name: Build

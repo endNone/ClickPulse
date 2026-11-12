@@ -253,7 +253,7 @@ def main():
             args.notes.write_text(notes, encoding='utf-8')
             if args.github_summary:
                 with args.github_summary.open('a', encoding='utf-8') as stream:
-                    stream.write('## Verified release candidate\n\nAll '+str(len(list(args.output.iterdir())))+' assets were validated. The Release workflow creates an unpublished draft for maintainer review.\n\n'+notes)
+                    stream.write('## Verified release candidate\n\nAll '+str(len(list(args.output.iterdir())))+' assets were validated. The Release workflow retains this candidate without creating a GitHub Release. The maintainer creates the draft with their personal GitHub account after review.\n\n'+notes)
             print('Verified release candidate: '+str(args.output))
     except (ValueError, OSError, KeyError, zipfile.BadZipFile, subprocess.CalledProcessError) as error:
         parser.exit(1, f'Release preparation failed: {error}\n')

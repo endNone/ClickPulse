@@ -20,6 +20,22 @@ Simulated desktop · Demo data.
 
 **0.2.1** — [Download packages](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1). You can also [build from source](docs/development.md).
 
+Already using [Homebrew](https://brew.sh) or [Scoop](https://scoop.sh)? Install from this project's own tap or bucket:
+
+**macOS · Homebrew**
+
+```sh
+brew tap endnone/clickpulse https://github.com/endNone/ClickPulse && brew install --cask endnone/clickpulse/clickpulse
+```
+
+**Windows · PowerShell with Scoop**
+
+```powershell
+scoop bucket add clickpulse https://github.com/endNone/ClickPulse; if ($?) { scoop install clickpulse/clickpulse }
+```
+
+These commands select the package and verify its checksum. They do not bypass OS security: macOS may still need **Open Anyway** and Input Monitoring; Windows Smart App Control may block the unsigned App. WebView2 Runtime is required on Windows. [Details and updates](docs/package-managers.md).
+
 | System | Package | Guide |
 | --- | --- | --- |
 | macOS 12+ · Apple Silicon | **arm64** DMG or App ZIP | [macOS installation](docs/install-macos.md) |
