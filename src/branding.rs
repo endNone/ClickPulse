@@ -46,11 +46,16 @@ pub fn font_css() -> String {
 
 pub fn tray_rgba() -> Result<Vec<u8>> {
     let mut reader = png::Decoder::new(Cursor::new(MARK)).read_info()?;
-    let mut pixels = vec![0; reader.output_buffer_size().context("Logo 图片尺寸无效")?];
+    let mut pixels = vec![
+        0;
+        reader
+            .output_buffer_size()
+            .context("Invalid logo image dimensions")?
+    ];
     let info = reader.next_frame(&mut pixels)?;
     ensure!(
         info.color_type == png::ColorType::Rgba && info.bit_depth == png::BitDepth::Eight,
-        "透明 Logo 需要 8 位 RGBA PNG"
+        "The transparent logo requires an 8-bit RGBA PNG"
     );
     let width = info.width as usize;
     let height = info.height as usize;
@@ -69,7 +74,10 @@ pub fn tray_rgba() -> Result<Vec<u8>> {
             }
         }
     }
-    ensure!(right > left && bottom > top, "Logo 没有可见图形");
+    ensure!(
+        right > left && bottom > top,
+        "The logo has no visible pixels"
+    );
     let size = TRAY_SIZE as usize;
     let scale = ((right - left).max(bottom - top)) as f64 / (size - 4) as f64;
     let center_x = (left + right) as f64 / 2.0;

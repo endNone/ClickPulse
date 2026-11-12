@@ -96,7 +96,7 @@ impl EventDb {
             )?;
             if legacy {
                 bail!(
-                    "这是旧版数据库，请选择另一份新版数据库路径，并使用 --legacy-db 导入。原文件未修改。"
+                    "This is a legacy database. Select a new database path and import with --legacy-db. The source was not modified."
                 );
             }
         }
@@ -136,14 +136,16 @@ impl EventDb {
             return Ok(0);
         }
         let legacy = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .with_context(|| format!("无法只读打开旧数据库 {}", path.display()))?;
+            .with_context(|| {
+                format!("Cannot open legacy database read-only: {}", path.display())
+            })?;
         let invalid: bool = legacy.query_row(
             "SELECT EXISTS(SELECT 1 FROM events WHERE dev NOT IN (0,1) OR cnt<0)",
             [],
             |r| r.get(0),
         )?;
         if invalid {
-            bail!("旧数据库包含无效的设备或计数");
+            bail!("The legacy database contains invalid devices or counts");
         }
         let mut stmt = legacy.prepare(
             "SELECT bucket, dev, SUM(cnt) FROM events GROUP BY bucket,dev ORDER BY bucket",
@@ -161,13 +163,15 @@ impl EventDb {
         for row in rows {
             let (bucket, dev, cnt) = row?;
             if !(0..=1).contains(&dev) || cnt < 0 {
-                bail!("旧数据库包含无效的设备或计数");
+                bail!("The legacy database contains invalid devices or counts");
             }
-            let ts = bucket.checked_mul(60).context("旧数据库时间溢出")?;
+            let ts = bucket
+                .checked_mul(60)
+                .context("Legacy database timestamp overflow")?;
             let date = Local
                 .timestamp_opt(ts, 0)
                 .single()
-                .context("旧数据库时间无效")?;
+                .context("Invalid legacy database timestamp")?;
             *days
                 .entry((date.format("%Y-%m-%d").to_string(), dev))
                 .or_default() += cnt;
@@ -215,7 +219,7 @@ impl EventDb {
             let ts = Local
                 .timestamp_millis_opt(event.ts_ms)
                 .single()
-                .context("事件时间无效")?;
+                .context("Invalid event timestamp")?;
             let dev = event.device as i64;
             let day = ts.format("%Y-%m-%d").to_string();
             let minute = event.ts_ms.div_euclid(60_000);
@@ -271,9 +275,11 @@ impl EventDb {
 
     pub fn rolling(&self, seconds: i64, now_ms: i64) -> Result<WindowCount> {
         if seconds <= 0 || seconds > 86_400 {
-            bail!("滚动窗口必须在 1 到 86400 秒之间");
+            bail!("The rolling window must be between 1 and 86400 seconds");
         }
-        let cutoff = now_ms.checked_sub(seconds * 1000).context("时间范围溢出")?;
+        let cutoff = now_ms
+            .checked_sub(seconds * 1000)
+            .context("Time range overflow")?;
         // Exact half-open trailing interval: (now-window, now]. Never include future rows.
         let mut counts = self.query_counts(
             "SELECT dev,SUM(cnt) FROM recent WHERE ts_ms>?1 AND ts_ms<=?2 GROUP BY dev",
@@ -465,7 +471,7 @@ impl EventDb {
 }
 
 fn day_bounds(date: NaiveDate) -> Result<(i64, i64)> {
-    let next = date.succ_opt().context("日期溢出")?;
+    let next = date.succ_opt().context("Date overflow")?;
     Ok((
         first_valid_local_instant(&Local, date)?.timestamp_millis(),
         first_valid_local_instant(&Local, next)?.timestamp_millis(),
@@ -484,7 +490,7 @@ pub(crate) fn first_valid_local_instant<T: TimeZone>(
                 .from_local_datetime(&(midnight + chrono::Duration::seconds(seconds)))
                 .earliest()
         })
-        .context("本地午夜不存在")
+        .context("Local midnight does not exist")
 }
 
 #[cfg(test)]
@@ -727,7 +733,7 @@ mod tests {
         let mut db = db();
         assert_eq!(
             db.import_legacy(&path).unwrap_err().to_string(),
-            "旧数据库包含无效的设备或计数"
+            "The legacy database contains invalid devices or counts"
         );
         assert!(!db.legacy_imported().unwrap());
         assert_eq!(db.lifetime().unwrap(), Counts::default());

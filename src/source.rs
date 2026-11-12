@@ -50,7 +50,7 @@ impl LiveSource {
 
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .with_context(|| format!("无法读取实时数据库 {}", path.display()))?;
+            .with_context(|| format!("Cannot read live database: {}", path.display()))?;
         conn.busy_timeout(Duration::from_secs(5))?;
         conn.execute_batch("PRAGMA query_only=ON")?;
         crate::storage_schema::require_key_encoding(&conn)?;

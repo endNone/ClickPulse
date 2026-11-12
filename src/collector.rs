@@ -44,7 +44,10 @@ impl CollectorDb {
                     |r| r.get::<_, bool>(0),
                 )
                 .unwrap_or(false);
-            ensure!(owned, "此文件尚未交给 App 管理，请先迁移；原文件未修改");
+            ensure!(
+                owned,
+                "This database is not app-owned; migrate it first. The source was not modified"
+            );
         }
         let mut conn = Connection::open(path)?;
         initialize(&mut conn)?;
@@ -68,8 +71,11 @@ impl CollectorDb {
         output: &Path,
         cutoff_bucket: Option<i64>,
     ) -> Result<Snapshot> {
-        ensure!(!output.exists(), "目标数据库已存在，不能重复迁移或覆盖历史");
-        let parent = output.parent().context("目标目录无效")?;
+        ensure!(
+            !output.exists(),
+            "The destination database already exists; migration cannot overwrite history"
+        );
+        let parent = output.parent().context("Invalid destination directory")?;
         std::fs::create_dir_all(parent)?;
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
@@ -85,7 +91,7 @@ impl CollectorDb {
             crate::storage::copy_snapshot(&source_conn, &mut dest)?;
             ensure!(
                 dest.query_row("PRAGMA quick_check", [], |r| r.get::<_, String>(0))? == "ok",
-                "原数据完整性检查失败"
+                "Source database integrity check failed"
             );
             if let Some(cutoff) = cutoff_bucket {
                 let cached: bool = dest.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='historical_key_totals')", [], |r| r.get(0))?;
@@ -117,7 +123,7 @@ impl CollectorDb {
                             .iter()
                             .map(|d| (&d.day, d.counts))
                             .collect::<Vec<_>>(),
-                "迁移前后历史统计不一致"
+                "Historical statistics changed during migration"
             );
             // Windows requires write access to flush a file. Flush the validated
             // staged copy before publishing, so a flush failure leaves no output.
@@ -152,7 +158,7 @@ impl CollectorDb {
                 let time = Local
                     .timestamp_millis_opt(event.ts_ms)
                     .single()
-                    .context("事件时间无效")?;
+                    .context("Invalid event timestamp")?;
                 let dev = event.device as i64;
                 let code = if event.device == Device::Keyboard {
                     PHYSICAL_CODE_BASE + i64::from(event.code)
@@ -237,7 +243,7 @@ pub(crate) fn initialize(conn: &mut Connection) -> Result<()> {
         |r| r.get(0),
     )?;
     if bad {
-        bail!("历史中存在无效计数，迁移已取消");
+        bail!("History contains invalid counts; migration was cancelled");
     }
     let aggregates: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM clickpulse_metadata WHERE key='aggregates_ready')",

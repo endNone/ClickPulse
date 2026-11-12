@@ -825,7 +825,7 @@ pub fn run(
                                                             &original_path,
                                                             false,
                                                         )
-                                                        .expect("无法恢复原统计视图"),
+                                                        .expect("Cannot restore the previous statistics view"),
                                                     );
                                                     report_error(
                                                         &webview,
@@ -839,7 +839,7 @@ pub fn run(
                                         Err(e) => {
                                             runtime = Some(
                                                 Runtime::prepare_handoff(&original_path, false)
-                                                    .expect("无法恢复原统计视图"),
+                                                    .expect("Cannot restore the previous statistics view"),
                                             );
                                             report_error(
                                                 &webview,
@@ -986,7 +986,7 @@ pub fn run(
                     Some(mut rt) => match rt.shutdown() {
                         Ok(()) => true,
                         Err(error) => {
-                            eprintln!("退出保存失败：{error:#}");
+                            eprintln!("Failed to save before exit: {error:#}");
                             false
                         }
                     },

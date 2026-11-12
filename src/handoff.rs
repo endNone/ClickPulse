@@ -11,7 +11,7 @@ const OLD_LABEL: &str = "com.zhangwuhan.clickpulse";
 const APP_LABEL: &str = "app.clickpulse.desktop.login";
 fn home() -> Result<PathBuf> {
     Ok(PathBuf::from(
-        std::env::var_os("HOME").context("无法确定用户目录")?,
+        std::env::var_os("HOME").context("Cannot determine the user home directory")?,
     ))
 }
 fn agent(label: &str) -> Result<PathBuf> {
@@ -19,14 +19,14 @@ fn agent(label: &str) -> Result<PathBuf> {
 }
 fn domain() -> Result<String> {
     let out = Command::new("/usr/bin/id").arg("-u").output()?;
-    ensure!(out.status.success(), "无法确定登录用户");
+    ensure!(out.status.success(), "Cannot determine the logged-in user");
     Ok(format!("gui/{}", String::from_utf8(out.stdout)?.trim()))
 }
 fn launchctl(args: &[&str]) -> Result<()> {
     let out = Command::new("/bin/launchctl").args(args).output()?;
     ensure!(
         out.status.success(),
-        "更新自动启动失败：{}",
+        "Failed to update login startup: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     Ok(())
@@ -37,10 +37,10 @@ fn app_path() -> Result<PathBuf> {
         .parent()
         .and_then(Path::parent)
         .and_then(Path::parent)
-        .context("请从打包的 ClickPulse.app 操作")?;
+        .context("Run this operation from the packaged ClickPulse.app")?;
     ensure!(
         app.extension().is_some_and(|e| e == "app"),
-        "请从打包的 ClickPulse.app 操作"
+        "Run this operation from the packaged ClickPulse.app"
     );
     Ok(app.to_path_buf())
 }
@@ -54,7 +54,8 @@ fn handoff_lock() -> Result<std::fs::File> {
         .read(true)
         .write(true)
         .open(path)?;
-    file.try_lock().context("App 正在交接记录，请稍后再打开")?;
+    file.try_lock()
+        .context("Recording handoff is in progress; try opening the app again shortly")?;
     Ok(file)
 }
 fn pending_path() -> Result<PathBuf> {
@@ -74,7 +75,7 @@ impl ParkedScript {
         let lock = handoff_lock()?;
         ensure!(
             !parked.exists() && !pending_path()?.exists(),
-            "还有未恢复的交接状态，请重新打开 App"
+            "An unfinished recording handoff needs recovery; reopen the app"
         );
         let pending = Pending {
             original: original.into(),
@@ -104,7 +105,7 @@ impl ParkedScript {
 impl Drop for ParkedScript {
     fn drop(&mut self) {
         if let Err(e) = self.restore() {
-            eprintln!("原脚本恢复失败：{e:#}");
+            eprintln!("Failed to restore the previous recorder script: {e:#}");
         }
     }
 }
@@ -112,12 +113,15 @@ fn restore_script(pending: &Pending) -> Result<()> {
     if pending.parked.exists() {
         ensure!(
             !pending.original.exists(),
-            "原脚本路径已被其他文件占用，已保留暂存文件"
+            "Another file occupies the previous script path; the staged file was retained"
         );
         std::fs::hard_link(&pending.parked, &pending.original)?;
         std::fs::remove_file(&pending.parked)?;
     }
-    ensure!(pending.original.is_file(), "原脚本未能恢复");
+    ensure!(
+        pending.original.is_file(),
+        "The previous recorder script could not be restored"
+    );
     Ok(())
 }
 
@@ -137,7 +141,7 @@ pub fn recover_pending() -> Result<()> {
                 .parked
                 .file_name()
                 .is_some_and(|p| p.to_string_lossy().starts_with(".clickpulse-handoff-")),
-        "交接恢复路径无效，原文件未改动"
+        "Invalid handoff recovery path; the original file was not modified"
     );
     restore_script(&pending)?;
     let output = data_path()?;
@@ -175,7 +179,7 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
             let contents = std::fs::read_to_string(&path)?;
             ensure!(
                 contents.contains(APP_LABEL),
-                "自动启动配置名称冲突，请检查原文件"
+                "Conflicting login startup configuration name; check the original file"
             );
             Some(contents)
         } else {
@@ -193,7 +197,10 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
             .arg("-lint")
             .arg(&temp)
             .output()?;
-        ensure!(checked.status.success(), "自动启动配置校验失败");
+        ensure!(
+            checked.status.success(),
+            "Login startup configuration validation failed"
+        );
         let _ = launchctl(&["bootout", &service]);
         std::fs::rename(temp, &path)?;
         activate_with_plist_rollback(&path, previous.as_deref(), || {
@@ -201,7 +208,7 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
             launchctl(&[
                 "bootstrap",
                 &domain()?,
-                path.to_str().context("应用路径无效")?,
+                path.to_str().context("Invalid application path")?,
             ])
         })?;
     } else if path.exists() {
@@ -237,29 +244,32 @@ fn activate_with_plist_rollback(
 pub fn take_over(source: &Path) -> Result<PathBuf> {
     ensure!(
         crate::capture::has_permission(),
-        "App 尚未获得有效输入监控权限，原记录器未停用"
+        "The app lacks Input Monitoring permission; the previous recorder remains active"
     );
     let output = data_path()?;
-    ensure!(!output.exists(), "App 数据库已经存在，不能再次接管");
+    ensure!(
+        !output.exists(),
+        "The app database already exists; recording cannot be handed over again"
+    );
     let old = agent(OLD_LABEL)?;
     ensure!(
         old.is_file(),
-        "找不到此前确认的自动启动配置，原记录器未改动"
+        "The confirmed login startup configuration is missing; the previous recorder was not modified"
     );
     let args = Command::new("/usr/bin/plutil")
         .args(["-extract", "ProgramArguments", "json", "-o", "-"])
         .arg(&old)
         .output()?;
-    let programs: Vec<String> =
-        serde_json::from_slice(&args.stdout).context("无法读取原记录器启动路径")?;
+    let programs: Vec<String> = serde_json::from_slice(&args.stdout)
+        .context("Cannot read the previous recorder launch path")?;
     let script = source
         .parent()
-        .context("原数据库路径无效")?
+        .context("Invalid source database path")?
         .join("log.py")
         .canonicalize()?;
     ensure!(
         programs.len() == 2 && Path::new(&programs[1]).canonicalize()? == script,
-        "启动配置与已确认的数据来源不一致，原记录器未改动"
+        "The startup configuration does not match the confirmed data source; the previous recorder was not modified"
     );
     let service = format!("{}/{}", domain()?, OLD_LABEL);
     let state = Command::new("/bin/launchctl")
@@ -267,7 +277,7 @@ pub fn take_over(source: &Path) -> Result<PathBuf> {
         .output()?;
     ensure!(
         state.status.success(),
-        "原记录器未由已确认的启动服务运行，接管已取消"
+        "The previous recorder is not running under the confirmed startup service; handoff was cancelled"
     );
     let text = String::from_utf8(state.stdout)?;
     let pid = text
@@ -277,7 +287,7 @@ pub fn take_over(source: &Path) -> Result<PathBuf> {
                 .strip_prefix("pid = ")
                 .and_then(|s| s.parse::<u32>().ok())
         })
-        .context("无法确认原记录器进程，接管已取消")?;
+        .context("Cannot verify the previous recorder process; handoff was cancelled")?;
     // disable prevents future loading, but does not suppress a loaded KeepAlive
     // job. Temporarily park its script while the already-loaded Python process
     // drains; respawns cannot start a second collector. Restore the exact inode
@@ -292,7 +302,10 @@ pub fn take_over(source: &Path) -> Result<PathBuf> {
         let signal = Command::new("/bin/kill")
             .args(["-INT", &pid.to_string()])
             .status()?;
-        ensure!(signal.success(), "无法正常停止原记录器");
+        ensure!(
+            signal.success(),
+            "Cannot stop the previous recorder normally"
+        );
         let began = Instant::now();
         while Command::new("/bin/kill")
             .args(["-0", &pid.to_string()])
@@ -301,7 +314,7 @@ pub fn take_over(source: &Path) -> Result<PathBuf> {
             .success()
         {
             if began.elapsed() > Duration::from_secs(10) {
-                bail!("原记录器尚未保存完毕，接管已取消");
+                bail!("The previous recorder has not finished saving; handoff was cancelled");
             }
             std::thread::sleep(Duration::from_millis(100));
         }
@@ -309,10 +322,13 @@ pub fn take_over(source: &Path) -> Result<PathBuf> {
         let state = Command::new("/bin/launchctl")
             .args(["print", &service])
             .output()?;
-        ensure!(!state.status.success(), "原记录服务仍未停止，接管已取消");
+        ensure!(
+            !state.status.success(),
+            "The previous recording service is still running; handoff was cancelled"
+        );
         ensure!(
             crate::capture::has_permission(),
-            "App 的输入监控权限发生变化，已恢复原记录器"
+            "Input Monitoring permission changed; the previous recorder was restored"
         );
         parked.restore()?;
         let baseline = CollectorDb::migrate(source, &output)?;
@@ -358,7 +374,8 @@ pub fn rollback(output: &Path) -> Result<()> {
     let _ = launchctl(&[
         "bootstrap",
         &domain()?,
-        old.to_str().context("原配置路径无效")?,
+        old.to_str()
+            .context("Invalid original configuration path")?,
     ]);
     launchctl(&["kickstart", &service])?;
     Ok(())

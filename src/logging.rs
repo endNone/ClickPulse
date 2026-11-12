@@ -48,7 +48,7 @@ fn bound_status_log(path: &Path, limit: u64) -> Result<u64> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
         Err(error) => return Err(error.into()),
     };
-    anyhow::ensure!(metadata.is_file(), "日志路径不是普通文件");
+    anyhow::ensure!(metadata.is_file(), "The log path is not a regular file");
     if metadata.len() <= limit {
         return Ok(metadata.len());
     }
@@ -79,8 +79,11 @@ pub(crate) fn append_status_log(path: &Path, line: &str, limit: u64) -> Result<(
     let _guard = LOG_WRITE_LOCK
         .lock()
         .unwrap_or_else(|error| error.into_inner());
-    anyhow::ensure!(line.len() as u64 <= limit, "单条日志超过大小限制");
-    std::fs::create_dir_all(path.parent().context("日志路径无效")?)?;
+    anyhow::ensure!(
+        line.len() as u64 <= limit,
+        "A log entry exceeds the size limit"
+    );
+    std::fs::create_dir_all(path.parent().context("Invalid log path")?)?;
     let current_size = bound_status_log(path, limit)?;
     for index in 1..=STATUS_LOG_BACKUPS {
         bound_status_log(&status_log_archive(path, index), limit)?;

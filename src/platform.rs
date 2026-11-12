@@ -18,10 +18,10 @@ pub fn data_dir() -> Result<PathBuf> {
     #[cfg(target_os = "windows")]
     return windows_data_dir(std::env::var_os("LOCALAPPDATA"));
     #[cfg(target_os = "macos")]
-    return Ok(
-        PathBuf::from(std::env::var_os("HOME").context("无法确定用户目录")?)
-            .join("Library/Application Support/ClickPulse"),
-    );
+    return Ok(PathBuf::from(
+        std::env::var_os("HOME").context("Cannot determine the user home directory")?,
+    )
+    .join("Library/Application Support/ClickPulse"));
     #[cfg(target_os = "linux")]
     return Ok(linux::xdg_dir(
         std::env::var_os("XDG_DATA_HOME"),
@@ -50,10 +50,10 @@ fn windows_data_dir(local_app_data: Option<std::ffi::OsString>) -> Result<PathBu
 
 pub fn log_path() -> Result<PathBuf> {
     #[cfg(target_os = "macos")]
-    return Ok(
-        PathBuf::from(std::env::var_os("HOME").context("无法确定日志目录")?)
-            .join("Library/Logs/clickpulse.log"),
-    );
+    return Ok(PathBuf::from(
+        std::env::var_os("HOME").context("Cannot determine the log directory")?,
+    )
+    .join("Library/Logs/clickpulse.log"));
     #[cfg(not(target_os = "macos"))]
     Ok(data_dir()?.join("logs/clickpulse.log"))
 }

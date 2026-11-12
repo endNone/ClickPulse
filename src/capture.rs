@@ -62,7 +62,9 @@ fn stop_with_error(stop: &AtomicBool, status: &Mutex<CaptureStatus>) {
         if !stop.swap(true, Ordering::Relaxed) {
             state.listening = false;
             state.error_code = Some("error.queue");
-            state.error = Some("记录队列不可用，监听已停止。请重启应用。".into());
+            state.error = Some(
+                "The recording queue is unavailable. Capture stopped; restart the app.".into(),
+            );
         }
     } else {
         stop.store(true, Ordering::Relaxed);
@@ -195,7 +197,7 @@ pub(crate) fn spawn(
                         s.listening = false;
                         s.permission_needed = true;
                         s.error_code = Some("error.capture");
-                        s.error = Some("无法启动监听，请检查输入监控权限并重启应用".into());
+                        s.error = Some("Cannot start capture; check Input Monitoring permission and restart the app".into());
                     }
                     thread::sleep(Duration::from_millis(500));
                     continue;
@@ -209,7 +211,7 @@ pub(crate) fn spawn(
                         && !stop.load(Ordering::Relaxed)
                     {
                         s.error_code = Some("error.capture");
-                        s.error = Some("无法建立输入监听，请重启应用".into());
+                        s.error = Some("Cannot create the input event source; restart the app".into());
                     }
                     break;
                 };

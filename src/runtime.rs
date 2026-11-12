@@ -273,7 +273,7 @@ impl Runtime {
             .open(lock_path)?;
         instance_lock
             .try_lock()
-            .map_err(|_| anyhow!("此数据库已有 ClickPulse 正在运行，请从菜单栏打开原窗口"))?;
+            .map_err(|_| anyhow!("ClickPulse is already using this database; open its existing window from the menu bar"))?;
         let mut db = if owned {
             Storage::App(CollectorDb::open(path)?)
         } else {
@@ -299,7 +299,8 @@ impl Runtime {
                     if let Ok(mut status) = writer_status.lock() {
                         status.listening = false;
                         status.error_code = Some("error.storage");
-                        status.error = Some(format!("保存失败，记录已停止：{error:#}"));
+                        status.error =
+                            Some(format!("Saving failed and recording stopped: {error:#}"));
                     }
                 }
                 result
@@ -364,9 +365,9 @@ impl Runtime {
             .read(true)
             .write(true)
             .open(lock_path)?;
-        instance_lock
-            .try_lock()
-            .map_err(|_| anyhow!("ClickPulse 已在运行，请从菜单栏打开原窗口"))?;
+        instance_lock.try_lock().map_err(|_| {
+            anyhow!("ClickPulse is already running; open its existing window from the menu bar")
+        })?;
         let (tx, rx) = bounded(8192);
         let status = Arc::new(Mutex::new(CaptureStatus::default()));
         let paused = Arc::new(AtomicBool::new(paused));
@@ -408,10 +409,10 @@ impl Runtime {
         let (tx, rx) = bounded(1);
         self.tx
             .send_timeout(Command::Snapshot(tx), Duration::from_secs(3))
-            .map_err(|_| anyhow!("统计线程不可用"))?;
+            .map_err(|_| anyhow!("The statistics worker is unavailable"))?;
         let stats = rx
             .recv_timeout(Duration::from_secs(5))
-            .context("统计读取超时")??;
+            .context("Statistics request timed out")??;
         Ok(AppSnapshot {
             stats,
             timezone: Default::default(),
@@ -609,7 +610,7 @@ impl Runtime {
         Ok(self
             .status
             .lock()
-            .map_err(|_| anyhow!("监听状态不可用"))?
+            .map_err(|_| anyhow!("Capture status is unavailable"))?
             .clone())
     }
 
@@ -621,7 +622,9 @@ impl Runtime {
         // Stop and join all producers before draining the storage queue.
         self.stop_capture.store(true, Ordering::Relaxed);
         let capture_result = if let Some(capture) = self.capture.take() {
-            capture.join().map_err(|_| anyhow!("监听线程异常退出"))
+            capture
+                .join()
+                .map_err(|_| anyhow!("The capture thread exited unexpectedly"))
         } else {
             Ok(())
         };
@@ -630,7 +633,7 @@ impl Runtime {
             let _ = self.tx.send(Command::Stop);
             writer
                 .join()
-                .map_err(|_| anyhow!("保存线程异常退出"))
+                .map_err(|_| anyhow!("The storage thread exited unexpectedly"))
                 .and_then(|result| result)
         } else {
             Ok(())
@@ -642,7 +645,7 @@ impl Runtime {
 impl Drop for Runtime {
     fn drop(&mut self) {
         if let Err(error) = self.shutdown() {
-            eprintln!("ClickPulse 退出时保存失败：{error:#}");
+            eprintln!("ClickPulse failed to save on exit: {error:#}");
         }
     }
 }
@@ -725,7 +728,9 @@ fn source_loop_inner(
                     mini_cached = Some((cache_key.clone(), stats.today));
                     cached = Some((cache_key, stats.clone()));
                 }
-                let mut current = status.lock().map_err(|_| anyhow!("同步状态不可用"))?;
+                let mut current = status
+                    .lock()
+                    .map_err(|_| anyhow!("Source status is unavailable"))?;
                 if !probe {
                     current.listening =
                         source.is_recording(now.timestamp_millis()).unwrap_or(false);
@@ -735,7 +740,7 @@ fn source_loop_inner(
                     current.error = result
                         .as_ref()
                         .err()
-                        .map(|e| format!("读取实时数据失败：{e:#}"));
+                        .map(|e| format!("Live data read failed: {e:#}"));
                 }
                 drop(current);
                 match command {
@@ -754,7 +759,11 @@ fn source_loop_inner(
             }
             Command::Stop => break,
             Command::Input(_) if probe => {} // Probe only: the old collector still owns persistence.
-            Command::Input(_) => return Err(anyhow!("实时数据读取模式不应接收采集事件")),
+            Command::Input(_) => {
+                return Err(anyhow!(
+                    "Read-only source mode must not receive captured input events"
+                ));
+            }
         }
     }
     Ok(())
@@ -865,17 +874,22 @@ impl StatusLog {
             return;
         }
         let result = (|| -> Result<()> {
-            let path = self.path.as_ref().context("无法确定日志目录")?;
+            let path = self
+                .path
+                .as_ref()
+                .context("Cannot determine the log directory")?;
             append_status_log(path, line, limit)
         })();
         if let Err(error) = result {
             if !self.failure_reported {
-                eprintln!("clicklog 输出失败，数据库记录继续；将自动重试：{error:#}");
+                eprintln!(
+                    "clicklog output failed; database recording continues and logging will retry: {error:#}"
+                );
             }
             self.failure_reported = true;
         } else {
             if self.failure_reported {
-                eprintln!("clicklog 输出已恢复");
+                eprintln!("clicklog output resumed");
             }
             self.failure_reported = false;
             self.last_written = Some(line.to_owned());
