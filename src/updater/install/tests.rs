@@ -65,9 +65,11 @@ fn custom_scoop_roots_are_identified_by_receipts_without_blocking_portable_copie
     #[cfg(windows)]
     {
         let status = Command::new("cmd")
-            .args(["/C", "mklink", "/J"])
-            .arg(&current)
-            .arg(&root)
+            .args(["/D", "/C", "mklink", "/J"])
+            // PathBuf joins can retain '/' inside a relative component;
+            // cmd's built-in mklink interprets those as option prefixes.
+            .arg(current.to_string_lossy().replace('/', "\\"))
+            .arg(root.to_string_lossy().replace('/', "\\"))
             .status()
             .unwrap();
         assert!(status.success());
