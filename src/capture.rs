@@ -17,8 +17,8 @@ use core_foundation::{
     runloop::{CFRunLoop, kCFRunLoopCommonModes, kCFRunLoopDefaultMode},
 };
 use core_graphics::event::{
-    CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
-    CallbackResult, EventField,
+    CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement,
+    CGEventType, CallbackResult, EventField,
 };
 use crossbeam_channel::Sender;
 
@@ -32,6 +32,7 @@ unsafe extern "C" {
     fn CGPreflightListenEventAccess() -> bool;
     fn CGRequestListenEventAccess() -> bool;
     fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
+    fn CGEventSourceFlagsState(state: i32) -> u64;
     fn CGEventTapEnable(tap: *const c_void, enable: bool);
 }
 
@@ -41,6 +42,17 @@ pub fn request_permission() -> bool {
 
 pub fn has_permission() -> bool {
     unsafe { CGPreflightListenEventAccess() }
+}
+
+fn caps_lock_state() -> bool {
+    unsafe { CGEventSourceFlagsState(0) & CGEventFlags::CGEventFlagAlphaShift.bits() != 0 }
+}
+
+// Caps Lock is a toggle. Count both directions from the event itself, rather
+// than querying a global key state that can already reflect a later release.
+fn caps_lock_changed(previous: &mut bool, flags: CGEventFlags) -> bool {
+    let locked = flags.contains(CGEventFlags::CGEventFlagAlphaShift);
+    std::mem::replace(previous, locked) != locked
 }
 
 fn stop_with_error(stop: &AtomicBool, status: &Mutex<CaptureStatus>) {
@@ -82,6 +94,7 @@ pub(crate) fn spawn(
                     continue;
                 }
                 let keys = RefCell::new(KeyTracker::default());
+                let caps_lock = RefCell::new(caps_lock_state());
                 let tap_ptr = Arc::new(AtomicUsize::new(0));
                 let cb_ptr = tap_ptr.clone();
                 let cb_status = status.clone();
@@ -106,6 +119,7 @@ pub(crate) fn spawn(
                             CGEventType::TapDisabledByTimeout
                             | CGEventType::TapDisabledByUserInput => {
                                 keys.reset();
+                                *caps_lock.borrow_mut() = caps_lock_state();
                                 let ptr = cb_ptr.load(Ordering::Relaxed) as *const c_void;
                                 if !ptr.is_null() {
                                     unsafe {
@@ -135,7 +149,13 @@ pub(crate) fn spawn(
                                 let code = event
                                     .get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE)
                                     as u32;
-                                if unsafe { CGEventSourceKeyState(0, code as u16) } {
+                                if code == 57 {
+                                    caps_lock_changed(
+                                        &mut caps_lock.borrow_mut(),
+                                        event.get_flags(),
+                                    )
+                                    .then_some((Device::Keyboard, code))
+                                } else if unsafe { CGEventSourceKeyState(0, code as u16) } {
                                     keys.press(code, false).then_some((Device::Keyboard, code))
                                 } else {
                                     keys.release(code);
@@ -242,6 +262,45 @@ pub(crate) fn spawn(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn caps_lock_counts_ten_toggles_from_either_initial_state() {
+        for initial in [false, true] {
+            let mut previous = initial;
+            let mut count = 0;
+            for press in 0..10 {
+                let locked = if press % 2 == 0 { !initial } else { initial };
+                let flags = if locked {
+                    CGEventFlags::CGEventFlagAlphaShift
+                } else {
+                    CGEventFlags::CGEventFlagNull
+                };
+                count += usize::from(caps_lock_changed(&mut previous, flags));
+                // Duplicate/release notifications with unchanged lock state do not count.
+                assert!(!caps_lock_changed(&mut previous, flags));
+            }
+            assert_eq!(count, 10);
+        }
+    }
+
+    #[test]
+    fn caps_lock_ignores_other_modifier_bits_and_resynchronizes_after_a_gap() {
+        let mut previous = true;
+        assert!(!caps_lock_changed(
+            &mut previous,
+            CGEventFlags::CGEventFlagAlphaShift | CGEventFlags::CGEventFlagShift
+        ));
+        // A disabled tap resynchronizes to the current state before accepting input.
+        previous = false;
+        assert!(!caps_lock_changed(
+            &mut previous,
+            CGEventFlags::CGEventFlagControl
+        ));
+        assert!(caps_lock_changed(
+            &mut previous,
+            CGEventFlags::CGEventFlagAlphaShift
+        ));
+    }
 
     #[test]
     fn queue_failure_preserves_an_earlier_storage_error() {
