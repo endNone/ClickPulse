@@ -186,7 +186,7 @@ pub fn run(
             .ok()
             .map(|position| saved_full_position(position, window.scale_factor())),
         compact: false,
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         full_maximized: false,
         #[cfg(target_os = "windows")]
         region: None,
@@ -1449,7 +1449,7 @@ mod window_tests {
             full_size: LogicalSize::new(1160.0, 840.0),
             full_position: None,
             compact: true,
-            #[cfg(target_os = "windows")]
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             full_maximized: false,
             #[cfg(target_os = "windows")]
             region: None,
@@ -1469,7 +1469,7 @@ mod window_tests {
             full_size: saved,
             full_position: None,
             compact: false,
-            #[cfg(target_os = "windows")]
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             full_maximized: false,
             #[cfg(target_os = "windows")]
             region: None,

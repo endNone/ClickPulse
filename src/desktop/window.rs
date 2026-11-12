@@ -10,7 +10,7 @@ pub(super) struct WindowLayout {
     pub(super) full_size: LogicalSize<f64>,
     pub(super) full_position: Option<Position>,
     pub(super) compact: bool,
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     pub(super) full_maximized: bool,
     #[cfg(target_os = "windows")]
     pub(super) region: Option<CompactRegion>,
@@ -104,8 +104,9 @@ pub(super) fn set_compact(
     pinned: bool,
 ) {
     if compact && !layout.compact {
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
+            // GTK also ignores Mini size requests while maximized.
             layout.full_maximized = window.is_maximized();
             window.set_maximized(false);
         }
@@ -144,7 +145,7 @@ pub(super) fn set_compact(
             window.set_undecorated_shadow(true);
         }
         restore_full_window(window, layout.full_size, layout.full_position);
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         window.set_maximized(layout.full_maximized);
     }
     layout.compact = compact;
