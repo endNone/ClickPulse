@@ -113,10 +113,13 @@ const ClickPulseSport=(() => {
     function request(){if(active)send('sport_sample');}
     function setActive(value){
       value=!!value&&!doc.hidden;
+      // Synchronize every layer even on the first inactive view. An empty canvas
+      // still creates a rectangular selection/compositing surface in the WebView.
+      canvas.hidden=!value;
+      el('mini-sport-layer').hidden=!value;el('mini-sport-readout').hidden=!value;
+      el('mini-sport-caption').hidden=!value;el('mini-status').hidden=value;
       if(active===value){render();return;}
       active=value;meter.suspend();marks=[];lastFrame=0;lastHit=-Infinity;
-      el('mini-sport-layer').hidden=!active;el('mini-sport-readout').hidden=!active;
-      el('mini-sport-caption').hidden=!active;el('mini-status').hidden=active;
       if(active){resize();paint(0);request();poll=win.setInterval?.(()=>{request();render();},250);}
       else{if(poll!==null)win.clearInterval?.(poll);poll=null;if(frame!==null)win.cancelAnimationFrame?.(frame);frame=null;paint(0);}
       render();
@@ -142,7 +145,7 @@ const ClickPulseSport=(() => {
     doc.addEventListener?.('visibilitychange',()=>win.updateSportActivity?.());
     motion?.addEventListener?.('change',()=>{paint(0);render();wake();});
     win.addEventListener?.('resize',()=>{resize();wake();});
-    render();
+    setActive(false);
     return {sync,receive,setPaused,render,get active(){return active;}};
   }
   return {ranks,gradeFor,createMeter,createView};

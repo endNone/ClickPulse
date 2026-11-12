@@ -53,7 +53,7 @@ test('pause, hidden gaps, counter resets and invalid samples cannot create phant
 });
 
 // Drive actual canvas frames, rather than a DOM adapter with canvas disabled.
-function scene(reducedMotion=false){
+function scene(reducedMotion=false,initialView={compact:true,sport_enabled:true}){
   let now=0,next=0,operations=0;
   const frames=new Map(),timers=new Map(),nodes=new Map();
   const finite=(...values)=>{operations++;for(const value of values)assert.ok(Number.isFinite(value));};
@@ -72,10 +72,50 @@ function scene(reducedMotion=false){
     setInterval(fn){const id=++next;timers.set(id,fn);return id;},clearInterval:id=>timers.delete(id),
     requestAnimationFrame(fn){const id=++next;frames.set(id,fn);return id;},cancelAnimationFrame:id=>frames.delete(id)};
   const view=require('../ui/sport.js').createView({document:doc,window:win,translate:key=>key,send(){}});
-  view.sync({compact:true,sport_enabled:true});
-  return {view,node,frames,timers,setTime:value=>{now=value;},get operations(){return operations;},
+  if(initialView)view.sync(initialView);
+  return {view,node,doc,frames,timers,setTime:value=>{now=value;},get operations(){return operations;},
     frame(value){now=value;const pending=[...frames.values()];frames.clear();pending.forEach(fn=>fn(now));}};
 }
+
+test('first Mini entry with only the Sport switch enabled has no animation surface',()=>{
+  const a=scene(false,null);
+  const expectLayers=active=>{
+    for(const id of ['sport-canvas','mini-sport-layer','mini-sport-readout','mini-sport-caption'])assert.equal(a.node(id).hidden,!active,id);
+    assert.equal(a.node('mini-status').hidden,active);
+    assert.equal(a.view.active,active);
+    assert.equal(a.timers.size,active?1:0);
+  };
+  expectLayers(false);
+  a.view.sync({compact:false,sport_visible:false,sport_enabled:false});expectLayers(false);
+  a.view.sync({compact:false,sport_visible:true,sport_enabled:false});expectLayers(false);
+  a.view.sync({compact:true,sport_visible:true,sport_enabled:false});expectLayers(false);
+  assert.equal(a.operations,0,'inactive first entry must not paint an empty overlay');
+  a.view.sync({compact:true,sport_visible:true,sport_enabled:true});expectLayers(true);
+  assert.equal(a.node('sport-canvas').width,320);assert.equal(a.node('sport-canvas').height,208);
+  const painted=a.operations;assert.ok(painted>0);
+  a.view.sync({compact:true,sport_visible:true,sport_enabled:true});expectLayers(true);
+  assert.equal(a.operations,painted,'unchanged state must not restart animation');
+  a.view.sync({compact:true,sport_visible:true,sport_enabled:false});expectLayers(false);
+  assert.equal(a.frames.size,0);
+});
+
+test('Sport surfaces follow full, hidden, restored and preference-disabled views',()=>{
+  const a=scene(false,{compact:false,sport_visible:true,sport_enabled:true});
+  for(const next of [
+    {compact:true},{visible:false},{visible:true},{compact:false},{compact:true},
+    {sport_visible:false},{sport_visible:true}
+  ]){
+    a.state={compact:false,sport_visible:true,sport_enabled:true,...a.state,...next};
+    a.view.sync(a.state);
+    const active=a.state.compact&&a.state.sport_visible&&a.state.visible!==false;
+    assert.equal(a.node('sport-canvas').hidden,!active);
+    assert.equal(a.view.active,active);assert.equal(a.timers.size,active?1:0);
+  }
+  a.doc.hidden=true;a.view.sync(a.state);
+  assert.equal(a.node('sport-canvas').hidden,true);assert.equal(a.frames.size,0);assert.equal(a.timers.size,0);
+  a.doc.hidden=false;a.view.sync(a.state);
+  assert.equal(a.node('sport-canvas').hidden,false);assert.equal(a.timers.size,1);
+});
 
 test('Warp finishes its animation, ignore empty samples as strikes, and stop when hidden',()=>{
   const a=scene();a.view.receive({keyboard:0,mouse:100,available:true});
