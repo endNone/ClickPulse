@@ -181,7 +181,7 @@
     "calendar.literary": "这些按键，约够写完 {count} 本《{book}》。",
     "calendar.literary_one": "这些按键，约够写完 {count} 本《{book}》。",
     "calendar.literary_opening": "故事，正从这些按键开始。",
-    "calendar.literary_basis": "按所选范围的键盘次数估算：1 次按键约作 1 个字符，《{book}》英文版按约 {characters} 个字符计算。仅作趣味类比，不代表实际写作字数。",
+    "calendar.literary_basis": "按 1 次按键约等于 1 个字符估算，仅供娱乐。",
     "window.controls": "窗口控制",
     "window.minimize": "最小化",
     "window.maximize": "最大化",
@@ -225,7 +225,7 @@
     "action.import_database": "导入数据库",
     "storage.choose_title": "选择保存目录",
     "storage.move_warning": "将统计保存到：\n{path}\n\n会复制并校验当前历史，原数据库保留。请选择本地且不含 events.sqlite3 的目录。",
-    "storage.import_warning": "导入来源：\n{path}\n\n会保留现有历史，并先自动备份。通常保留最近 5 份自动备份。同一分钟、同一设备及同一按键／鼠标键的记录保留较大计数。重叠的独立记录无法区分，可能产生冲突而少计。本次将合并记录，不替换当前历史。是否继续？",
+    "storage.import_warning": "将合并以下数据库的历史：\n{path}\n\n导入前会自动备份当前数据，重复记录不会被重复计算。是否继续？",
     "action.cancel": "取消",
     "action.merge_history": "合并导入",
     "storage.destination_exists": "该目录已有 events.sqlite3。请选择其他目录，或通过“导入数据库”合并其中的历史。",
@@ -263,9 +263,9 @@
     "update.failed": "更新失败，请检查网络后重试。",
     "update.installed": "已更新至 {version}",
     "update.failed_last": "上次更新未完成，请重试。",
-    "update.scoop": "由 Scoop 管理。请退出 ClickPulse，然后运行：{command}",
-    "update.automatic_scoop": "App 运行时每 24 小时检查一次，请通过 Scoop 安装更新。",
-    "update.found_scoop": "发现新版本 {version}。请退出 ClickPulse，然后运行：{command}"
+    "update.scoop": "由 Scoop 管理，请退出后运行：{command}",
+    "update.automatic_scoop": "App 运行时每 24 小时检查一次。",
+    "update.found_scoop": "更新详情请见设置。"
   },
   "en": {
     "nav.main": "Main navigation",
@@ -449,7 +449,7 @@
     "calendar.literary": "About {count} copies of {book}, one keystroke at a time.",
     "calendar.literary_one": "About {count} copy of {book}, one keystroke at a time.",
     "calendar.literary_opening": "Every story begins with a few keystrokes.",
-    "calendar.literary_basis": "Uses keyboard counts in the selected range, roughly one character per keystroke. The English edition of {book} is rounded to {characters} characters. A playful comparison, not actual written text.",
+    "calendar.literary_basis": "Estimated at roughly one character per keystroke, just for fun.",
     "window.controls": "Window controls",
     "window.minimize": "Minimize",
     "window.maximize": "Maximize",
@@ -493,7 +493,7 @@
     "action.import_database": "Import database",
     "storage.choose_title": "Choose a save folder",
     "storage.move_warning": "Save statistics in:\n{path}\n\nCurrent history will be copied and verified. The original database is kept. Choose a local folder without events.sqlite3.",
-    "storage.import_warning": "Import from:\n{path}\n\nYour existing history will be kept and backed up first. Usually the latest 5 automatic backups are kept. For the same minute, device and key/button, the larger count is retained. Overlapping independent records cannot be distinguished and may be undercounted. This is a merge, not a replacement. Continue?",
+    "storage.import_warning": "Merge history from this database:\n{path}\n\nYour current data will be backed up automatically. Duplicate records will not be counted twice. Continue?",
     "action.cancel": "Cancel",
     "action.merge_history": "Merge history",
     "storage.destination_exists": "This folder already contains events.sqlite3. Choose another folder, or import that database to merge its history.",
@@ -532,8 +532,8 @@
     "update.installed": "Updated to {version}",
     "update.failed_last": "The last update did not finish. Please try again.",
     "update.scoop": "Managed by Scoop. Quit ClickPulse, then run: {command}",
-    "update.automatic_scoop": "Check every 24 hours while the app is running. Install updates through Scoop.",
-    "update.found_scoop": "Version {version} is available. Quit ClickPulse, then run: {command}"
+    "update.automatic_scoop": "Check every 24 hours while the app is running.",
+    "update.found_scoop": "View update details in Settings."
   },
   "zh-TW": {
     "nav.main": "主導覽",
@@ -717,7 +717,7 @@
     "calendar.literary": "一次次按鍵，約寫下 {count} 本《{book}》。",
     "calendar.literary_one": "一次次按鍵，約寫下 {count} 本《{book}》。",
     "calendar.literary_opening": "每個故事，都從幾次按鍵開始。",
-    "calendar.literary_basis": "依選取範圍的鍵盤次數估算，每次按鍵約視為一個字元。《{book}》英文版約取整為 {characters} 個字元。僅為趣味比較，不代表實際輸入文字。",
+    "calendar.literary_basis": "以 1 次按鍵約等於 1 個字元估算，僅供娛樂。",
     "window.controls": "視窗控制",
     "window.minimize": "最小化",
     "window.maximize": "最大化",
@@ -761,7 +761,7 @@
     "action.import_database": "匯入資料庫",
     "storage.choose_title": "選擇儲存目錄",
     "storage.move_warning": "將統計儲存至：\n{path}\n\n會複製並驗證目前歷史，保留原資料庫。請選擇本機且不含 events.sqlite3 的目錄。",
-    "storage.import_warning": "匯入來源：\n{path}\n\n會保留現有歷史，並先自動備份。通常保留最近 5 份自動備份。同一分鐘、同一裝置及同一按鍵／滑鼠鍵的記錄保留較大計數。重疊的獨立記錄無法區分，可能衝突而少計。本次將合併記錄，不取代目前歷史。是否繼續？",
+    "storage.import_warning": "將合併以下資料庫的歷史：\n{path}\n\n匯入前會自動備份目前資料，重複記錄不會重複計算。是否繼續？",
     "action.cancel": "取消",
     "action.merge_history": "合併匯入",
     "storage.destination_exists": "該目錄已有 events.sqlite3。請選擇其他目錄，或透過「匯入資料庫」合併其中的歷史。",
@@ -799,9 +799,9 @@
     "update.failed": "更新失敗，請檢查網路後重試。",
     "update.installed": "已更新至 {version}",
     "update.failed_last": "上次更新未完成，請重試。",
-    "update.scoop": "由 Scoop 管理。請結束 ClickPulse，然後執行：{command}",
-    "update.automatic_scoop": "App 執行時每 24 小時檢查一次，請透過 Scoop 安裝更新。",
-    "update.found_scoop": "發現新版本 {version}。請結束 ClickPulse，然後執行：{command}"
+    "update.scoop": "由 Scoop 管理，請結束後執行：{command}",
+    "update.automatic_scoop": "App 執行時每 24 小時檢查一次。",
+    "update.found_scoop": "更新詳情請見設定。"
   },
   "ja": {
     "nav.main": "メインナビゲーション",
@@ -985,7 +985,7 @@
     "calendar.literary": "1打ずつ積み重ねて、約{count}冊の『{book}』に。",
     "calendar.literary_one": "1打ずつ積み重ねて、約{count}冊の『{book}』に。",
     "calendar.literary_opening": "どんな物語も、いくつかのキー入力から始まります。",
-    "calendar.literary_basis": "選択範囲のキー入力を1打あたり約1文字として推定しています。『{book}』英語版を約{characters}文字として計算した遊び心のある比較で、実際に書いた文章量ではありません。",
+    "calendar.literary_basis": "1回のキー入力を約1文字として換算した、遊び心のある目安です。",
     "window.controls": "ウインドウ操作",
     "window.minimize": "最小化",
     "window.maximize": "最大化",
@@ -1029,7 +1029,7 @@
     "action.import_database": "データベースを読み込む",
     "storage.choose_title": "保存フォルダを選択",
     "storage.move_warning": "統計の保存先：\n{path}\n\n現在の履歴をコピーして検証し、元のデータベースも保持します。events.sqlite3 のないローカルフォルダを選択してください。",
-    "storage.import_warning": "読み込み元：\n{path}\n\n既存の履歴を保持し、先にバックアップします。自動バックアップは通常、最新5件を保持します。同じ分・デバイス・キー／マウスボタンの記録は大きい方の回数を残します。重複する独立した記録は区別できず、競合により少なく集計される場合があります。現在の履歴に統合します。続行しますか？",
+    "storage.import_warning": "次のデータベースの履歴を統合します：\n{path}\n\n現在のデータは読み込み前に自動でバックアップされます。重複する記録は二重に集計されません。続行しますか？",
     "action.cancel": "キャンセル",
     "action.merge_history": "履歴を統合",
     "storage.destination_exists": "このフォルダには events.sqlite3 があります。別のフォルダを選ぶか、データベースの読み込みで履歴を統合してください。",
@@ -1067,9 +1067,9 @@
     "update.failed": "更新できませんでした。接続を確認して再試行してください。",
     "update.installed": "{version} に更新しました",
     "update.failed_last": "前回の更新が完了していません。再試行してください。",
-    "update.scoop": "Scoop で管理されています。ClickPulse を終了してから実行してください：{command}",
-    "update.automatic_scoop": "アプリの起動中に24時間ごとに確認します。更新は Scoop でインストールしてください。",
-    "update.found_scoop": "新しいバージョン {version} があります。ClickPulse を終了してから実行してください：{command}"
+    "update.scoop": "Scoopで管理されています。ClickPulseを終了してから実行してください：{command}",
+    "update.automatic_scoop": "アプリの実行中は24時間ごとに確認します。",
+    "update.found_scoop": "更新の詳細は設定で確認できます。"
   },
   "ko": {
     "nav.main": "기본 탐색",
@@ -1253,7 +1253,7 @@
     "calendar.literary": "키 입력이 쌓여 약 {count}권의 『{book}』이 되었습니다.",
     "calendar.literary_one": "키 입력이 쌓여 약 {count}권의 『{book}』이 되었습니다.",
     "calendar.literary_opening": "모든 이야기는 몇 번의 키 입력에서 시작됩니다.",
-    "calendar.literary_basis": "선택한 기간의 키 입력 한 번을 약 한 글자로 추정합니다. 『{book}』 영어판을 약 {characters}자로 반올림해 계산한 재미를 위한 비교이며 실제 작성한 텍스트가 아닙니다.",
+    "calendar.literary_basis": "키 입력 한 번을 약 한 글자로 계산한 재미를 위한 추정치입니다.",
     "window.controls": "창 제어",
     "window.minimize": "최소화",
     "window.maximize": "최대화",
@@ -1297,7 +1297,7 @@
     "action.import_database": "데이터베이스 가져오기",
     "storage.choose_title": "저장 폴더 선택",
     "storage.move_warning": "통계 저장 위치:\n{path}\n\n현재 기록을 복사하고 확인하며 원본 데이터베이스를 보관합니다. events.sqlite3이 없는 로컬 폴더를 선택하세요.",
-    "storage.import_warning": "가져올 파일:\n{path}\n\n기존 기록을 유지하고 먼저 백업합니다. 자동 백업은 보통 최근 5개를 보관합니다. 같은 분, 장치, 키 또는 마우스 버튼의 기록은 더 큰 횟수를 유지합니다. 겹치는 별도 기록을 구별할 수 없어 충돌 시 적게 집계될 수 있습니다. 현재 기록에 병합합니다. 계속할까요?",
+    "storage.import_warning": "다음 데이터베이스의 기록을 병합합니다:\n{path}\n\n가져오기 전에 현재 데이터를 자동으로 백업합니다. 중복 기록은 두 번 집계하지 않습니다. 계속할까요?",
     "action.cancel": "취소",
     "action.merge_history": "기록 병합",
     "storage.destination_exists": "이 폴더에 events.sqlite3이 이미 있습니다. 다른 폴더를 선택하거나 데이터베이스 가져오기로 기록을 병합하세요.",
@@ -1336,8 +1336,8 @@
     "update.installed": "{version}(으)로 업데이트했습니다",
     "update.failed_last": "지난 업데이트가 완료되지 않았습니다. 다시 시도하세요.",
     "update.scoop": "Scoop에서 관리합니다. ClickPulse를 종료한 후 실행하세요: {command}",
-    "update.automatic_scoop": "앱 실행 중 24시간마다 확인합니다. 업데이트는 Scoop으로 설치하세요.",
-    "update.found_scoop": "새 버전 {version}이 있습니다. ClickPulse를 종료한 후 실행하세요: {command}"
+    "update.automatic_scoop": "앱 실행 중 24시간마다 확인합니다.",
+    "update.found_scoop": "설정에서 업데이트 내용을 확인하세요."
   },
   "fr": {
     "nav.main": "Navigation principale",
@@ -1521,7 +1521,7 @@
     "calendar.literary": "Environ {count} exemplaires de {book}, une frappe après l’autre.",
     "calendar.literary_one": "Environ {count} exemplaire de {book}, une frappe après l’autre.",
     "calendar.literary_opening": "Chaque histoire commence par quelques frappes.",
-    "calendar.literary_basis": "Estimation fondée sur les frappes de la période sélectionnée, à raison d’environ un caractère par frappe. L’édition anglaise de {book} est arrondie à {characters} caractères. Une comparaison ludique, pas une mesure du texte réellement écrit.",
+    "calendar.literary_basis": "Estimation d’environ un caractère par frappe, juste pour le plaisir.",
     "window.controls": "Commandes de la fenêtre",
     "window.minimize": "Réduire",
     "window.maximize": "Agrandir",
@@ -1565,7 +1565,7 @@
     "action.import_database": "Importer une base",
     "storage.choose_title": "Choisir le dossier de stockage",
     "storage.move_warning": "Enregistrer les statistiques dans :\n{path}\n\nL’historique sera copié et vérifié. La base d’origine sera conservée. Choisissez un dossier local sans events.sqlite3.",
-    "storage.import_warning": "Source :\n{path}\n\nL’historique actuel sera conservé et sauvegardé. Les 5 dernières sauvegardes automatiques sont généralement conservées. Pour une même minute, un même appareil et une même touche ou un même bouton, le nombre le plus élevé est retenu. Des enregistrements indépendants qui se chevauchent peuvent être sous-estimés, car ils sont impossibles à distinguer. L’import fusionne les données. Continuer ?",
+    "storage.import_warning": "Fusionner l’historique de cette base de données :\n{path}\n\nVos données actuelles seront sauvegardées automatiquement. Les doublons ne seront pas comptés deux fois. Continuer ?",
     "action.cancel": "Annuler",
     "action.merge_history": "Fusionner l’historique",
     "storage.destination_exists": "Ce dossier contient déjà events.sqlite3. Choisissez un autre dossier ou importez cette base pour fusionner son historique.",
@@ -1604,8 +1604,8 @@
     "update.installed": "Mise à jour vers {version} effectuée",
     "update.failed_last": "La dernière mise à jour ne s’est pas terminée. Réessayez.",
     "update.scoop": "Géré par Scoop. Quittez ClickPulse, puis exécutez : {command}",
-    "update.automatic_scoop": "Vérification toutes les 24 heures pendant l’exécution de l’application. Installez les mises à jour avec Scoop.",
-    "update.found_scoop": "La version {version} est disponible. Quittez ClickPulse, puis exécutez : {command}"
+    "update.automatic_scoop": "Vérification toutes les 24 heures lorsque l’application est ouverte.",
+    "update.found_scoop": "Consultez les détails de la mise à jour dans les réglages."
   },
   "de": {
     "nav.main": "Hauptnavigation",
@@ -1789,7 +1789,7 @@
     "calendar.literary": "Etwa {count} Ausgaben von {book}, ein Tastenanschlag nach dem anderen.",
     "calendar.literary_one": "Etwa {count} Ausgabe von {book}, ein Tastenanschlag nach dem anderen.",
     "calendar.literary_opening": "Jede Geschichte beginnt mit ein paar Tastenanschlägen.",
-    "calendar.literary_basis": "Grundlage sind die Tastenanschläge im gewählten Zeitraum, mit ungefähr einem Zeichen pro Anschlag. Die englische Ausgabe von {book} wird auf {characters} Zeichen gerundet. Ein spielerischer Vergleich, keine Messung tatsächlich geschriebenen Texts.",
+    "calendar.literary_basis": "Ungefähr ein Zeichen pro Tastenanschlag – nur zum Spaß geschätzt.",
     "window.controls": "Fenstersteuerung",
     "window.minimize": "Minimieren",
     "window.maximize": "Maximieren",
@@ -1833,7 +1833,7 @@
     "action.import_database": "Datenbank importieren",
     "storage.choose_title": "Speicherordner auswählen",
     "storage.move_warning": "Statistiken speichern unter:\n{path}\n\nDer Verlauf wird kopiert und geprüft. Die ursprüngliche Datenbank bleibt erhalten. Wählen Sie einen lokalen Ordner ohne events.sqlite3.",
-    "storage.import_warning": "Quelle:\n{path}\n\nDer vorhandene Verlauf bleibt erhalten und wird zuvor gesichert. In der Regel bleiben die letzten 5 automatischen Sicherungen erhalten. Für dieselbe Minute, dasselbe Gerät und dieselbe Taste oder Maustaste bleibt der größere Zähler erhalten. Überlappende unabhängige Aufzeichnungen sind nicht unterscheidbar und können zu niedrig gezählt werden. Der Import führt Daten zusammen. Fortfahren?",
+    "storage.import_warning": "Verlauf aus dieser Datenbank zusammenführen:\n{path}\n\nDeine aktuellen Daten werden vorher automatisch gesichert. Doppelte Einträge werden nicht doppelt gezählt. Fortfahren?",
     "action.cancel": "Abbrechen",
     "action.merge_history": "Verlauf zusammenführen",
     "storage.destination_exists": "Dieser Ordner enthält bereits events.sqlite3. Wählen Sie einen anderen Ordner oder importieren Sie diese Datenbank, um den Verlauf zusammenzuführen.",
@@ -1872,8 +1872,8 @@
     "update.installed": "Auf {version} aktualisiert",
     "update.failed_last": "Das letzte Update wurde nicht abgeschlossen. Bitte erneut versuchen.",
     "update.scoop": "Von Scoop verwaltet. Beende ClickPulse und führe dann aus: {command}",
-    "update.automatic_scoop": "Prüfung alle 24 Stunden, während die App läuft. Installiere Updates über Scoop.",
-    "update.found_scoop": "Version {version} ist verfügbar. Beende ClickPulse und führe dann aus: {command}"
+    "update.automatic_scoop": "Prüft alle 24 Stunden, während die App läuft.",
+    "update.found_scoop": "Details zum Update findest du in den Einstellungen."
   },
   "es": {
     "nav.main": "Navegación principal",
@@ -2057,7 +2057,7 @@
     "calendar.literary": "Unos {count} ejemplares de {book}, pulsación a pulsación.",
     "calendar.literary_one": "Aproximadamente {count} ejemplar de {book}, pulsación a pulsación.",
     "calendar.literary_opening": "Toda historia comienza con unas pocas pulsaciones.",
-    "calendar.literary_basis": "Se estima a partir de las pulsaciones del período seleccionado, aproximadamente un carácter por pulsación. La edición inglesa de {book} se redondea a {characters} caracteres. Es una comparación lúdica, no una medida del texto escrito.",
+    "calendar.literary_basis": "Estimación de un carácter por pulsación, solo por diversión.",
     "window.controls": "Controles de ventana",
     "window.minimize": "Minimizar",
     "window.maximize": "Maximizar",
@@ -2101,7 +2101,7 @@
     "action.import_database": "Importar base de datos",
     "storage.choose_title": "Elegir carpeta de almacenamiento",
     "storage.move_warning": "Guardar estadísticas en:\n{path}\n\nSe copiará y verificará el historial. Se conservará la base original. Elige una carpeta local sin events.sqlite3.",
-    "storage.import_warning": "Origen:\n{path}\n\nEl historial actual se conservará y se guardará una copia antes de importar. Normalmente se conservan las 5 últimas copias automáticas. Para el mismo minuto, dispositivo y tecla o botón, se conserva el recuento mayor. Los registros independientes que se solapan no se pueden distinguir y pueden quedar infravalorados. La importación combina los datos. ¿Continuar?",
+    "storage.import_warning": "Combinar el historial de esta base de datos:\n{path}\n\nTus datos actuales se guardarán automáticamente antes de importar. Los registros duplicados no se contarán dos veces. ¿Continuar?",
     "action.cancel": "Cancelar",
     "action.merge_history": "Combinar historial",
     "storage.destination_exists": "Esta carpeta ya contiene events.sqlite3. Elige otra carpeta o importa esa base para combinar su historial.",
@@ -2140,7 +2140,7 @@
     "update.installed": "Actualizado a {version}",
     "update.failed_last": "La última actualización no terminó. Inténtalo de nuevo.",
     "update.scoop": "Administrado por Scoop. Cierra ClickPulse y ejecuta: {command}",
-    "update.automatic_scoop": "Se comprueba cada 24 horas mientras la aplicación está abierta. Instala las actualizaciones con Scoop.",
-    "update.found_scoop": "La versión {version} está disponible. Cierra ClickPulse y ejecuta: {command}"
+    "update.automatic_scoop": "Comprueba cada 24 horas mientras la aplicación está abierta.",
+    "update.found_scoop": "Consulta los detalles de la actualización en Configuración."
   }
 }

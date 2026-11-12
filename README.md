@@ -2,78 +2,41 @@
 
 <h1 align="center">ClickPulse</h1>
 
-<p align="center"><strong>Small app. Every click. Big insights.</strong></p>
+<p align="center"><strong>See how you really use your keyboard and mouse. Fully offline.</strong></p>
 
-<p align="center"><a href="#installation"><img src="assets/badges/preview.svg" alt="release: v0.2.1"></a> <a href="docs/development.md"><img src="assets/badges/rust.svg" alt="Core: Rust"></a> <a href="LICENSE"><img src="assets/badges/license.svg" alt="license: GPL-3.0-or-later"></a> <a href="docs/install-macos.md"><img src="assets/badges/macos.svg" alt="macOS: 12+ · arm64/x64"></a> <a href="docs/install-windows.md"><img src="assets/badges/windows.svg" alt="Windows: 10/11 · x64"></a></p>
+<p align="center"><a href="#install"><img src="assets/badges/preview.svg" alt="release: v0.2.1"></a> <a href="LICENSE"><img src="assets/badges/license.svg" alt="license: GPL-3.0-or-later"></a> <a href="docs/install-macos.md"><img src="assets/badges/macos.svg" alt="macOS: 12+ · arm64/x64"></a> <a href="docs/install-windows.md"><img src="assets/badges/windows.svg" alt="Windows: 10/11 · x64"></a></p>
 
-An offline keyboard and mouse activity tracker for macOS and Windows. See your daily patterns, most-used keys and live counts.
+[![ClickPulse Sport in Mini mode](docs/images/sport-desktop-en.webp)](docs/images/sport-desktop-en.webp)
 
-[![ClickPulse overview](docs/images/overview-en.jpg)](docs/images/overview-en.jpg)
+Counts keys and clicks only. Never records what you type. No account, no telemetry.
 
-## Mini mode
+## Install
 
-[![Mini mode alongside everyday desktop work](docs/images/mini-desktop-en.webp)](docs/images/mini-desktop-en.webp)
+| | |
+| --- | --- |
+| **macOS** (Homebrew) | `brew install --cask endnone/clickpulse/clickpulse` (run `brew tap endnone/clickpulse https://github.com/endNone/ClickPulse` once first) |
+| **Windows** (Scoop) | `scoop bucket add clickpulse https://github.com/endNone/ClickPulse` then `scoop install clickpulse` |
+| **Manual** | [Download](https://github.com/endNone/ClickPulse/releases/latest) DMG (macOS 12+) or portable ZIP (Windows 10/11) |
 
-Simulated desktop · Demo data.
-
-## Installation
-
-**0.2.1** — [Download packages](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1). You can also [build from source](docs/development.md).
-
-Already using [Homebrew](https://brew.sh) or [Scoop](https://scoop.sh)? Install from this project's own tap or bucket:
-
-**macOS · Homebrew**
-
-```sh
-brew tap endnone/clickpulse https://github.com/endNone/ClickPulse && brew install --cask endnone/clickpulse/clickpulse
-```
-
-**Windows · PowerShell with Scoop**
-
-```powershell
-scoop bucket add clickpulse https://github.com/endNone/ClickPulse; if ($?) { scoop install clickpulse/clickpulse }
-```
-
-These commands select the package and verify its checksum. They do not bypass OS security: macOS may still need **Open Anyway** and Input Monitoring; Windows Smart App Control may block the unsigned App. WebView2 Runtime is required on Windows. [Details and updates](docs/package-managers.md).
-
-| System | Package | Guide |
-| --- | --- | --- |
-| macOS 12+ · Apple Silicon | **arm64** DMG or App ZIP | [macOS installation](docs/install-macos.md) |
-| macOS 12+ · Intel | **x64** DMG or App ZIP | [macOS installation](docs/install-macos.md) |
-| Windows 10/11 · x64 | Portable ZIP | [Windows installation](docs/install-windows.md) |
-
-**macOS:** move the App to Applications, allow the [first launch](docs/install-macos.md#2-allow-the-first-launch), then enable Input Monitoring. **Windows:** extract the ZIP and open ClickPulse.exe. Check **Recording** before use.
-
-Upgrading from 0.2.0 or earlier? Install 0.2.1 manually once to get the in-app updater. History and settings are retained.
-
-Mac packages are ad-hoc signed without notarization; Windows packages are unsigned.
-
-**Windows launch blocked?** See [Windows security prompts](docs/install-windows.md#windows-security-prompts), including Smart App Control error 4551.
+The app isn't signed yet, so your system may block its first launch. [macOS steps](docs/install-macos.md) · [Windows steps](docs/install-windows.md)
 
 ## Features
 
-- **Overview:** 24-hour activity, 14/30/90-day trends and an activity calendar.
-- **Keyboard:** physical-key heatmap and usage treemap.
-- **History:** complete daily records and yearly filters.
-- **Mini:** floating counts, pin/pause controls and optional Sport effects.
-- **Data:** custom save folders and SQLite history imports with backups.
-- **Updates:** daily checks, a manual check in Settings and installation when you choose.
-
-Four themes, eight languages and a time-zone override are available in Settings. Language and time zone follow your system by default. [Usage guide](docs/usage.md).
-
-## Sport mode
-
-Type and click your way from **C → B → A → S → SS**. Mini’s Warp effect adds light gates and particles as your speed rises. Red **SS** keeps the motion without shaking the window.
-
-[![Sport mode progressing from C to red SS during a simulated desktop writing session](docs/images/sport-desktop-en.webp)](docs/images/sport-desktop-en.webp)
-
-Simulated desktop · Demo data. [Static SS preview](docs/images/sport-desktop-ss-en.jpg).
-
-**Off by default.** Show Sport in **Settings → Personalization**, then enable it with Mini’s lightning button. Ranks combine keyboard and mouse input. [How it works](docs/usage.md#sport-in-mini-mode).
+- Discover daily patterns with activity trends and a calendar.
+- Find your most-used keys with a heatmap and treemap.
+- Revisit any day's activity in your complete history.
+- Watch live counts while you work in a floating Mini window.
+- Turn typing and clicking into Sport effects with Mini's lightning button.
+- Move your data anywhere, or merge history from another computer.
+- Make it yours with four themes, eight languages and your preferred time zone.
 
 ## Screenshots
 
-Demo data, English interface, default deep blue theme. Click an image to view the original.
+All screenshots use demo data.
+
+### Overview
+
+[![Overview](docs/images/overview-en.jpg)](docs/images/overview-en.jpg)
 
 ### Keyboard heatmap
 
@@ -87,24 +50,9 @@ Demo data, English interface, default deep blue theme. Click an image to view th
 
 [![History](docs/images/history-en.jpg)](docs/images/history-en.jpg)
 
-## Privacy
+## More
 
-No account, telemetry or cloud sync. Only key/button identities, counts and timestamps are stored locally—never typed text, pointer positions or screen contents. History is retained when you update or uninstall. [Data and privacy](docs/data-and-privacy.md).
-
-## Documentation
-
-Read the [documentation](docs/README.md) for installation, everyday use, backups and development.
-
-## Contributing
-
-Bug reports and focused pull requests are welcome. See the [contribution guide](CONTRIBUTING.md).
-
-## License
-
-Licensed under [GPL-3.0-or-later](LICENSE).
-
-Bundled fonts and artwork retain their own licenses. See the [font notices](assets/fonts/README.txt) and [artwork notices](assets/badges/README.md).
-
-## Community
-
-Questions, ideas or something to share? Join [GitHub Discussions](https://github.com/endNone/ClickPulse/discussions). For reproducible bugs, [open an issue](https://github.com/endNone/ClickPulse/issues/new/choose).
+[Guides](docs/README.md) · [Privacy](docs/data-and-privacy.md) · [Changelog](CHANGELOG.md)<br>
+[Contribute](CONTRIBUTING.md) · [Report a bug](https://github.com/endNone/ClickPulse/issues/new/choose)<br>
+[Discussions](https://github.com/endNone/ClickPulse/discussions)<br>
+[GPL-3.0-or-later](LICENSE) · [Font credits](assets/fonts/README.txt) · [Artwork credits](assets/badges/README.md)

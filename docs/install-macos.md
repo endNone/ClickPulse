@@ -1,68 +1,57 @@
-# macOS installation and updates
+# Install on macOS
 
-For **0.2.1 · macOS 12 or later · Apple Silicon and Intel**. DMG and App ZIP packages for both architectures are available in the [0.2.1 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1). Both architectures pass builds and checks on their corresponding GitHub macOS runners. This guide covers first launch, Input Monitoring and updates.
+## 1. Download
 
-Check Apple menu → About This Mac: choose `macos-arm64` for an Apple M-series chip, or `macos-x64` for an Intel processor.
+[Download the DMG](https://github.com/endNone/ClickPulse/releases/latest) for macOS 12 or later, or use [Homebrew](package-managers.md#macos-homebrew-cask).
 
-Using Homebrew? [Install from the maintainer's Cask](package-managers.md#macos-homebrew-cask) to select your architecture and verify the download automatically. The first-launch and Input Monitoring steps below still apply.
+Apple chip (M1 or later) → arm64; Intel → x64.
 
-Using a built App requires no Rust, Python or other developer tools, and no developer account or membership purchase. The App is locally ad-hoc signed; it has not been signed with Apple Developer ID or notarized.
+1. Open the DMG and drag **ClickPulse** into **Applications**.
+2. Open ClickPulse from Applications.
 
-## 1. Place the App in Applications
+<a id="2-allow-the-first-launch"></a>
 
-1. Open the matching `ClickPulse-0.2.1-macos-arm64.dmg` or `ClickPulse-0.2.1-macos-x64.dmg`, or extract the matching App ZIP and locate `ClickPulse.app`. GitHub Source code downloads and `source-draft.zip` contain source rather than an installable App; see the [development guide](development.md) to build it.
-2. In Finder, drag the entire `ClickPulse.app` into Applications (`/Applications`). For your user only, `~/Applications` is also suitable: press `⇧⌘G`, enter `~` to open your home folder, then create or open its `Applications` folder.
-3. Open the App from that location. Keep it there after granting access or enabling launch at login, and avoid opening another copy from Downloads.
+## 2. First launch
 
-The DMG's Applications shortcut points to the application directory; drag the App onto it, then eject the disk image after copying. Quit any running older version from the menu bar before replacing it.
+ClickPulse isn't signed by a verified publisher yet. If macOS blocks it:
 
-First launch uses `~/Library/Application Support/ClickPulse/`. Existing history and preferences are retained; startup does not select a developer's or another recorder's old directory. To uninstall, quit and remove only the App; history is kept.
+1. Open **System Settings → Privacy & Security**.
+2. Select **Open Anyway** beside ClickPulse, authenticate, then select **Open**.
 
-## 2. Allow the first launch
+[![Open Anyway in macOS Privacy & Security](https://cdsassets.apple.com/live/7WUAS350/images/macos/sequoia/macos-sequoia-system-settings-privacy-and-security-open-app-anyway.png)](https://support.apple.com/en-us/102445)
 
-After confirming the package came from the maintainer and has not been modified, add an opening exception for **ClickPulse**:
+Screenshot: Apple.
 
-1. Double-click `ClickPulse.app` in its installed location. If it opens normally, continue to the next section.
-2. If macOS cannot verify the developer or check the App for malicious software, dismiss the alert and open **System Settings → Privacy & Security**, then scroll to Security.
-3. Find the message about ClickPulse being blocked and select **Open Anyway**.
-4. Complete any Touch ID or Mac login-password prompt yourself, then select **Open**. Later launches can usually use a normal double-click.
+## 3. Allow input monitoring
 
-**macOS 12:** use **System Preferences → Security & Privacy → General → Open Anyway**. Labels may vary by macOS version. See [Apple's current instructions](https://support.apple.com/en-us/102445) and the [macOS 12 instructions](https://support.apple.com/guide/mac-help/mh40616/12.0/mac/12.0).
+1. Start recording: **ClickPulse → Settings → Recording and access → Manage access**.
+2. Enable **ClickPulse** in **Input Monitoring**, then quit and reopen it.
+3. Check that **Recording** appears and counts increase as you type and click.
 
-This adds an exception for the selected App without disabling system-wide protection. If the alert says the App **will damage your computer** or **is damaged**, stop, obtain the original package again and contact the maintainer. Those alerts need a different response from an unidentified-developer message. [Apple's explanation of these alerts](https://support.apple.com/en-us/102445)
+![ClickPulse Input Monitoring controls](images/install-macos-permission.png)
 
-## 3. Grant Input Monitoring access
+## Common questions
 
-After allowing the App to open, grant access for keyboard and mouse statistics:
+<details>
+<summary>Using macOS 12?</summary>
 
-1. In ClickPulse, open **Settings → Recording and access**, then select **Grant access** or **Manage access** beside Input Monitoring. You can also open **System Settings → Privacy & Security → Input Monitoring** directly.
-2. Enable **ClickPulse**. If it is missing, select **+**, choose `ClickPulse.app` from its installed location and enable it. Complete any authentication prompt yourself.
-3. Follow any **Quit & Reopen** prompt. If it does not reopen automatically, choose **Quit ClickPulse** from its menu-bar menu, then open it from the installed location.
-4. Confirm that the App shows **Recording**. Press a few keys and click a few times in another application, wait briefly, then check that today's keyboard and mouse counts increase.
+For first launch, use **System Preferences → Security & Privacy → General → Open Anyway**.
 
-**macOS 12:** open **System Preferences → Security & Privacy → Privacy → Input Monitoring**, unlock the pane and select ClickPulse. See [Apple's Input Monitoring instructions](https://support.apple.com/guide/mac-help/mchl4cedafb6/mac) and the [macOS 12 location](https://support.apple.com/guide/mac-help/mchl4cedafb6/12.0/mac/12.0).
+For recording, open **Privacy → Input Monitoring**, unlock the pane, and enable ClickPulse.
 
-The window's close button only hides it; recording continues. Use **Quit ClickPulse** when restarting for access changes. The App stores key/button identities, counts and statistical timestamps, without typed text, pointer positions or screen contents.
+</details>
 
-## 4. Update and refresh access
+<details>
+<summary>“Is damaged” or “will damage your computer”?</summary>
 
-Starting with 0.2.1, use **Settings → Application → Check for updates**, then **Update & restart** when offered. Daily checks are enabled by default and can be turned off. Upgrading from the published 0.2.0 or earlier requires the manual steps below once to obtain the updater.
+Download the app again. If the alert persists, [report the problem](https://github.com/endNone/ClickPulse/issues/new/choose). See [Apple's explanation](https://support.apple.com/en-us/102445).
 
-1. Choose **Quit ClickPulse** from its menu-bar menu, then replace the old App with the complete new `ClickPulse.app` in the same directory.
-2. Open it from that location. If macOS blocks it again, follow section 2. If it does not show Recording, check access as described in section 3.
-3. If Input Monitoring is enabled but the App still reports missing access, quit ClickPulse first. Select the old ClickPulse entry in Input Monitoring and remove it with **−**, then use **+** to add the **updated App from its current installed location**. Enable access and reopen it.
+</details>
 
-Updating the App changes its ad-hoc signature, so an old permission entry may not apply to the new App. Confirm both Recording status and increasing counts. Replacing the App retains history in `~/Library/Application Support/ClickPulse/`; deleting that directory is not needed to refresh permissions.
+<a id="4-update-and-refresh-access"></a>
 
-If you move the App, confirm recording works in its new location, then turn **Settings → Application → Launch at login** off and back on to update the startup location. Login startup runs in the menu bar with the window hidden.
+**Not recording after an update?** Quit ClickPulse. In Input Monitoring, remove its entry with **−**, add the updated app with **+**, enable it, then reopen.
 
-## Common situations
+**How do I update?** Open **Settings → Application → Check for updates**, then **Update & restart**. Daily checks can be turned off. Version 0.2.0 or earlier needs one manual update.
 
-| Situation | What to do |
-| --- | --- |
-| Open Anyway is missing | Try opening the installed App again, then return to security settings. A work- or school-managed Mac may restrict this action; contact its administrator. |
-| Access is enabled but recording has not started | Check whether recording is paused, quit normally and reopen. If access is still missing, remove the old entry and add the updated App as described in section 4. |
-| Closing the window hides the interface | Reopen from Applications, the Dock or the menu-bar Open statistics action. Closing does not stop recording. |
-| You received source code or an incompatible package | Choose arm64 for an Apple M-series chip or x64 for Intel, and use the complete App. Source requires a developer build. |
-
-See the [usage guide](usage.md) and [data and privacy guide](data-and-privacy.md) for further details.
+**Where is my history?** In `~/Library/Application Support/ClickPulse`, unless you selected another folder. Updating or removing the app keeps it.
