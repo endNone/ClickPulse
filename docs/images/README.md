@@ -1,16 +1,16 @@
 # Screenshot assets
 
-README.md leads with the Sport animation, followed by English-interface screenshots. Public project images must use English, regardless of the surrounding documentation language. Every showcase uses the default deep blue theme; other color themes remain an App feature described in text. The overview was refreshed from the 0.2.1 interface, including the current hourly chart and no CSV export control. The preview reads its version from `Cargo.toml`; never hard-code an older release in the capture script.
+README.md uses English-interface screenshots, a Mini desktop demonstration and a Sport rank animation. Public project images must use English, regardless of the surrounding documentation language. Every showcase uses the default deep blue theme; other color themes remain an App feature described in text. The overview was refreshed from the 0.2.1 interface, including the current hourly chart and no CSV export control. The preview reads its version from `Cargo.toml`; never hard-code an older release in the capture script.
 
 | Mini mode asset | Format |
 | --- | --- |
-| [Desktop demonstration](mini-desktop-en.webp) | Optional Mini demonstration |
+| [Desktop demonstration](mini-desktop-en.webp) | Animated WebP used in the README |
 | [GIF alternative](mini-desktop-en.gif) | The same desktop demonstration |
 | [Static preview](mini-blue-en.jpg) | High-density view of the floating panel |
 
 These are browser captures of the App's own HTML/CSS/JavaScript and unmodified bundled fonts, with generated data. They show interface content, without native OS window controls. Full pages render at twice the pixel density with a 1280-pixel logical width. The overview keeps the complete interface at 2560 pixels wide. Keyboard, treemap and history examples capture only their visible feature cards, excluding the sidebar, top toolbar, page heading and footer without changing the UI layout. The three feature images are displayed as separate full-width rows in the README, without comparison tables or table-heading rows. Mini renders at three times the pixel density: a 960 × 624 image of the unchanged 320 × 208 logical layout, available above. Text and vector icons are rendered at the target density, rather than enlarging a compressed image. They are not native Windows validation evidence.
 
-The README's four SVG badges are local assets under `assets/badges/`: release version, GPL-3.0-or-later license, macOS and Windows. The license badge uses compact text padding. Storage and network information remain in the privacy text instead of separate badges. Keep their facts consistent with installation status. The license badge links to the project LICENSE file and reflects the maintainer-approved GPL-3.0-or-later grant. Stars and a stable-release label require a published repository and release first.
+The README's five SVG badges are local assets under `assets/badges/`: preview version (orange), GPL-3.0-or-later license (green), macOS target (violet), Windows target (blue) and Rust core (orange, with its artwork notice in `assets/badges/README.md`). The license badge uses compact text padding. Storage and network information remain in the privacy text instead of separate badges. Keep their facts consistent with installation status. The license badge links to the project LICENSE file and reflects the maintainer-approved GPL-3.0-or-later grant. Stars and a stable-release label require a published repository and release first.
 
 ## Reproduce the demo
 
@@ -34,7 +34,7 @@ Capture after the `data-preview-ready="true"` attribute appears on `<html>` and 
 
 For keyboard, treemap and history, find the bounding rectangle of the visible `.card` elements in the selected page. Use their combined bounds with 16 pixels of outer padding on each side for the browser screenshot's clip option. At the dimensions above, these examples start at x=464, y=318 and are 2052 pixels wide. This captures the actual feature content without surrounding navigation or duplicate page titles; do not hide controls in the App or stretch the cropped image. Keep overview and mini uncropped.
 
-The Settings screen appears only in the installation guide, not the README showcase.
+The Settings screen is not included in the public showcase.
 
 ## Mini mode desktop animation
 
@@ -103,14 +103,3 @@ The encoder checks dimensions, total 3,600 ms duration and infinite looping, inc
 Final generation prompt:
 
 > Use case: photorealistic-natural. Asset type: a desktop wallpaper behind a compact productivity app demonstration. Primary request: a clear, realistic alpine lake landscape photograph. Snow-dusted mountain ridge in the distance, calm deep-blue lake, evergreen forest along the shoreline, soft natural morning light. Wide 4K landscape composition, 3840x2160, crisp natural textures and restrained colors. Photograph-like, quiet and believable, not fantasy or oversaturated. No interface, no icons, no text, no logos, no watermark. This is scenery only; all application UI will be rendered separately.
-
-## Installation illustrations
-
-| Image | Source |
-| --- | --- |
-| macOS first launch | [Apple’s Open Anyway screenshot](https://support.apple.com/en-us/102445), embedded from Apple’s website. |
-| `install-macos-permission.png` | Current English Settings interface with a simulated permission request, captured in the browser. |
-| `install-windows-first-launch.png` | Current Windows interface with generated data, captured in the browser. |
-| `install-windows-recording.png` | An existing native Windows screenshot showing 11 test keystrokes and 11 test clicks. |
-
-App captures use the existing interface without modifying its layout. The Windows recording image demonstrates the status to look for; Windows has no separate input permission screen. Apple’s screenshot is credited in the guide and retains Apple’s rights.

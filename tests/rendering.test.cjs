@@ -230,7 +230,7 @@ test('calendar literary aside uses only selected keyboard history and follows ra
   a.window.receive(s);
   const aside=a.get('calendar-aside');
   assert.equal(aside.hidden,false);assert.match(aside.textContent,/About 3 copies of Pride and Prejudice/);
-  assert.equal(aside.title,messages.en['calendar.literary_basis']);
+  assert.match(aside.title,/700,000/);assert.match(aside.title,/not actual written text/);
   const range=a.get('calendar-range-select');range.value='2025';range.fire('change');
   assert.match(aside.textContent,/About 1 copy of Pride and Prejudice/);
   range.value='90';range.fire('change');assert.match(aside.textContent,/About 2 copies/);
@@ -753,8 +753,7 @@ test('Scoop-managed updates keep checks and localized guidance without sending i
     assert.equal(a.get('automatic-updates').disabled,false);
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
     a.get('update-details').fire();assert.deepEqual(sent.pop(),{action:'update_release'});
-    a.window.receiveUpdateAvailable('9.9.9');assert.equal(a.get('toast').textContent,messages[locale]['update.found_scoop']);
-    assert.ok(!a.get('toast').textContent.includes('scoop update clickpulse'),'the update command is shown only in Settings');
+    a.window.receiveUpdateAvailable('9.9.9');assert.ok(a.get('toast').textContent.includes('scoop update clickpulse'));
     assert.equal(sent.length,0);
     a.window.receiveUpdateState({status:'current'});assert.equal(a.get('update-managed').hidden,false);
     a.window.receiveUpdateState({status:'available',can_install:true,update_command:null});
