@@ -140,24 +140,33 @@ impl CollectorDb {
             return Ok(());
         }
         let tx = self.conn.transaction()?;
-        for event in events {
-            let time = Local
-                .timestamp_millis_opt(event.ts_ms)
-                .single()
-                .context("事件时间无效")?;
-            let dev = event.device as i64;
-            let code = if event.device == Device::Keyboard {
-                PHYSICAL_CODE_BASE + i64::from(event.code)
-            } else {
-                i64::from(event.code)
-            };
-            tx.execute("INSERT INTO events VALUES(?1,?2,?3,1) ON CONFLICT(bucket,dev,code) DO UPDATE SET cnt=cnt+1",params![event.ts_ms.div_euclid(60_000),dev,code])?;
-            tx.execute("UPDATE lifetime_totals SET cnt=cnt+1 WHERE dev=?1", [dev])?;
-            tx.execute("INSERT INTO daily_totals VALUES(?1,?2,1) ON CONFLICT(day,dev) DO UPDATE SET cnt=cnt+1",params![time.date_naive().to_string(),dev])?;
-            tx.execute("INSERT INTO recent_counts VALUES(?1,?2,1) ON CONFLICT(ts_ms,dev) DO UPDATE SET cnt=cnt+1",params![event.ts_ms,dev])?;
-            if event.device == Device::Keyboard {
-                tx.execute("INSERT INTO native_key_totals VALUES(?1,1) ON CONFLICT(code) DO UPDATE SET cnt=cnt+1",[event.code])?;
-                tx.execute("INSERT INTO historical_key_totals VALUES(0,?1,1) ON CONFLICT(era,code) DO UPDATE SET cnt=cnt+1",[code])?;
+        {
+            let mut minute = tx.prepare_cached("INSERT INTO events VALUES(?1,?2,?3,1) ON CONFLICT(bucket,dev,code) DO UPDATE SET cnt=cnt+1")?;
+            let mut lifetime =
+                tx.prepare_cached("UPDATE lifetime_totals SET cnt=cnt+1 WHERE dev=?1")?;
+            let mut daily = tx.prepare_cached("INSERT INTO daily_totals VALUES(?1,?2,1) ON CONFLICT(day,dev) DO UPDATE SET cnt=cnt+1")?;
+            let mut recent = tx.prepare_cached("INSERT INTO recent_counts VALUES(?1,?2,1) ON CONFLICT(ts_ms,dev) DO UPDATE SET cnt=cnt+1")?;
+            let mut native = tx.prepare_cached("INSERT INTO native_key_totals VALUES(?1,1) ON CONFLICT(code) DO UPDATE SET cnt=cnt+1")?;
+            let mut historical = tx.prepare_cached("INSERT INTO historical_key_totals VALUES(0,?1,1) ON CONFLICT(era,code) DO UPDATE SET cnt=cnt+1")?;
+            for event in events {
+                let time = Local
+                    .timestamp_millis_opt(event.ts_ms)
+                    .single()
+                    .context("事件时间无效")?;
+                let dev = event.device as i64;
+                let code = if event.device == Device::Keyboard {
+                    PHYSICAL_CODE_BASE + i64::from(event.code)
+                } else {
+                    i64::from(event.code)
+                };
+                minute.execute(params![event.ts_ms.div_euclid(60_000), dev, code])?;
+                lifetime.execute([dev])?;
+                daily.execute(params![time.date_naive().to_string(), dev])?;
+                recent.execute(params![event.ts_ms, dev])?;
+                if event.device == Device::Keyboard {
+                    native.execute([event.code])?;
+                    historical.execute([code])?;
+                }
             }
         }
         tx.commit()?;
@@ -313,6 +322,57 @@ mod tests {
         );
     }
     use super::*;
+    #[test]
+    fn cached_inserts_preserve_all_aggregates_and_rollback_failed_batches() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("cached.sqlite3");
+        let mut db = CollectorDb::open(&path).unwrap();
+        let key = InputEvent {
+            ts_ms: Local::now().timestamp_millis(),
+            device: Device::Keyboard,
+            code: 57,
+        };
+        let mouse = InputEvent {
+            device: Device::Mouse,
+            code: 1,
+            ..key
+        };
+        for _ in 0..3 {
+            db.insert(&[key.clone(), key.clone(), mouse.clone()])
+                .unwrap();
+        }
+        // An error after a successful statement must roll back every aggregate.
+        let invalid = InputEvent {
+            ts_ms: i64::MAX,
+            ..key
+        };
+        assert!(db.insert(&[mouse, invalid]).is_err());
+        db.insert(&[key]).unwrap();
+        for (table, total) in [
+            ("events", 10),
+            ("lifetime_totals", 10),
+            ("daily_totals", 10),
+            ("recent_counts", 10),
+            ("native_key_totals", 7),
+            ("historical_key_totals", 7),
+        ] {
+            let actual: i64 = db
+                .conn
+                .query_row(&format!("SELECT SUM(cnt) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(actual, total, "{table}");
+        }
+        drop(db);
+        let db = CollectorDb::open(&path).unwrap();
+        assert_eq!(
+            db.lifetime().unwrap(),
+            crate::db::Counts {
+                keyboard: 7,
+                mouse: 3
+            }
+        );
+    }
+
     #[test]
     fn failed_schema_upgrade_rolls_back_new_tables_and_version() {
         let temp = tempfile::tempdir().unwrap();
