@@ -134,20 +134,74 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(expected, hashlib.sha256((self.output/name).read_bytes()).hexdigest())
         self.assertIn('/blob/v0.1.0/docs/install-windows.md', notes)
         self.assertNotRegex(notes, r'[\u3400-\u9fff]')
-        self.assertIn(REVISION, notes)
+        self.assertNotIn(REVISION, notes)
         self.assertIn('macos-x64.dmg', notes)
 
         # Every displayed download must exist in the assembled candidate.
         linked_assets = re.findall(r'\]\(https://github.com/example/ClickPulse/releases/download/v0\.1\.0/([^()]+)\)', notes)
-        self.assertEqual(len(linked_assets), 5)
+        self.assertEqual(len(linked_assets), 4)
         self.assertTrue(set(linked_assets).issubset(files))
         self.assertEqual(set(linked_assets), {
             'ClickPulse-0.1.0-windows-x64.zip',
             'ClickPulse-0.1.0-macos-arm64.dmg',
             'ClickPulse-0.1.0-macos-x64.dmg',
             'ClickPulse-0.1.0-source.zip',
-            'SHA256SUMS.txt',
         })
+
+    def linux_candidate(self):
+        self.candidate()
+        for relative in ['Cargo.toml', 'Cargo.lock', 'assets/windows/app.rc']:
+            p = self.root/relative
+            p.write_text(p.read_text().replace('0.1.0', '0.3.0').replace('0,1,0,45', '0,3,0,45'))
+        p = self.root/'assets/Info.plist'
+        data = plistlib.loads(p.read_bytes());data['CFBundleShortVersionString'] = '0.3.0'
+        p.write_bytes(plistlib.dumps(data))
+        for p in list(self.packages.iterdir()):
+            if p.suffix == '.zip':
+                with zipfile.ZipFile(p) as archive:
+                    entries = {n.replace('0.1.0','0.3.0'):archive.read(n).replace(b'0.1.0',b'0.3.0') for n in archive.namelist()}
+                # Source Cargo.toml changed, so refresh the corresponding source digest.
+                for n in entries:
+                    if n.endswith('/source-manifest.json'):
+                        m=json.loads(entries[n]);prefix=n.rsplit('/',1)[0]+'/'
+                        m['files']={key:hashlib.sha256(entries[prefix+key]).hexdigest() for key in m['files']}
+                        entries[n]=json.dumps(m).encode()
+                with zipfile.ZipFile(p,'w') as archive:
+                    for n,data in entries.items():archive.writestr(n,data)
+            elif p.suffix == '.json':
+                p.write_text(p.read_text().replace('0.1.0','0.3.0'))
+            p.rename(p.with_name(p.name.replace('0.1.0','0.3.0')))
+        for p in self.packages.iterdir():
+            if p.suffix in ['.zip','.dmg','.exe']:self.checksum(p)
+        for arch,target in [('arm64','aarch64-unknown-linux-gnu'),('x64','x86_64-unknown-linux-gnu')]:
+            prefix='ClickPulse-0.3.0-linux-'+arch
+            manifest=self.archive(prefix, {'clickpulse':b'ELF fixture','LICENSE.txt':(self.root/'LICENSE').read_bytes()}, internal_build=45,target=target,source_revision=REVISION)
+            # archive() uses the legacy sample version by default.
+            file=self.packages/(prefix+'.zip')
+            manifest['version']='0.3.0'
+            self.rewrite_zip(file.name,lambda entries:entries.update({prefix+'/build-manifest.json':json.dumps(manifest).encode()}))
+            (self.packages/(prefix+'.manifest.json')).write_text(json.dumps(manifest))
+
+    def test_030_requires_both_linux_packages_and_checks_external_metadata(self):
+        self.linux_candidate()
+        path=self.packages/'ClickPulse-0.3.0-linux-x64.zip'
+        saved=path.read_bytes();path.unlink()
+        with self.assertRaisesRegex(ValueError,'Missing'):
+            release.prepare_release(self.root,self.packages,self.output,'v0.3.0',REVISION,'example/ClickPulse')
+        self.assertFalse(self.output.exists());path.write_bytes(saved)
+        external=self.packages/'ClickPulse-0.3.0-linux-x64.manifest.json'
+        good=external.read_text();m=json.loads(good);m['target']='aarch64-unknown-linux-gnu';external.write_text(json.dumps(m))
+        with self.assertRaisesRegex(ValueError,'Linux external'):
+            release.prepare_release(self.root,self.packages,self.output,'v0.3.0',REVISION,'example/ClickPulse')
+        external.write_text(good)
+        notes=release.prepare_release(self.root,self.packages,self.output,'v0.3.0',REVISION,'example/ClickPulse')
+        self.assertEqual(len(list(self.output.iterdir())),14)
+        self.assertIn('Ubuntu 22.04 / 24.04',notes)
+        for arch in ['arm64','x64']:
+            self.assertIn(f'ClickPulse-0.3.0-linux-{arch}.zip',notes)
+            self.assertTrue((self.output/f'ClickPulse-0.3.0-linux-{arch}.manifest.json').is_file())
+        for word in ['ad-hoc','runner','manifest','checksum','internal build']:
+            self.assertNotIn(word,notes.lower())
 
     def test_download_buttons_pin_images_and_assets_to_the_requested_release(self):
         notes = release.release_notes('1.2.3', 'fixture/RenamedApp', REVISION)

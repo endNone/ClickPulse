@@ -1,7 +1,7 @@
 1 ICON "assets/windows/ClickPulse.ico"
 1 24 "assets/windows/ClickPulse.manifest"
 1 VERSIONINFO
-FILEVERSION 0,2,1,78
+FILEVERSION 0,3,0,79
 PRODUCTVERSION 0,2,1,0
 FILEOS 0x40004
 FILETYPE 0x1
@@ -12,11 +12,11 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "ClickPulse"
    VALUE "FileDescription", "ClickPulse input activity statistics"
-   VALUE "FileVersion", "0.2.1.78"
+   VALUE "FileVersion", "0.3.0.79"
    VALUE "InternalName", "ClickPulse"
    VALUE "OriginalFilename", "ClickPulse.exe"
    VALUE "ProductName", "ClickPulse"
-   VALUE "ProductVersion", "0.2.1"
+   VALUE "ProductVersion", "0.3.0"
   END
  END
  BLOCK "VarFileInfo"

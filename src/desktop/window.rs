@@ -138,7 +138,10 @@ pub(super) fn set_compact(
     } else if !compact && layout.compact {
         window.set_max_inner_size(None::<LogicalSize<f64>>);
         window.set_resizable(true);
-        window.set_decorations(!cfg!(target_os = "windows"));
+        // Keep GTK undecorated in both modes. Adding/removing its Wayland
+        // header during a resize can temporarily subtract the titlebar height
+        // from the WebView, clipping Mini until another allocation arrives.
+        window.set_decorations(cfg!(target_os = "macos"));
         #[cfg(target_os = "windows")]
         {
             use tao::platform::windows::WindowExtWindows;

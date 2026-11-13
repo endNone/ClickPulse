@@ -180,7 +180,7 @@ pub fn run(
             .with_title_hidden(true)
             .with_fullsize_content_view(true)
     };
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     let builder = builder.with_decorations(false);
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     let builder = builder.with_window_icon(Some(tao::window::Icon::from_rgba(
@@ -509,14 +509,13 @@ pub fn run(
                     fix_compact_size(&window);
                 }
                 #[cfg(target_os = "windows")]
-                {
-                    update_windows_region(&window, &mut layout);
-                    if ready {
-                        let _ = webview.evaluate_script(&format!(
-                            "window.receiveView({{maximized:{}}});",
-                            window.is_maximized()
-                        ));
-                    }
+                update_windows_region(&window, &mut layout);
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                if ready {
+                    let _ = webview.evaluate_script(&format!(
+                        "window.receiveView({{maximized:{}}});",
+                        window.is_maximized()
+                    ));
                 }
             }
             Event::WindowEvent {

@@ -46,6 +46,9 @@
     });
   }
   window.receiveView=next=>{
+    // A range anchored in the hidden mode can paint across the newly shown
+    // layout in WebKit. Keep selections during live refreshes, not mode changes.
+    if(typeof next.compact==='boolean'&&next.compact!==view.compact)window.getSelection?.()?.removeAllRanges();
     if(next.timezones)window.setTimeZoneChoices(next.timezones);
     if(next.timezone)window.setInterfaceTimeZone(next.timezone);
     if(next.locale)window.setInterfaceLanguage(next.locale,next.language_preference);

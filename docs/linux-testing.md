@@ -49,3 +49,33 @@ Ubuntu 22.04 automated checks passed: 140 library tests, 23 desktop tests and 8 
 A current-version update response does not validate downloading/installing a newer public Linux release. Linux package/ELF validation and rollback use test fixtures, and the daily schedule is covered by clock/restart tests; no 24-hour soak is claimed. The build manifest's `native_linux_tested` field remains its build-time value; this acceptance record is separate evidence.
 
 No x64 desktop test or remote Linux CI run is claimed. Physical special keys, suspend/resume, fractional scaling/multiple monitors, X11 and other desktop environments remain outside this validation. These VMs use software graphics fallback; successful rendering does not establish physical-GPU performance.
+
+## Update follow-up — 2026-11-12
+
+Ubuntu 24.04 ARM64 passed 23 updater checks and 9 daily-update controller checks. The installed App's manual check also returned “up to date”, confirmed by the user. The public release is still 0.2.1 and has no Linux download.
+
+The helper-process test now runs on Linux. It waits for the parent to finish saving, replaces a disposable program, then uses the real restart launcher to start a small compiled Linux probe. The probe confirms the preserved pause argument; a seeded SQLite database and preference file remain byte-for-byte unchanged. macOS updater regression checks also passed (23).
+
+This establishes local replacement and process restart, not a complete GitHub-to-App Linux upgrade. That still needs a newer Linux release package. Daily checks use controlled timestamps rather than a 24-hour waiting test. The user's installed program, history and preferences were unchanged by this follow-up.
+
+## 0.3.0 local candidate validation — 2026-11-12
+
+The isolated `Release030` worktree combines the Linux changes and the local documentation draft. The local review retained a file-by-file source snapshot before the release preparation commit; base revision alone did not identify those working changes.
+
+The Ubuntu 22.04 ARM64 package was installed on both Ubuntu versions. Each old 0.2.1 updater replaced the actual program, restarted it as the normal desktop user, and retained every existing statistics row/count. Both databases passed integrity checks and every installed package file matched its recorded hash. This uses a locally staged real package, not a published GitHub download. Manual online checks and the daily schedule have separate earlier coverage.
+
+Both normal-user desktops showed the new 0.3.0 interface. The user confirmed Mini/full round trips on 22.04. On 24.04, a pink/brown highlight appeared after expanding Mini and disappeared after clicking. The saved theme remained Blue. A focused fix clears the old text selection only when switching modes, preserving copy selections during ordinary live refreshes. The user then confirmed two round trips, including selecting a Mini count before expanding. No speculative native transparency change remains. Final selection behavior is covered across all three platforms by the interface regression suite; the native selection retest was on 24.04.
+
+Native isolated input checks passed on both guests: repeated key events are ignored, pause/resume works, device reconnect works, and saved history reopens correctly. The temporary input-device exclusion rules were removed afterward. The 24.04 test executable was copied onto its local disk before running; an earlier attempt to execute it from the shared folder failed before test output.
+
+Automated checks: macOS 175 Rust tests; Ubuntu 22.04 ARM64 and emulated Ubuntu 22.04 x64 each 173 Rust tests; 116 JavaScript checks; 33 Python packaging checks. Opt-in network and stress checks are not included. Warnings-denied Rust checks passed on macOS and ARM64 Ubuntu. macOS ARM64/Intel and Linux ARM64/x64 packages were rebuilt after the selection fix. x64 Linux also passed dependency resolution and command-line startup inside its Ubuntu 22.04 container; no x64 desktop or physical Intel Mac validation is claimed.
+
+Windows acceptance is assigned to the user. Final committed-source packaging, Windows results, distribution-list updates, and an online download of the newly published release remain release steps. No 24-hour soak, physical multi-display/fractional scaling, suspend/resume, or X11 acceptance is claimed.
+
+## Final code validation — 2026-11-12
+
+Both Ubuntu ARM64 versions passed 179 Rust checks after the background and cached-insert changes. Warnings-denied checks passed on Ubuntu 22.04, where the compatible ARM64 package was built. The explicit native input check passed again on 22.04 (5.64 seconds) and 24.04 (4.90 seconds): four physical-device test keys, one click, repeat filtering, pause/resume, reconnect and persisted history. The test device was isolated from desktop input and its temporary rule was removed.
+
+The final Linux package replaced the program on both guests after normal exit, with separate backups of the previous program and SQLite profile. The data passed integrity checks. Ubuntu 24.04 then ran that package in its normal Wayland session with its window hidden for the [resource comparison](validation/resource-usage-2026-11-12.md). The subsequent Caps Lock correction is macOS-only.
+
+This extends the native desktop and update checks above; it does not add unperformed x64 desktop, physical Intel Mac or Windows hardware coverage.

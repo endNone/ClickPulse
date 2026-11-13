@@ -127,48 +127,41 @@ def release_notes(version, repository, revision, private=False):
     mac_arm = button('macos-apple-silicon', 'DMG Apple Silicon', name+'-macos-arm64.dmg')
     mac_intel = button('macos-intel-x64', 'DMG Intel x64', name+'-macos-x64.dmg')
     access = '\nThis private preview requires a GitHub account with repository access.\n' if private else ''
-    return f'''Local keyboard and mouse activity statistics for macOS and Windows.
+    linux = ''
+    linux_guide = ''
+    if tuple(map(int, version.split('.'))) >= (0, 3, 0):
+        linux = f"- **Ubuntu 22.04 / 24.04:** [x64 ZIP]({downloads}{name}-linux-x64.zip) · [ARM64 ZIP]({downloads}{name}-linux-arm64.zip)\n"
+        linux_guide = f" · [Ubuntu guide]({base}install-linux.md)"
+    changes = (f'- See the [changelog](https://github.com/{repository}/blob/v{version}/CHANGELOG.md) for this release.\n')
+    if version == '0.3.0':
+        changes = ('- Track keyboard and mouse activity on Ubuntu 22.04 and 24.04.\n'
+                   '- Enjoy clearer controls and smoother Mini transitions across platforms.\n'
+                   '- Reduce background refreshes and disk activity.\n'
+                   '- Count physical Caps Lock presses correctly on macOS.\n')
+    return f'''Local keyboard and mouse activity statistics. Fully offline.
 {access}
-
 ## Downloads
 
-| Platform | Download |
-| --- | --- |
-| Windows 10/11 | {windows} |
-| macOS 12+ | {mac_arm} |
-| | {mac_intel} |
+- **macOS 12+, Apple Silicon:** {mac_arm}
+- **macOS 12+, Intel:** {mac_intel}
+- **Windows 10/11, x64:** {windows}
+{linux}
+[Source code]({downloads}{name}-source.zip) · [Build from source]({base}development.md)
 
-Mac App ZIPs are also available in the release attachments.
+## What's new
 
-### Release files
+{changes}
+## Getting started
 
-| File | Contents |
-| --- | --- |
-| [Source code]({downloads}{name}-source.zip) | Corresponding source and build scripts |
-| [SHA256 checksums]({downloads}SHA256SUMS.txt) | Verify downloaded files |
+The app isn't signed yet; macOS and Windows may ask you to allow first launch.
+[macOS guide]({base}install-macos.md) · [Windows guide]({base}install-windows.md){linux_guide}
 
-Platform manifests in the attachments list individual package files and their hashes.
+Your history and preferences stay in place when you update.
+See the [changelog](https://github.com/{repository}/blob/v{version}/CHANGELOG.md) for what's new.
 
-### Documentation
-
-| Guide | Covers |
-| --- | --- |
-| [macOS installation]({base}install-macos.md) | First launch, Input Monitoring and updates |
-| [Windows installation]({base}install-windows.md) | Portable ZIP, WebView2 and updates |
-| [Changelog](https://github.com/{repository}/blob/v{version}/CHANGELOG.md) | Changes included in this release |
-
-## Preview notes
-
-- The Mac App is ad-hoc signed without Apple notarization. Grant Input Monitoring after installation.
-- Windows is distributed as a portable ZIP and requires Microsoft Edge WebView2 Runtime. No Setup installer is offered.
-- The Windows executable is unsigned. Windows 11 Smart App Control may block it; portable packaging does not change publisher trust. See [Microsoft's guidance](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions).
-- Apple Silicon, Intel Mac and Windows x64 packages passed automated tests and packaging on their native GitHub runners.
-- Physical special-key input, login startup, multi-display DPI and Intel desktop coverage are tracked in the [validation checklist]({base}windows-testing.md) and roadmap. Automated checks do not replace those hardware tests.
-- Program updates and uninstalling retain the separate user-data directory.
-- Code: GPL-3.0-or-later. Packages include the license and third-party notices.
-
-Source revision: `{revision}`
+GPL-3.0-or-later. [Questions or ideas?](https://github.com/{repository}/discussions)
 '''
+
 
 
 def prepare_release(root, packages, output, tag, revision, repository, private=False):
@@ -181,10 +174,12 @@ def prepare_release(root, packages, output, tag, revision, repository, private=F
     version = plan['version']
     mac_targets = [(f'ClickPulse-{version}-macos-arm64', 'aarch64-apple-darwin'),
                    (f'ClickPulse-{version}-macos-x64', 'x86_64-apple-darwin')]
+    linux_targets = [(f'ClickPulse-{version}-linux-arm64', 'aarch64-unknown-linux-gnu'),
+                     (f'ClickPulse-{version}-linux-x64', 'x86_64-unknown-linux-gnu')] if tuple(map(int, version.split('.'))) >= (0, 3, 0) else []
     win = f'ClickPulse-{version}-windows-x64'
     source = f'ClickPulse-{version}-source'
     asset_names = [name+suffix for name,_ in mac_targets for suffix in ['.dmg','.zip']]
-    asset_names += [win+'.zip', source+'.zip']
+    asset_names += [win+'.zip', source+'.zip'] + [name+'.zip' for name,_ in linux_targets]
     for name in asset_names:
         file = packages/name
         if file.is_symlink() or not file.is_file() or not file.stat().st_size:
@@ -199,6 +194,11 @@ def prepare_release(root, packages, output, tag, revision, repository, private=F
         if json.loads((packages/(mac+'.manifest.json')).read_text(encoding='utf-8')) != manifest:
             raise ValueError('Mac external manifest does not match the App ZIP.')
         manifests.append((mac, manifest, {target}))
+    for linux,target in linux_targets:
+        manifest = verify_archive(packages/(linux+'.zip'), linux, 'build-manifest.json', plan, 'LICENSE.txt', license_bytes)
+        if json.loads((packages/(linux+'.manifest.json')).read_text(encoding='utf-8')) != manifest:
+            raise ValueError('Linux external manifest does not match the portable ZIP.')
+        manifests.append((linux, manifest, {target}))
     win_manifest = verify_archive(packages/(win+'.zip'), win, 'build-manifest.json', plan, 'LICENSE.txt', license_bytes)
     source_manifest = verify_archive(packages/(source+'.zip'), source, 'source-manifest.json', plan, 'LICENSE', license_bytes)
     if source_manifest.get('revision') != revision or source_manifest.get('tag') != tag:

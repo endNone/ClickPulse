@@ -4,10 +4,10 @@
 <aside class="sidebar">
   <div class="brand"><span class="brand-icon"><img src="__BRAND_MARK__" alt="" aria-hidden="true"></span><div>ClickPulse<small data-i18n="brand.description">键鼠统计</small></div></div>
   <nav aria-label="主导航" data-i18n-aria="nav.main">
-    <button data-page="overview" class="selected"><span class="nav-icon">◫</span><span data-i18n="page.overview">总览</span></button>
-    <button data-page="history"><span class="nav-icon">◷</span><span data-i18n="page.history">历史记录</span></button>
-    <button data-page="keys"><span class="nav-icon">⌨</span><span data-i18n="page.keys">键盘热力图</span></button>
-    <button id="settings-nav" data-page="settings" aria-expanded="false" aria-controls="settings-subnav"><span class="nav-icon">⚙</span><span data-i18n="page.settings">偏好设置</span></button>
+    <button data-page="overview" class="selected"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg></span><span data-i18n="page.overview">总览</span></button>
+    <button data-page="history"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg></span><span data-i18n="page.history">历史记录</span></button>
+    <button data-page="keys"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M6 9h.5m3.5 0h.5m3.5 0h.5m3.5 0h.5M6 12.5h.5m3.5 0h.5m3.5 0h.5m3.5 0h.5M8 16h8"/></svg></span><span data-i18n="page.keys">键盘热力图</span></button>
+    <button id="settings-nav" data-page="settings" aria-expanded="false" aria-controls="settings-subnav"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9.5 3-.5 2-2 1-2-.5-2 3.5L4.5 11v2L3 15l2 3.5 2-.5 2 1 .5 2h5l.5-2 2-1 2 .5 2-3.5-1.5-2v-2L21 9l-2-3.5-2 .5-2-1-.5-2Z"/><circle cx="12" cy="12" r="3"/></svg></span><span data-i18n="page.settings">偏好设置</span></button>
     <div id="settings-subnav" class="settings-subnav" hidden>
       <button data-settings-section="personalization-settings" data-i18n="settings.personalization">个性化</button>
       <button data-settings-section="handoff-settings" data-i18n="settings.migration" hidden>记录迁移</button>
@@ -35,7 +35,7 @@
         <article class="metric"><div class="metric-label"><span data-i18n="metric.week">近 7 天</span></div><div class="metric-number" id="week">—</div><div class="metric-details" id="week-detail" data-i18n="metric.placeholder">键盘 — &nbsp; / &nbsp; 鼠标 —</div><div class="metric-bottom"><span data-i18n="metric.week.scope">含今日</span></div></article>
         <article class="metric"><div class="metric-label"><span data-i18n="metric.lifetime">累计操作</span></div><div class="metric-number" id="lifetime">—</div><div class="metric-details" id="lifetime-detail" data-i18n="metric.placeholder">键盘 — &nbsp; / &nbsp; 鼠标 —</div><div class="metric-bottom" id="legacy-note"><span data-i18n="metric.all">全部记录</span></div></article>
       </div>
-      <article class="live card"><div><span class="live-dot"></span><strong><span data-i18n="live.title">实时计数</span></strong><small><span data-i18n="live.refresh">0.5 秒刷新</span></small></div><div id="windows" class="windows"></div><button class="button" id="pause"><span data-i18n="action.pause">暂停记录</span></button></article>
+      <article class="live card"><div><span class="live-dot"></span><strong><span data-i18n="live.title">实时计数</span></strong><small><span data-i18n="live.refresh">2 秒刷新</span></small></div><div id="windows" class="windows"></div><button class="button" id="pause"><span data-i18n="action.pause">暂停记录</span></button></article>
       <article class="card hourly-card">
         <div class="card-heading"><div><h2 data-i18n="chart.hourly">24 小时时段统计</h2><p id="hourly-range"></p></div><strong id="hourly-total" class="hourly-total"></strong></div>
         <div class="legend"><span class="keyboard-dot"></span><span data-i18n="common.keyboard">键盘</span><span class="mouse-dot"></span><span data-i18n="common.mouse">鼠标</span></div>

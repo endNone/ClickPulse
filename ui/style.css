@@ -1,6 +1,7 @@
 :root {
   --bg:#f3f6fc; --surface:#fff; --text:#172b4a; --muted:#63758e; --line:#e1e8f3;
   --blue:#2563eb; --cyan:#38bdf8; --navy:#102543; --sans:"ClickPulse UI","ClickPulse Sans",sans-serif; --mono:"ClickPulse Mono","ClickPulse Sans",monospace;
+  --ui-label-size:14px; --ui-detail-size:12px; --ui-section-size:16px;
   font-family:var(--sans);
   color:var(--text);font-size:13px;
 }
@@ -11,20 +12,21 @@ button {cursor:pointer;transition:background .16s,color .16s,box-shadow .16s}
 button:focus-visible,select:focus-visible {outline:3px solid #60a5fa;outline-offset:3px}
 button:disabled,select:disabled {opacity:.45;cursor:default}
 [hidden] {display:none!important}
-.sidebar {width:190px;flex:none;background:var(--navy);padding:28px 15px 20px;display:flex;flex-direction:column;color:#c8d7ee}
+.sidebar {width:220px;flex:none;background:var(--navy);padding:28px 15px 20px;display:flex;flex-direction:column;color:#c8d7ee}
 html[data-platform="macos"] .sidebar {padding-top:46px}
-.brand {display:flex;align-items:center;gap:10px;font-family:var(--sans);font-size:18px;font-weight:700;letter-spacing:-.5px;padding:0 5px;color:#f8fbff}
-.brand-icon {display:flex;align-items:center;justify-content:center;width:40px;height:40px;flex:none;background:#f5f8ff;border-radius:9px;overflow:hidden}
-.brand-icon img {display:block;width:40px;height:40px;object-fit:contain}
-.brand small {display:block;font:400 10px/1.4 var(--sans);letter-spacing:0;white-space:nowrap;color:#a4b8d3;margin-top:5px}
+.brand {display:flex;align-items:center;gap:10px;font-family:var(--sans);font-size:18px;line-height:1.25;font-weight:700;letter-spacing:-.5px;padding:0 5px;color:#f8fbff}
+.brand-icon {display:flex;align-items:center;justify-content:center;width:36px;height:36px;flex:none;background:#f5f8ff;border-radius:9px;overflow:hidden}
+.brand-icon img {display:block;width:36px;height:36px;object-fit:contain}
+.brand small {display:block;font:400 11px/1.4 var(--sans);letter-spacing:0;white-space:nowrap;color:#a4b8d3;margin-top:5px}
 nav {display:flex;flex-direction:column;gap:6px;margin-top:28px}
-nav button {position:relative;display:flex;align-items:center;text-align:left;border:0;background:transparent;color:#a9bbd5;padding:12px 14px;border-radius:6px;gap:12px}
+nav button {position:relative;display:flex;align-items:center;text-align:left;border:0;background:transparent;color:#a9bbd5;min-height:44px;padding:11px 10px;border-radius:6px;gap:10px;font:500 var(--ui-label-size)/1.5 var(--sans)}
 nav button:hover {background:#193456;color:#f5f9ff}
 nav button.selected {background:#1c3c68;color:white;font-weight:600}
 nav button.selected:before {position:absolute;content:'';left:-15px;top:10px;bottom:10px;width:3px;background:#60a5fa;border-radius:0 2px 2px 0}
-.nav-icon {font-size:19px;line-height:18px;width:20px;text-align:center;color:#83a8db}
+.nav-icon {display:flex;align-items:center;justify-content:center;width:20px;height:20px;flex:0 0 20px;color:#83a8db}
+.nav-icon svg {display:block;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 nav button.selected .nav-icon {color:#7dd3fc}
-.sidebar-bottom {margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:9px;font:500 10px/1.4 var(--sans);padding:16px 5px 0;color:#a0b6d2;border-top:1px solid #284060}
+.sidebar-bottom {margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:9px;font:500 11px/1.4 var(--sans);padding:16px 5px 0;color:#a0b6d2;border-top:1px solid #284060}
 .sidebar-version {font-weight:600;font-variant-numeric:tabular-nums}
 main {min-width:0;flex:1;overflow:auto}
 header {position:sticky;top:0;z-index:30;height:58px;display:flex;justify-content:flex-end;align-items:center;padding:0 30px;background:#fff;border-bottom:1px solid var(--line)}
@@ -32,7 +34,7 @@ header {position:sticky;top:0;z-index:30;height:58px;display:flex;justify-conten
 .content {padding:29px 30px 20px;max-width:1400px;margin:0 auto}
 .page-heading {display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
 .eyebrow {font:500 9px var(--sans);letter-spacing:0;color:#3b74bd;margin-bottom:8px}
-h1 {font-size:29px;letter-spacing:-.6px;font-weight:700;margin:0 0 8px}
+h1 {font-size:26px;line-height:1.3;letter-spacing:-.6px;font-weight:700;margin:0 0 8px}
 .page-heading p {font-size:11px;color:var(--muted);margin:0}
 .heading-right {display:flex;flex-direction:column;align-items:flex-end;gap:10px;font-size:10px;color:#6d819d}
 .status {display:flex;align-items:center;gap:6px;padding:5px 9px;background:#e7f0ff;border-radius:4px;color:#2663b9;font-size:10px}
@@ -113,11 +115,11 @@ td:first-child,th:first-child {text-align:left}tbody tr:hover {background:#f6f9f
 .empty-state strong {font-weight:600;display:block;margin-bottom:10px;color:#3d5f91}.empty-state p {font-size:11px;line-height:1.8}
 .footnote {font-size:10px;color:#7085a3;line-height:1.8;border-top:1px solid var(--line);margin:22px 0 0;padding-top:15px}
 .settings-card {--settings-control-width:216px;--settings-control-height:44px;text-align:left}
-.settings-card h2 {margin-bottom:9px}.setting-row {display:flex;justify-content:space-between;align-items:center;gap:18px;padding:19px 0}
-.setting-row + .setting-row {border-top:1px solid var(--line)}.setting-row:last-child {padding-bottom:2px}.setting-row strong {font-size:14px;font-weight:600;color:#365479}
-.setting-row p {font-size:12px;line-height:1.7;color:#7186a3;margin:6px 0 0}.path {font:11px var(--mono)!important;overflow-wrap:anywhere}.setting-row>div {min-width:0}
-.setting-row a {font-size:12px;line-height:1.7;color:var(--blue)}
-.settings-card .button,.settings-card select {font:600 14px/1.4 var(--sans);text-align:center}
+.settings-card h2 {font-size:var(--ui-section-size);line-height:1.5;margin-bottom:9px}.setting-row {display:flex;justify-content:space-between;align-items:center;gap:18px;padding:19px 0}
+.setting-row + .setting-row {border-top:1px solid var(--line)}.setting-row:last-child {padding-bottom:2px}.setting-row strong {font-size:var(--ui-label-size);line-height:1.5;font-weight:600;color:#365479}
+.setting-row p {font-size:var(--ui-detail-size);line-height:1.7;color:#7186a3;margin:6px 0 0}.path {font:11px var(--mono)!important;overflow-wrap:anywhere}.setting-row>div {min-width:0}
+.setting-row a {font-size:var(--ui-detail-size);line-height:1.7;color:var(--blue)}
+.settings-card .button,.settings-card select {font:600 var(--ui-label-size)/1.4 var(--sans);text-align:center}
 #demo-badge {font-size:10px;color:#497bc1;border:1px solid #bcd2ef;border-radius:4px;padding:4px 7px}
 #toast {position:fixed;bottom:25px;left:50%;transform:translateX(-50%);background:#173b6b;color:#fff;padding:12px 20px;border-radius:7px;font-size:12px;box-shadow:0 5px 24px #17376325;max-width:80%;z-index:10}
 .keyboard-card {font-family:var(--sans)}
@@ -152,8 +154,7 @@ td:first-child,th:first-child {text-align:left}tbody tr:hover {background:#f6f9f
 .keyboard-bottom {display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:9px;color:#6f85a4}
 .keyboard-scale {display:flex;align-items:center;gap:4px}.keyboard-scale i {width:11px;height:7px;border-radius:1px}
 @media(max-width:1000px) {
-  .sidebar {width:165px;padding:26px 12px}.brand {font-size:16px;gap:6px}.brand small {font-size:8px}
-  .brand-icon,.brand-icon img {width:36px;height:36px}
+  .sidebar {width:210px;padding:26px 12px}
   nav button.selected:before {left:-12px}.content {padding:25px 22px}header {padding:0 22px}
   .metric {padding:18px 16px 14px}.metric-number {font-size:30px}.metric-details {font-size:8px}
   .card {padding:18px}.chart-grid {gap:14px;grid-template-columns:minmax(0,1.7fr) minmax(195px,1fr)}
@@ -161,14 +162,11 @@ td:first-child,th:first-child {text-align:left}tbody tr:hover {background:#f6f9f
 }
 @media(prefers-reduced-motion:reduce) {button,.button,select {transition:none}}
 
-:root:lang(en) .sidebar {width:210px}
-:root:lang(en) nav button {white-space:nowrap}
 #language-select {min-width:130px}
-@media(max-width:1000px) {:root:lang(en) .sidebar {width:185px}:root:lang(en) nav button {font-size:12px;gap:9px;padding:12px 10px}}
 
 .window-controls {display:none;align-items:center;gap:2px;margin-left:4px}
-html[data-platform="windows"] .window-controls {display:flex}
-html[data-platform="windows"] header {z-index:50;padding-right:12px;user-select:none}
+html[data-platform="windows"] .window-controls,html[data-platform="linux"] .window-controls {display:flex}
+html[data-platform="windows"] header,html[data-platform="linux"] header {z-index:50;padding-right:12px;user-select:none}
 .window-control {display:grid;place-items:center;flex:none;width:32px;height:30px;padding:7px;border:0;border-radius:5px;background:transparent;color:#526985}
 .window-control svg {width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;pointer-events:none}
 .window-control:hover {background:var(--control-hover);color:var(--text)}
@@ -179,8 +177,11 @@ html[data-platform="windows"] header {z-index:50;padding-right:12px;user-select:
 .close-dialog-heading h2 {margin:0;font-size:16px;font-weight:650}
 .close-dialog-heading .window-control {width:24px;height:24px;padding:5px}
 .close-dialog p {margin:10px 0 14px;font-size:12px;line-height:1.5;color:var(--muted)}
-.close-remember {display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);cursor:pointer}
-.close-remember input {margin:0;width:13px;height:13px;accent-color:var(--blue)}
+.close-remember {display:flex;align-items:center;gap:8px;min-height:24px;font-size:var(--ui-detail-size);color:var(--muted);cursor:pointer}
+.close-remember input {appearance:none;-webkit-appearance:none;flex:none;margin:0;width:16px;height:16px;border:1.5px solid var(--muted);border-radius:4px;background:var(--surface) center/12px 12px no-repeat;cursor:pointer}
+.close-remember input:checked {border-color:var(--blue);background-color:var(--blue);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3 8 3.2 3.2L13 4.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.close-remember input:focus-visible {outline:2px solid var(--blue);outline-offset:3px}
+@media(forced-colors:active) {.close-remember input {appearance:auto;-webkit-appearance:auto;background-image:none}}
 .close-dialog-actions {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:16px}
 body.compact .close-dialog {padding:14px}
 body.compact .close-dialog-heading h2 {font-size:14px}
@@ -210,7 +211,7 @@ button,select,.preference-switch {user-select:none;-webkit-user-select:none}
 /* Expand section shortcuts only while Settings is open. */
 .sidebar {overflow-y:auto}
 .settings-subnav {display:flex;flex-direction:column;gap:2px;margin:0 0 4px 25px;border-left:1px solid var(--nav-line)}
-/* :root outranks the per-language `nav button` nowrap rules in themes.css. */
-:root .sidebar .settings-subnav button {font-size:11px;line-height:1.5;padding:6px 10px;margin-left:8px;white-space:normal;overflow-wrap:anywhere}
+/* Long section names wrap without shrinking the shared type scale. */
+:root .sidebar .settings-subnav button {font-size:var(--ui-detail-size);line-height:1.5;min-height:36px;padding:8px 10px;margin-left:8px;white-space:normal;overflow-wrap:anywhere}
 .settings-subnav button.current-section {background:var(--nav-hover);color:#fff}
 .settings-card {scroll-margin-top:76px}

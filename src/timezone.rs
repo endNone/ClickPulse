@@ -75,7 +75,7 @@ impl<'de> Deserialize<'de> for TimeZonePreference {
     }
 }
 
-/// Bound Mini reads to at most two days of minute buckets, then apply the
+/// Bound Mini reads to recent minute buckets, then apply the
 /// selected calendar date exactly (including offset changes at DST boundaries).
 pub(crate) fn today_counts(
     conn: &Connection,

@@ -1,6 +1,6 @@
 # README badges
 
-The release version, project license, platform targets and Rust core badges are stored locally, so the README does not depend on a third-party badge service. Keep version and platform labels consistent with the actual packages.
+The release version, project license, platform targets and Rust core badges are stored locally, so the README does not depend on a third-party badge service. Match version and platform labels to the release being documented. The README groups project and platform badges into two rows, displayed at 24 pixels high. Each badge keeps its own accent color; the Rust badge retains its original orange artwork.
 
 ## Rust logo
 

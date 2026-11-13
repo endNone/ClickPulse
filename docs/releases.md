@@ -1,6 +1,6 @@
 # Builds and releases
 
-GitHub Actions checks and packages ClickPulse on hosted Mac and Windows machines. The release workflow produces a **verified candidate artifact** for maintainer review. Wuhan Zhang (`endNone`) creates and publishes Releases with the personal GitHub account; automation never creates a bot-authored Release. The [0.2.1 release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1) uses internal build **78**. Source, binaries and checksums identify the same tagged revision. Check the running app's complete version and package manifest when testing a fix. Every candidate runs checks and packaging on hosted Apple Silicon, Intel Mac and Windows x64 runners. Hardware-specific validation is recorded separately in the Windows checklist and roadmap.
+GitHub Actions checks and packages ClickPulse on hosted Mac, Windows and Ubuntu machines. The release workflow produces a **verified candidate artifact** for maintainer review. Wuhan Zhang (`endNone`) creates and publishes Releases with the personal GitHub account; automation never creates a bot-authored Release. The [0.3.0 release](https://github.com/endNone/ClickPulse/releases/tag/v0.3.0) uses internal build **79**. Source, binaries and checksums identify the same tagged revision. Check the running app's complete version and package manifest when testing a fix. Every candidate runs checks and packaging on hosted Apple Silicon, Intel Mac, Windows x64 and Ubuntu runners. Hardware-specific validation is recorded separately in the Windows checklist and roadmap.
 
 ## Release download layout
 
@@ -9,20 +9,21 @@ GitHub Actions checks and packages ClickPulse on hosted Mac and Windows machines
 | Windows 10/11 | [![Windows Portable x64](../assets/downloads/windows-portable-x64.svg)](install-windows.md) |
 | macOS 12+ | [![DMG Apple Silicon](../assets/downloads/macos-apple-silicon.svg)](install-macos.md) |
 | | [![DMG Intel x64](../assets/downloads/macos-intel-x64.svg)](install-macos.md) |
+| Ubuntu 22.04 / 24.04 | [Linux x64 and ARM64 ZIPs](install-linux.md) |
 
-This is the layout used by the release-note generator. The main download table contains three consistent buttons, with macOS grouped under one platform label. Mac App ZIPs remain available in the release attachments. Preview links open installation guides; a published Release links directly to that version’s attachments. Source code and checksums use a separate file table. Installation guides and the changelog each have their own documentation row. Badge images also use the version tag, with no external badge service.
+This is the layout used by the release-note generator. Downloads are grouped by platform, with both Mac and Ubuntu architectures available. Mac App ZIPs remain available in the release attachments. Preview links open installation guides; a published Release links directly to that version’s attachments. Source code and checksums use a separate file table. Installation guides and the changelog each have their own documentation row. Badge images also use the version tag, with no external badge service.
 
 ## Workflows
 
 | Workflow | Trigger | Result |
 | --- | --- | --- |
 | **Checks** | Push to `main`, pull request, manual run, or another workflow | Rust tests, formatting, Clippy, interface tests, packaging/release tests and release build |
-| **Packages** | Manual run, or Release candidate | Checks first, then Mac arm64/Intel x64 and Windows x64 packages saved as Actions artifacts |
+| **Packages** | Manual run, or Release candidate | Checks first, then Mac arm64/Intel x64, Windows x64 and Ubuntu arm64/x64 packages saved as Actions artifacts |
 | **Release candidate** | Push a `vX.Y.Z` tag, or manually select an existing tag | Validate versions, run Packages, verify all assets, assemble corresponding source and retain a candidate artifact |
 
 Checks is reused by the other workflows. Every release stage uses the exact tagged commit. All workflow jobs have read-only repository access. The built-in GitHub token is used only for read access, with no personal token stored in Actions. Signing certificates are not configured.
 
-Actions artifacts are retained for **14 days**; Release attachments are separate. Current targets are Apple Silicon, Intel Mac and Windows x64. No Windows ARM or Linux package is generated.
+Actions artifacts are retained for **14 days**; Release attachments are separate. Current targets are Apple Silicon, Intel Mac, Windows x64, Ubuntu x64 and Ubuntu ARM64. Linux packages are built on Ubuntu 22.04 for compatibility with 22.04 and 24.04. No Windows ARM package is generated.
 
 ## Prepare and publish a release
 
@@ -51,7 +52,7 @@ test "$(gh api "repos/endNone/ClickPulse/commits/$release_tag" --jq .sha)" = "$s
 gh release create "$release_tag" "$candidate"/release/* --repo endNone/ClickPulse --verify-tag --draft --title "ClickPulse ${release_tag#v}" --notes-file "$candidate/release-notes.md"
 ```
 
-Verify the draft's author is `endNone`, all ten expected assets and hashes match the candidate, and the notes contain download links, changes, upgrade instructions and known limitations. Then publish the reviewed stable version:
+Verify the draft's author is `endNone`, all fourteen expected assets and hashes match the candidate, and the notes contain download links, changes, upgrade instructions and known limitations. Then publish the reviewed stable version:
 
 ```sh
 gh release edit "$release_tag" --repo endNone/ClickPulse --draft=false --prerelease=false --latest
@@ -61,28 +62,32 @@ Do not delete/recreate a published release to change attribution. Do not store p
 
 ## Download assets
 
-The 0.2.1 release package set contains ten attachments. Windows releases contain the portable ZIP; the former Setup download has been withdrawn. Versions in filenames come from project metadata; the workflow verifies the complete set before retaining the candidate.
+The 0.3.0 release package set contains fourteen attachments. Windows releases contain the portable ZIP; the former Setup download has been withdrawn. Versions in filenames come from project metadata; the workflow verifies the complete set before retaining the candidate.
 
 | Asset | Purpose |
 | --- | --- |
-| `ClickPulse-0.2.1-macos-arm64.dmg` | Mac drag-to-install package |
-| `ClickPulse-0.2.1-macos-arm64.zip` | Complete Apple Silicon App ZIP |
-| `ClickPulse-0.2.1-macos-x64.dmg` | Intel Mac drag-to-install package |
-| `ClickPulse-0.2.1-macos-x64.zip` | Complete Intel App ZIP |
-| `ClickPulse-0.2.1-windows-x64.zip` | Windows portable folder |
-| `ClickPulse-0.2.1-source.zip` | Corresponding source, licenses, build scripts and documentation |
-| `ClickPulse-0.2.1-macos-arm64.manifest.json` | Apple Silicon package hashes and source revision |
-| `ClickPulse-0.2.1-macos-x64.manifest.json` | Intel package hashes and source revision |
-| `ClickPulse-0.2.1-windows-x64.manifest.json` | Windows package file hashes and source revision |
-| `SHA256SUMS.txt` | SHA256 values for the nine other attachments |
+| `ClickPulse-0.3.0-macos-arm64.dmg` | Mac drag-to-install package |
+| `ClickPulse-0.3.0-macos-arm64.zip` | Complete Apple Silicon App ZIP |
+| `ClickPulse-0.3.0-macos-x64.dmg` | Intel Mac drag-to-install package |
+| `ClickPulse-0.3.0-macos-x64.zip` | Complete Intel App ZIP |
+| `ClickPulse-0.3.0-windows-x64.zip` | Windows portable folder |
+| `ClickPulse-0.3.0-linux-arm64.zip` | Ubuntu ARM64 portable folder |
+| `ClickPulse-0.3.0-linux-x64.zip` | Ubuntu x64 portable folder |
+| `ClickPulse-0.3.0-source.zip` | Corresponding source, licenses, build scripts and documentation |
+| `ClickPulse-0.3.0-macos-arm64.manifest.json` | Apple Silicon package hashes and source revision |
+| `ClickPulse-0.3.0-macos-x64.manifest.json` | Intel package hashes and source revision |
+| `ClickPulse-0.3.0-windows-x64.manifest.json` | Windows package file hashes and source revision |
+| `ClickPulse-0.3.0-linux-arm64.manifest.json` | Ubuntu ARM64 package hashes and source revision |
+| `ClickPulse-0.3.0-linux-x64.manifest.json` | Ubuntu x64 package hashes and source revision |
+| `SHA256SUMS.txt` | SHA256 values for the thirteen other attachments |
 
-The current packages are available in the [0.2.1 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1). Installation is covered by the [Mac](install-macos.md) and [Windows](install-windows.md) guides.
+The current packages are available in the [0.3.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.3.0). Installation is covered by the [Mac](install-macos.md), [Windows](install-windows.md) and [Ubuntu](install-linux.md) guides.
 
 ## Validation and failures
 
 Preparation stops on missing assets, mismatched versions/build numbers, incorrect outer or package-file checksums, unlisted files, missing GPL text, or different binary/source revisions. Database files, logs, environment files and private notes cannot become payloads. Only declared assets are copied; unrelated files in `dist/` are excluded.
 
-The source ZIP and all three platform manifests must record the tagged commit. Packages made outside a Git checkout lack verified provenance and remain local test packages; rebuild from the tagged source for release.
+The source ZIP and all five platform manifests must record the tagged commit. Packages made outside a Git checkout lack verified provenance and remain local test packages; rebuild from the tagged source for release.
 
 | Failure | Action |
 | --- | --- |

@@ -261,14 +261,18 @@ fn payload_root_cannot_be_replaced_with_a_link() {
     assert!(verify_payload(&link, &m).is_err());
 }
 
-// A real subprocess executes the same helper code, with only the final native
-// launcher substituted. Its HOME/profile/cache and installation are disposable.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+// A real subprocess executes the helper. Linux also uses the real restart
+// launcher with a tiny executable probe; other platforms substitute that last
+// callback. Every profile, cache and installation path is disposable.
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 #[test]
 fn helper_process_entry() {
     let Some(plan) = std::env::var_os("CLICKPULSE_UPDATER_TEST_PLAN") else {
         return;
     };
+    #[cfg(target_os = "linux")]
+    apply_update(Path::new(&plan)).unwrap();
+    #[cfg(not(target_os = "linux"))]
     apply_update_with_restart(Path::new(&plan), |install, paused| {
         fs::write(
             install.root.parent().unwrap().join("restarted"),
@@ -278,7 +282,7 @@ fn helper_process_entry() {
     })
     .unwrap();
 }
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 #[test]
 fn helper_process_waits_for_saved_parent_and_preserves_profile_files() {
     let temp = tempfile::tempdir().unwrap();
@@ -287,14 +291,22 @@ fn helper_process_waits_for_saved_parent_and_preserves_profile_files() {
     let profile = home.join("Library/Application Support/ClickPulse");
     #[cfg(target_os = "windows")]
     let profile = home.join("AppData/Local/ClickPulse");
+    #[cfg(target_os = "linux")]
+    let profile = home.join(".local/share/ClickPulse");
     #[cfg(target_os = "macos")]
     let cache = home.join("Library/Caches/ClickPulse/updates");
     #[cfg(target_os = "windows")]
     let cache = profile.join("updates");
+    #[cfg(target_os = "linux")]
+    let cache = home.join(".cache/ClickPulse/updates");
     fs::create_dir_all(&profile).unwrap();
     fs::create_dir_all(&cache).unwrap();
     File::create(profile.join("profile.lock")).unwrap();
-    fs::write(profile.join("events.sqlite3"), b"history must never change").unwrap();
+    {
+        let db = rusqlite::Connection::open(profile.join("events.sqlite3")).unwrap();
+        db.execute_batch("CREATE TABLE history (day TEXT, count INTEGER); INSERT INTO history VALUES ('2026-11-01', 7956);").unwrap();
+    }
+    let history_before = hash_file(&profile.join("events.sqlite3")).unwrap();
     fs::write(
         profile.join("presentation.json"),
         b"preferences must never change",
@@ -313,6 +325,8 @@ fn helper_process_waits_for_saved_parent_and_preserves_profile_files() {
     fs::create_dir(&root).unwrap();
     let old_exe = if target.mac() {
         root.join("Contents/MacOS/clickpulse")
+    } else if target.linux() {
+        root.join("clickpulse")
     } else {
         root.join("ClickPulse.exe")
     };
@@ -363,6 +377,31 @@ fn helper_process_waits_for_saved_parent_and_preserves_profile_files() {
             }
         }
         collect(&payload, &app, &mut files);
+    } else if target.linux() {
+        // The installed probe writes its own launch arguments and version, so
+        // this covers actual process creation without opening another App.
+        let probe = temp.path().join("restart_probe.rs");
+        fs::write(&probe, format!(r#"fn main() {{
+            let exe = std::env::current_exe().unwrap();
+            let paused = std::env::args().any(|arg| arg == "--paused");
+            std::fs::write(exe.parent().unwrap().parent().unwrap().join("restarted"), format!("paused={{paused}}")).unwrap();
+            println!("{next} (70)");
+        }}"#)).unwrap();
+        let result = Command::new("rustc")
+            .arg(&probe)
+            .arg("-o")
+            .arg(payload.join("clickpulse"))
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        files.insert(
+            "clickpulse".into(),
+            hash_file(&payload.join("clickpulse")).unwrap(),
+        );
     } else {
         fs::write(root.join("WebView2Loader.dll"), b"fixture loader").unwrap();
         let mut bytes = vec![0u8; 256];
@@ -391,7 +430,19 @@ fn helper_process_waits_for_saved_parent_and_preserves_profile_files() {
     };
     let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
     fs::write(payload.join("build-manifest.json"), &manifest_bytes).unwrap();
-    let helper = stage.join(if target.mac() {
+    if target.linux() {
+        let mut installed = manifest.clone();
+        installed.version = crate::version::PUBLIC.into();
+        installed
+            .files
+            .insert("clickpulse".into(), hash_file(&old_exe).unwrap());
+        fs::write(
+            root.join("build-manifest.json"),
+            serde_json::to_vec(&installed).unwrap(),
+        )
+        .unwrap();
+    }
+    let helper = stage.join(if target != Target::WindowsX64 {
         "update-helper"
     } else {
         "update-helper.exe"
@@ -427,6 +478,8 @@ fn helper_process_waits_for_saved_parent_and_preserves_profile_files() {
         .env("CLICKPULSE_UPDATER_TEST_PLAN", &plan_path)
         .env("HOME", &home)
         .env("LOCALAPPDATA", home.join("AppData/Local"))
+        .env("XDG_DATA_HOME", home.join(".local/share"))
+        .env("XDG_CACHE_HOME", home.join(".cache"))
         .spawn()
         .unwrap();
     let until = Instant::now() + Duration::from_secs(60);
@@ -459,13 +512,17 @@ fn helper_process_waits_for_saved_parent_and_preserves_profile_files() {
         std::thread::sleep(Duration::from_millis(50));
     }
     assert_ne!(hash_file(&old_exe).unwrap(), previous_hash);
+    while !root.parent().unwrap().join("restarted").exists() {
+        assert!(Instant::now() < until, "updated program did not restart");
+        std::thread::sleep(Duration::from_millis(50));
+    }
     assert_eq!(
         fs::read_to_string(root.parent().unwrap().join("restarted")).unwrap(),
         "paused=true"
     );
     assert_eq!(
-        fs::read(profile.join("events.sqlite3")).unwrap(),
-        b"history must never change"
+        hash_file(&profile.join("events.sqlite3")).unwrap(),
+        history_before
     );
     assert_eq!(
         fs::read(profile.join("presentation.json")).unwrap(),

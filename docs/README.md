@@ -25,4 +25,8 @@
 | [Windows validation checklist](windows-testing.md) | Maintainer checklist for installation and native behavior |
 | [Linux validation](linux-testing.md) | Ubuntu versions, architecture coverage and native input checks |
 
-Current packages target macOS 12+ on Apple Silicon/Intel and Windows 10/11 x64. Version 0.2.1 is available as a [release](https://github.com/endNone/ClickPulse/releases/tag/v0.2.1). Automated checks and packaging pass for all three targets. The Windows validation guide records hardware-specific test coverage.
+ClickPulse supports macOS 12+, Windows 10/11 and Ubuntu 22.04/24.04. [Download packages](https://github.com/endNone/ClickPulse/releases/latest).
+
+## Credits
+
+[Fonts](../assets/fonts/README.txt) and [artwork](../assets/badges/README.md).

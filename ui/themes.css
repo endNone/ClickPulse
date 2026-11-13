@@ -46,14 +46,8 @@ body.compact #toast {background:var(--nav-selected)}
 :root:lang(zh-TW){--sans:"ClickPulse UI","PingFang TC","Microsoft JhengHei","ClickPulse Sans",sans-serif}
 :root:lang(ja){--sans:"ClickPulse UI","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo","ClickPulse Sans",sans-serif}
 :root:lang(ko){--sans:"ClickPulse UI","Apple SD Gothic Neo","Malgun Gothic","ClickPulse Sans",sans-serif}
-:root:lang(ja) .sidebar,:root:lang(ko) .sidebar{width:210px}
-:root:lang(ja) nav button,:root:lang(ko) nav button{white-space:nowrap;font-size:12px;gap:9px;padding-left:10px;padding-right:10px}
-@media(max-width:1000px){:root:lang(ja) .sidebar,:root:lang(ko) .sidebar{width:190px}}
 
-:root:lang(fr) .sidebar,:root:lang(de) .sidebar,:root:lang(es) .sidebar{width:220px}
-:root:lang(fr) nav button,:root:lang(de) nav button,:root:lang(es) nav button{white-space:nowrap;font-size:12px;gap:9px;padding-left:10px;padding-right:10px}
 #language-select{min-width:160px}
-@media(max-width:1000px){:root:lang(fr) .sidebar,:root:lang(de) .sidebar,:root:lang(es) .sidebar{width:195px}}
 /* Long translated choices wrap inside the existing close confirmation. */
 .close-dialog{max-height:calc(100vh - 24px);overflow:auto}
 .close-dialog-actions .button{min-width:0;white-space:normal;line-height:1.4;text-align:center}

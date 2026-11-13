@@ -205,7 +205,7 @@ test('legacy own-property checks reject inherited themes and interpolation value
   assert.equal(vm.runInContext('ClickPulseI18n.t("common.year",Object.assign(Object.create(null),{year:2026,hasOwnProperty:null}))',a.context),'2026');
 });
 test('integrated headers drag from empty space without intercepting controls or right clicks',()=>{
-  for(const platform of ['macos','windows']){
+  for(const platform of ['macos','windows','linux']){
     const a=app(platform),sent=[];
     a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
     const drag=a.get('header').listeners.mousedown;
@@ -217,8 +217,8 @@ test('integrated headers drag from empty space without intercepting controls or 
     assert.deepEqual(sent,[{action:'drag'}]);assert.equal(prevented,1);
   }
 });
-test('Windows controls and close choices send distinct actions with optional persistence',()=>{
-  const a=app('windows'),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
+for(const platform of ['windows','linux'])test(`${platform} controls and close choices send distinct actions with optional persistence`,()=>{
+  const a=app(platform),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
   for(const id of ['window-minimize','window-maximize','window-close'])a.get(id).fire();
   assert.deepEqual(sent.map(message=>message.action),['minimize','maximize','close']);
   sent.length=0;
@@ -238,8 +238,8 @@ test('Windows controls and close choices send distinct actions with optional per
   assert.deepEqual(sent.at(-1),{action:'close_preference',close_action:'ask'});
   assert.equal(app('macos').window.requestClose,undefined);
 });
-test('close prompt traps keyboard focus, cancels on Escape and ignores header control double clicks',()=>{
-  const a=app('windows'),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
+for(const platform of ['windows','linux'])test(`${platform} close prompt traps keyboard focus, cancels on Escape and ignores header control double clicks`,()=>{
+  const a=app(platform),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
   a.get('close-overlay').hidden=true;a.window.requestClose();
   const key=a.get('close-overlay').listeners.keydown;
   let prevented=0;key({key:'Tab',preventDefault(){prevented++;}});
@@ -256,7 +256,7 @@ test('calendar literary aside uses only selected keyboard history and follows ra
   a.window.receive(s);
   const aside=a.get('calendar-aside');
   assert.equal(aside.hidden,false);assert.match(aside.textContent,/About 3 copies of Pride and Prejudice/);
-  assert.match(aside.title,/700,000/);assert.match(aside.title,/not actual written text/);
+  assert.equal(aside.title,messages.en['calendar.literary_basis']);
   const range=a.get('calendar-range-select');range.value='2025';range.fire('change');
   assert.match(aside.textContent,/About 1 copy of Pride and Prejudice/);
   range.value='90';range.fire('change');assert.match(aside.textContent,/About 2 copies/);
@@ -399,6 +399,19 @@ test('selected main and Mini statistics keep updating without losing copy select
       assert.equal(selection.focusOffset,backwards?0:expected.length);
       assert.equal(text.data.slice(Math.min(selection.anchorOffset,selection.focusOffset),Math.max(selection.anchorOffset,selection.focusOffset)),expected,'copy selection covers the current count');
     }
+  }
+});
+
+test('mode changes clear stale selections while same-mode refreshes retain copying',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform);let clears=0;
+    a.window.getSelection=()=>({removeAllRanges(){clears++;}});
+    a.window.receiveView({compact:false});assert.equal(clears,0);
+    a.window.receiveView({compact:true});assert.equal(clears,1);
+    a.window.receiveView({compact:true,pinned:false});assert.equal(clears,1);
+    a.window.receiveView({visible:false});assert.equal(clears,1);
+    a.window.receiveView({compact:false,visible:true});assert.equal(clears,2);
+    a.window.receiveView({compact:false});assert.equal(clears,2);
   }
 });
 
@@ -779,7 +792,8 @@ test('Scoop-managed updates keep checks and localized guidance without sending i
     assert.equal(a.get('automatic-updates').disabled,false);
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
     a.get('update-details').fire();assert.deepEqual(sent.pop(),{action:'update_release'});
-    a.window.receiveUpdateAvailable('9.9.9');assert.ok(a.get('toast').textContent.includes('scoop update clickpulse'));
+    a.window.receiveUpdateAvailable('9.9.9');assert.equal(a.get('toast').textContent,messages[locale]['update.found_scoop']);
+    assert.ok(!a.get('toast').textContent.includes('scoop update clickpulse'),'the update command is shown only in Settings');
     assert.equal(sent.length,0);
     a.window.receiveUpdateState({status:'current'});assert.equal(a.get('update-managed').hidden,false);
     a.window.receiveUpdateState({status:'available',can_install:true,update_command:null});
