@@ -1,5 +1,32 @@
 use super::*;
 
+#[cfg(windows)]
+#[test]
+fn winget_registration_blocks_the_installer_even_with_a_custom_root() {
+    let temp = tempfile::tempdir().unwrap();
+    let parent = temp.path().join("custom programs");
+    let root = parent.join("ClickPulse-0.3.1-windows-x64");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("ClickPulse.exe"), b"original").unwrap();
+    fs::write(root.join("WebView2Loader.dll"), b"loader").unwrap();
+    let install = Installation {
+        root: root.canonicalize().unwrap(),
+        target: Target::WindowsX64,
+    };
+    assert!(install.check().is_ok());
+    let receipt = crate::windows_installation::TestRegistration::new(&parent);
+    assert!(
+        install
+            .check()
+            .unwrap_err()
+            .to_string()
+            .contains("winget upgrade --id endNone.ClickPulse --exact")
+    );
+    assert_eq!(fs::read(root.join("ClickPulse.exe")).unwrap(), b"original");
+    drop(receipt);
+    assert!(install.check().is_ok());
+}
+
 #[test]
 fn scoop_owned_version_and_current_directories_reject_in_app_replacement() {
     let temp = tempfile::tempdir().unwrap();

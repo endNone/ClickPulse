@@ -56,7 +56,23 @@ Prefer Scoop updates for a Scoop installation so its version directory and metad
 
 The commands and in-app guidance assume the usual per-user Scoop installation. If you installed globally with `--global`, update from an elevated terminal with `scoop update clickpulse --global` instead.
 
-The next App release detects Scoop-owned installations, including custom roots and `current` junctions. Daily and manual checks remain available, but Settings instructs you to quit ClickPulse and run `scoop update clickpulse`; the App cannot download or replace its own Scoop-managed files. The already published 0.2.1 package predates this protection: use Scoop for its updates as described above.
+Starting with 0.3.0, the App detects Scoop-owned installations, including custom roots and `current` junctions. Daily and manual checks remain available, but Settings instructs you to quit ClickPulse and run `scoop update clickpulse`; the App cannot download or replace its own Scoop-managed files. The already published 0.2.1 package predates this protection: use Scoop for its updates as described above.
+
+## Windows: WinGet preparation
+
+ClickPulse is not listed in the public WinGet repository yet. Prepare the submission after 0.3.1 is published.
+
+In 0.3.1, a WinGet installation shows this update command in Settings:
+
+```powershell
+winget upgrade --id endNone.ClickPulse --exact
+```
+
+Quit ClickPulse before updating. The App checks for releases but leaves downloading and replacement to WinGet.
+
+Launch at login uses WinGet’s fixed `clickpulse.exe` entry when it points to this installation. User installations use `%LOCALAPPDATA%\Microsoft\WinGet\Links`; machine installations use `%ProgramFiles%\WinGet\Links`. Custom package folders are recognized through WinGet’s installation record. A missing old startup path is repaired the next time ClickPulse opens; disabled startup stays disabled. An existing entry for another working copy is retained.
+
+See the [0.3.1 submission checklist](winget-submission.md). Scoop Extras remains a later distribution step.
 
 ## Maintainer: keep the channels current
 

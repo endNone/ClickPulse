@@ -1,4 +1,4 @@
-//! Daily or manual release checks; downloading and installing require a user action.
+//! Daily or manual checks and background downloads; installation requires confirmation.
 use anyhow::{Context, Result, bail, ensure};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -145,14 +145,14 @@ struct Release {
     prerelease: bool,
     assets: Vec<Asset>,
 }
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 struct Asset {
     name: String,
     browser_download_url: String,
     size: u64,
     digest: Option<String>,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
     pub version: String,
     pub release_url: String,
@@ -287,6 +287,7 @@ pub(crate) struct Manifest {
     pub code_license: String,
     pub files: BTreeMap<String, String>,
 }
+#[derive(Debug)]
 pub struct StagedUpdate {
     pub(crate) directory: tempfile::TempDir,
     pub(crate) manifest: Manifest,

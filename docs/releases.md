@@ -1,6 +1,6 @@
 # Builds and releases
 
-GitHub Actions checks and packages ClickPulse on hosted Mac, Windows and Ubuntu machines. The release workflow produces a **verified candidate artifact** for maintainer review. Wuhan Zhang (`endNone`) creates and publishes Releases with the personal GitHub account; automation never creates a bot-authored Release. The [0.3.0 release](https://github.com/endNone/ClickPulse/releases/tag/v0.3.0) uses internal build **79**. Source, binaries and checksums identify the same tagged revision. Check the running app's complete version and package manifest when testing a fix. Every candidate runs checks and packaging on hosted Apple Silicon, Intel Mac, Windows x64 and Ubuntu runners. Hardware-specific validation is recorded separately in the Windows checklist and roadmap.
+GitHub Actions checks and packages ClickPulse on hosted Mac, Windows and Ubuntu machines. The release workflow produces a **verified candidate artifact** for maintainer review. Wuhan Zhang (`endNone`) creates and publishes Releases with the personal GitHub account; automation never creates a bot-authored Release. The [0.3.1 release](https://github.com/endNone/ClickPulse/releases/tag/v0.3.1) uses internal build **80**. Source, binaries and checksums identify the same tagged revision. Check the running app's complete version and package manifest when testing a fix. Every candidate runs checks and packaging on hosted Apple Silicon, Intel Mac, Windows x64 and Ubuntu runners. Hardware-specific validation is recorded separately in the Windows checklist and roadmap.
 
 ## Release download layout
 
@@ -62,26 +62,26 @@ Do not delete/recreate a published release to change attribution. Do not store p
 
 ## Download assets
 
-The 0.3.0 release package set contains fourteen attachments. Windows releases contain the portable ZIP; the former Setup download has been withdrawn. Versions in filenames come from project metadata; the workflow verifies the complete set before retaining the candidate.
+The 0.3.1 release package set contains fourteen attachments. Windows releases contain the portable ZIP; the former Setup download has been withdrawn. Versions in filenames come from project metadata; the workflow verifies the complete set before retaining the candidate.
 
 | Asset | Purpose |
 | --- | --- |
-| `ClickPulse-0.3.0-macos-arm64.dmg` | Mac drag-to-install package |
-| `ClickPulse-0.3.0-macos-arm64.zip` | Complete Apple Silicon App ZIP |
-| `ClickPulse-0.3.0-macos-x64.dmg` | Intel Mac drag-to-install package |
-| `ClickPulse-0.3.0-macos-x64.zip` | Complete Intel App ZIP |
-| `ClickPulse-0.3.0-windows-x64.zip` | Windows portable folder |
-| `ClickPulse-0.3.0-linux-arm64.zip` | Ubuntu ARM64 portable folder |
-| `ClickPulse-0.3.0-linux-x64.zip` | Ubuntu x64 portable folder |
-| `ClickPulse-0.3.0-source.zip` | Corresponding source, licenses, build scripts and documentation |
-| `ClickPulse-0.3.0-macos-arm64.manifest.json` | Apple Silicon package hashes and source revision |
-| `ClickPulse-0.3.0-macos-x64.manifest.json` | Intel package hashes and source revision |
-| `ClickPulse-0.3.0-windows-x64.manifest.json` | Windows package file hashes and source revision |
-| `ClickPulse-0.3.0-linux-arm64.manifest.json` | Ubuntu ARM64 package hashes and source revision |
-| `ClickPulse-0.3.0-linux-x64.manifest.json` | Ubuntu x64 package hashes and source revision |
+| `ClickPulse-0.3.1-macos-arm64.dmg` | Mac drag-to-install package |
+| `ClickPulse-0.3.1-macos-arm64.zip` | Complete Apple Silicon App ZIP |
+| `ClickPulse-0.3.1-macos-x64.dmg` | Intel Mac drag-to-install package |
+| `ClickPulse-0.3.1-macos-x64.zip` | Complete Intel App ZIP |
+| `ClickPulse-0.3.1-windows-x64.zip` | Windows portable folder |
+| `ClickPulse-0.3.1-linux-arm64.zip` | Ubuntu ARM64 portable folder |
+| `ClickPulse-0.3.1-linux-x64.zip` | Ubuntu x64 portable folder |
+| `ClickPulse-0.3.1-source.zip` | Corresponding source, licenses, build scripts and documentation |
+| `ClickPulse-0.3.1-macos-arm64.manifest.json` | Apple Silicon package hashes and source revision |
+| `ClickPulse-0.3.1-macos-x64.manifest.json` | Intel package hashes and source revision |
+| `ClickPulse-0.3.1-windows-x64.manifest.json` | Windows package file hashes and source revision |
+| `ClickPulse-0.3.1-linux-arm64.manifest.json` | Ubuntu ARM64 package hashes and source revision |
+| `ClickPulse-0.3.1-linux-x64.manifest.json` | Ubuntu x64 package hashes and source revision |
 | `SHA256SUMS.txt` | SHA256 values for the thirteen other attachments |
 
-The current packages are available in the [0.3.0 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.3.0). Installation is covered by the [Mac](install-macos.md), [Windows](install-windows.md) and [Ubuntu](install-linux.md) guides.
+The current packages are available in the [0.3.1 Release](https://github.com/endNone/ClickPulse/releases/tag/v0.3.1). Installation is covered by the [Mac](install-macos.md), [Windows](install-windows.md) and [Ubuntu](install-linux.md) guides.
 
 ## Validation and failures
 
@@ -102,4 +102,4 @@ Windows builds produce the portable ZIP. Release assembly uses an explicit asset
 
 Build and integrity results do not certify window appearance, DPI, physical input, login startup, upgrades or actual process exit. Those still need native checks. No workflow operates a personal Windows machine or reads local statistics.
 
-The Mac preview remains ad-hoc signed without notarization; Windows packages remain unsigned. Installation notes explain manual authorization. Daily and manual update checks are included; downloads and installation require an explicit action in Settings.
+The Mac preview remains ad-hoc signed without notarization; Windows packages remain unsigned. Installation notes explain manual authorization. Daily and manual checks are included. From 0.3.1, ordinary installations download updates automatically and wait for confirmation in Settings before installation and restart.

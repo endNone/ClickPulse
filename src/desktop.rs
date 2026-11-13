@@ -388,6 +388,18 @@ pub fn run(
     let mut data_notice: Option<DataNotice> = None;
     let mut updates =
         updates::Controller::new(options.owned && !demo && !source_mode && !setup_pending);
+    #[cfg(windows)]
+    if options.owned
+        && !demo
+        && !source_mode
+        && !setup_pending
+        && let Err(error) = clickpulse::platform::windows::repair_auto_start()
+    {
+        clickpulse::logging::error(
+            clickpulse::platform::log_path().ok().as_deref(),
+            &format!("Repair startup entry: {error:#}"),
+        );
+    }
     let handle_event = move |event: Event<'_, UiEvent>,
                              target: &EventLoopWindowTarget<UiEvent>,
                              flow: &mut ControlFlow| {
@@ -1009,6 +1021,14 @@ pub fn run(
             _ => {}
         }
         // Reopening restores the latest state once, including results received hidden.
+        if ready
+            && data_job.is_none()
+            && !quit_after_data
+            && !matches!(*flow, ControlFlow::ExitWithCode(_))
+            && updates.download_if_available(snapshot_proxy.clone())
+        {
+            updates.publish(&webview);
+        }
         let active = visible && window.is_visible() && !window.is_minimized();
         if active && !webview.is_active() {
             view_changed = true;

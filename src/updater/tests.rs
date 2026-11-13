@@ -79,6 +79,25 @@ fn candidate() -> Candidate {
     .unwrap()
     .unwrap()
 }
+#[test]
+fn cached_download_identity_includes_every_release_asset() {
+    let original = candidate();
+    let mut reordered = release("1.2.3", Target::WindowsX64);
+    reordered.assets.reverse();
+    assert_eq!(
+        Some(original.clone()),
+        Candidate::from_release(reordered, "1.2.2", Target::WindowsX64).unwrap()
+    );
+    for index in 0..3 {
+        let mut replaced = release("1.2.3", Target::WindowsX64);
+        replaced.assets[index].digest = Some(format!("sha256:{}", "a".repeat(64)));
+        let replaced = Candidate::from_release(replaced, "1.2.2", Target::WindowsX64)
+            .unwrap()
+            .unwrap();
+        assert_eq!(replaced.version, original.version);
+        assert_ne!(replaced, original, "replaced asset {index}");
+    }
+}
 fn executable(version: &str) -> Vec<u8> {
     let mut bytes = vec![0; 256];
     bytes[..2].copy_from_slice(b"MZ");

@@ -39,3 +39,5 @@ Smart App Control can block ClickPulse and has no individual-app exception. On a
 **Where is my history?** In `%LOCALAPPDATA%\ClickPulse`, unless you selected another folder. Updating or removing the program keeps it.
 
 **Why did closing the window keep it running?** Choose **Quit ClickPulse** from the tray menu to stop recording.
+
+From 0.3.1, normal installations download updates automatically and wait for **Update & restart**. WinGet and Scoop installations show their upgrade command instead. Missing startup paths are repaired when you next open ClickPulse.

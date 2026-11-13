@@ -38,6 +38,14 @@ pub fn package_update_command() -> Option<&'static str> {
         return None;
     }
     let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
+    #[cfg(windows)]
+    if crate::windows_installation::winget_installation(&exe)
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        return Some(crate::windows_installation::WINGET_UPDATE);
+    }
     is_scoop_installation(exe.parent()?).then_some(SCOOP_UPDATE)
 }
 
@@ -65,6 +73,14 @@ impl Installation {
             self.target != Target::WindowsX64 || !is_scoop_installation(&self.root),
             "This installation is managed by Scoop; run {SCOOP_UPDATE}"
         );
+        #[cfg(windows)]
+        if self.target == Target::WindowsX64 {
+            ensure!(
+                crate::windows_installation::winget_installation(&self.executable())?.is_none(),
+                "This installation is managed by WinGet; run {}",
+                crate::windows_installation::WINGET_UPDATE
+            );
+        }
         ensure!(
             self.executable().is_file(),
             "Installed executable is missing"

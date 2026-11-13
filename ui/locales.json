@@ -242,7 +242,6 @@
     "chart.hourly_total": "最近 24 小时共 {count} 次",
     "update.title": "应用更新",
     "update.automatic": "每天自动检查更新",
-    "update.automatic_description": "App 运行时每 24 小时检查一次，安装前由你确认。",
     "update.automatic_unavailable": "演示、只读或独立数据库模式不会自动检查。",
     "update.last_checked": "上次检查：{time}",
     "update.check": "检查更新",
@@ -263,9 +262,6 @@
     "update.failed": "更新失败，请检查网络后重试。",
     "update.installed": "已更新至 {version}",
     "update.failed_last": "上次更新未完成，请重试。",
-    "update.scoop": "由 Scoop 管理，请退出后运行：{command}",
-    "update.automatic_scoop": "App 运行时每 24 小时检查一次。",
-    "update.found_scoop": "更新详情请见设置。",
     "native.hide.linux": "收起到系统托盘",
     "mini.hide.linux": "收起到系统托盘，继续记录",
     "settings.permission.linux": "监听状态",
@@ -280,7 +276,11 @@
     "permission.title.linux": "Linux 输入设备读取权限不足。",
     "action.authorize.linux": "查看授权方法",
     "action.permissions.linux": "查看授权方法",
-    "permission.description.linux": "在终端执行 sudo usermod -aG input \"$USER\"，然后注销并重新登录。input 组允许你的账户读取输入设备。"
+    "permission.description.linux": "在终端执行 sudo usermod -aG input \"$USER\"，然后注销并重新登录。input 组允许你的账户读取输入设备。",
+    "update.managed": "由 {manager} 管理，请退出后运行：{command}",
+    "update.found_managed": "更新详情请见设置。",
+    "update.ready": "已下载 {version}，可安装并重启。",
+    "update.install_help": "当前位置无法安装更新。请使用完整 App，并确认所在文件夹可写。"
   },
   "en": {
     "nav.main": "Main navigation",
@@ -525,7 +525,6 @@
     "chart.hourly_total": "{count} inputs in the last 24 hours",
     "update.title": "App updates",
     "update.automatic": "Check automatically every day",
-    "update.automatic_description": "Check every 24 hours while the app is running. You choose when to install.",
     "update.automatic_unavailable": "Not available in demo, read-only or separate-database sessions.",
     "update.last_checked": "Last checked: {time}",
     "update.check": "Check for updates",
@@ -546,9 +545,6 @@
     "update.failed": "Could not update. Check your connection and try again.",
     "update.installed": "Updated to {version}",
     "update.failed_last": "The last update did not finish. Please try again.",
-    "update.scoop": "Managed by Scoop. Quit ClickPulse, then run: {command}",
-    "update.automatic_scoop": "Check every 24 hours while the app is running.",
-    "update.found_scoop": "View update details in Settings.",
     "native.hide.linux": "Hide to system tray",
     "mini.hide.linux": "Hide to system tray; keep recording",
     "settings.permission.linux": "Capture status",
@@ -563,7 +559,11 @@
     "permission.title.linux": "Linux input-device access is required.",
     "action.authorize.linux": "Permission instructions",
     "action.permissions.linux": "Permission instructions",
-    "permission.description.linux": "Run sudo usermod -aG input \"$USER\" in a terminal, then sign out and back in. The input group lets your account read input devices."
+    "permission.description.linux": "Run sudo usermod -aG input \"$USER\" in a terminal, then sign out and back in. The input group lets your account read input devices.",
+    "update.managed": "Managed by {manager}. Quit ClickPulse, then run: {command}",
+    "update.found_managed": "View update details in Settings.",
+    "update.ready": "{version} is downloaded and ready to install.",
+    "update.install_help": "Updates cannot install here. Use the complete app in a writable folder."
   },
   "zh-TW": {
     "nav.main": "主導覽",
@@ -808,7 +808,6 @@
     "chart.hourly_total": "最近 24 小時共 {count} 次",
     "update.title": "應用程式更新",
     "update.automatic": "每天自動檢查更新",
-    "update.automatic_description": "App 執行時每 24 小時檢查一次，安裝前由你確認。",
     "update.automatic_unavailable": "示範、唯讀或獨立資料庫模式不會自動檢查。",
     "update.last_checked": "上次檢查：{time}",
     "update.check": "檢查更新",
@@ -829,9 +828,6 @@
     "update.failed": "更新失敗，請檢查網路後重試。",
     "update.installed": "已更新至 {version}",
     "update.failed_last": "上次更新未完成，請重試。",
-    "update.scoop": "由 Scoop 管理，請結束後執行：{command}",
-    "update.automatic_scoop": "App 執行時每 24 小時檢查一次。",
-    "update.found_scoop": "更新詳情請見設定。",
     "native.hide.linux": "收起至系統匣",
     "mini.hide.linux": "收起至系統匣，繼續記錄",
     "settings.permission.linux": "擷取狀態",
@@ -846,7 +842,11 @@
     "permission.title.linux": "需要 Linux 輸入裝置讀取權限。",
     "action.authorize.linux": "查看授權方式",
     "action.permissions.linux": "查看授權方式",
-    "permission.description.linux": "在終端機執行 sudo usermod -aG input \"$USER\"，然後登出再登入。input 群組允許你的帳戶讀取輸入裝置。"
+    "permission.description.linux": "在終端機執行 sudo usermod -aG input \"$USER\"，然後登出再登入。input 群組允許你的帳戶讀取輸入裝置。",
+    "update.managed": "由 {manager} 管理，請結束後執行：{command}",
+    "update.found_managed": "更新詳情請見設定。",
+    "update.ready": "已下載 {version}，可安裝並重新啟動。",
+    "update.install_help": "目前位置無法安裝更新。請使用完整 App，並確認所在資料夾可寫入。"
   },
   "ja": {
     "nav.main": "メインナビゲーション",
@@ -1091,7 +1091,6 @@
     "chart.hourly_total": "過去24時間の入力数：{count}",
     "update.title": "アプリの更新",
     "update.automatic": "毎日自動でアップデートを確認",
-    "update.automatic_description": "アプリの起動中に 24 時間ごとに確認します。インストールには確認が必要です。",
     "update.automatic_unavailable": "デモ、読み取り専用、別データベースのセッションでは自動確認しません。",
     "update.last_checked": "最終確認：{time}",
     "update.check": "更新を確認",
@@ -1112,9 +1111,6 @@
     "update.failed": "更新できませんでした。接続を確認して再試行してください。",
     "update.installed": "{version} に更新しました",
     "update.failed_last": "前回の更新が完了していません。再試行してください。",
-    "update.scoop": "Scoopで管理されています。ClickPulseを終了してから実行してください：{command}",
-    "update.automatic_scoop": "アプリの実行中は24時間ごとに確認します。",
-    "update.found_scoop": "更新の詳細は設定で確認できます。",
     "native.hide.linux": "システムトレイにしまう",
     "mini.hide.linux": "システムトレイにしまって記録を続ける",
     "settings.permission.linux": "入力取得の状態",
@@ -1129,7 +1125,11 @@
     "permission.title.linux": "Linux 入力デバイスの読み取り権限が必要です。",
     "action.authorize.linux": "権限の設定方法",
     "action.permissions.linux": "権限の設定方法",
-    "permission.description.linux": "端末で sudo usermod -aG input \"$USER\" を実行し、ログアウトして再ログインしてください。input グループは入力デバイスの読み取りを許可します。"
+    "permission.description.linux": "端末で sudo usermod -aG input \"$USER\" を実行し、ログアウトして再ログインしてください。input グループは入力デバイスの読み取りを許可します。",
+    "update.managed": "{manager}で管理されています。ClickPulseを終了してから実行してください：{command}",
+    "update.found_managed": "更新の詳細は設定で確認できます。",
+    "update.ready": "{version} のダウンロードが完了しました。インストールできます。",
+    "update.install_help": "この場所では更新をインストールできません。完全なアプリを書き込み可能なフォルダーに置いてください。"
   },
   "ko": {
     "nav.main": "기본 탐색",
@@ -1374,7 +1374,6 @@
     "chart.hourly_total": "최근 24시간 입력 {count}회",
     "update.title": "앱 업데이트",
     "update.automatic": "매일 자동으로 업데이트 확인",
-    "update.automatic_description": "앱 실행 중 24시간마다 확인합니다. 설치 여부는 직접 선택합니다.",
     "update.automatic_unavailable": "데모, 읽기 전용 또는 별도 데이터베이스 세션에서는 자동으로 확인하지 않습니다.",
     "update.last_checked": "마지막 확인: {time}",
     "update.check": "업데이트 확인",
@@ -1395,9 +1394,6 @@
     "update.failed": "업데이트하지 못했습니다. 연결을 확인하고 다시 시도하세요.",
     "update.installed": "{version}(으)로 업데이트했습니다",
     "update.failed_last": "지난 업데이트가 완료되지 않았습니다. 다시 시도하세요.",
-    "update.scoop": "Scoop에서 관리합니다. ClickPulse를 종료한 후 실행하세요: {command}",
-    "update.automatic_scoop": "앱 실행 중 24시간마다 확인합니다.",
-    "update.found_scoop": "설정에서 업데이트 내용을 확인하세요.",
     "native.hide.linux": "시스템 트레이로 숨기기",
     "mini.hide.linux": "시스템 트레이로 숨기고 기록 계속",
     "settings.permission.linux": "캡처 상태",
@@ -1412,7 +1408,11 @@
     "permission.title.linux": "Linux 입력 장치 읽기 권한이 필요합니다.",
     "action.authorize.linux": "권한 설정 방법",
     "action.permissions.linux": "권한 설정 방법",
-    "permission.description.linux": "터미널에서 sudo usermod -aG input \"$USER\" 를 실행한 후 로그아웃하고 다시 로그인하세요. input 그룹은 계정에 입력 장치 읽기 권한을 부여합니다."
+    "permission.description.linux": "터미널에서 sudo usermod -aG input \"$USER\" 를 실행한 후 로그아웃하고 다시 로그인하세요. input 그룹은 계정에 입력 장치 읽기 권한을 부여합니다.",
+    "update.managed": "{manager}에서 관리합니다. ClickPulse를 종료한 후 실행하세요: {command}",
+    "update.found_managed": "설정에서 업데이트 내용을 확인하세요.",
+    "update.ready": "{version} 다운로드가 완료되었습니다. 설치할 수 있습니다.",
+    "update.install_help": "이 위치에는 업데이트를 설치할 수 없습니다. 전체 앱을 쓰기 가능한 폴더에 두세요."
   },
   "fr": {
     "nav.main": "Navigation principale",
@@ -1657,7 +1657,6 @@
     "chart.hourly_total": "{count} entrées sur les dernières 24 heures",
     "update.title": "Mises à jour",
     "update.automatic": "Rechercher automatiquement chaque jour",
-    "update.automatic_description": "Vérification toutes les 24 heures lorsque l’application est ouverte. Vous décidez quand installer.",
     "update.automatic_unavailable": "Indisponible en mode démo, en lecture seule ou avec une base de données distincte.",
     "update.last_checked": "Dernière vérification : {time}",
     "update.check": "Vérifier les mises à jour",
@@ -1678,9 +1677,6 @@
     "update.failed": "Échec de la mise à jour. Vérifiez la connexion puis réessayez.",
     "update.installed": "Mise à jour vers {version} effectuée",
     "update.failed_last": "La dernière mise à jour ne s’est pas terminée. Réessayez.",
-    "update.scoop": "Géré par Scoop. Quittez ClickPulse, puis exécutez : {command}",
-    "update.automatic_scoop": "Vérification toutes les 24 heures lorsque l’application est ouverte.",
-    "update.found_scoop": "Consultez les détails de la mise à jour dans les réglages.",
     "native.hide.linux": "Masquer dans la zone de notification",
     "mini.hide.linux": "Masquer dans la zone de notification et poursuivre l’enregistrement",
     "settings.permission.linux": "État de la capture",
@@ -1695,7 +1691,11 @@
     "permission.title.linux": "L’accès aux périphériques d’entrée Linux est nécessaire.",
     "action.authorize.linux": "Configurer les permissions",
     "action.permissions.linux": "Configurer les permissions",
-    "permission.description.linux": "Exécutez sudo usermod -aG input \"$USER\" dans un terminal, puis déconnectez-vous et reconnectez-vous. Le groupe input autorise votre compte à lire les périphériques d’entrée."
+    "permission.description.linux": "Exécutez sudo usermod -aG input \"$USER\" dans un terminal, puis déconnectez-vous et reconnectez-vous. Le groupe input autorise votre compte à lire les périphériques d’entrée.",
+    "update.managed": "Géré par {manager}. Quittez ClickPulse, puis exécutez : {command}",
+    "update.found_managed": "Consultez les détails de la mise à jour dans les réglages.",
+    "update.ready": "{version} est téléchargée et prête à être installée.",
+    "update.install_help": "Installation impossible ici. Placez l’application complète dans un dossier accessible en écriture."
   },
   "de": {
     "nav.main": "Hauptnavigation",
@@ -1940,7 +1940,6 @@
     "chart.hourly_total": "{count} Eingaben in den letzten 24 Stunden",
     "update.title": "App-Updates",
     "update.automatic": "Täglich automatisch nach Updates suchen",
-    "update.automatic_description": "Prüfung alle 24 Stunden, solange die App läuft. Sie entscheiden, wann installiert wird.",
     "update.automatic_unavailable": "Im Demo-, Nur-Lese- oder separaten Datenbankmodus nicht verfügbar.",
     "update.last_checked": "Zuletzt geprüft: {time}",
     "update.check": "Updates suchen",
@@ -1961,9 +1960,6 @@
     "update.failed": "Update fehlgeschlagen. Verbindung prüfen und erneut versuchen.",
     "update.installed": "Auf {version} aktualisiert",
     "update.failed_last": "Das letzte Update wurde nicht abgeschlossen. Bitte erneut versuchen.",
-    "update.scoop": "Von Scoop verwaltet. Beende ClickPulse und führe dann aus: {command}",
-    "update.automatic_scoop": "Prüft alle 24 Stunden, während die App läuft.",
-    "update.found_scoop": "Details zum Update findest du in den Einstellungen.",
     "native.hide.linux": "In den Infobereich ausblenden",
     "mini.hide.linux": "In den Infobereich ausblenden und weiter aufzeichnen",
     "settings.permission.linux": "Erfassungsstatus",
@@ -1978,7 +1974,11 @@
     "permission.title.linux": "Zugriff auf Linux-Eingabegeräte erforderlich.",
     "action.authorize.linux": "Berechtigung einrichten",
     "action.permissions.linux": "Berechtigung einrichten",
-    "permission.description.linux": "Führen Sie sudo usermod -aG input \"$USER\" im Terminal aus und melden Sie sich ab und wieder an. Die Gruppe input erlaubt Ihrem Konto, Eingabegeräte zu lesen."
+    "permission.description.linux": "Führen Sie sudo usermod -aG input \"$USER\" im Terminal aus und melden Sie sich ab und wieder an. Die Gruppe input erlaubt Ihrem Konto, Eingabegeräte zu lesen.",
+    "update.managed": "Von {manager} verwaltet. Beende ClickPulse und führe dann aus: {command}",
+    "update.found_managed": "Details zum Update findest du in den Einstellungen.",
+    "update.ready": "{version} ist heruntergeladen und bereit zur Installation.",
+    "update.install_help": "Hier sind keine Updates installierbar. Verwende die vollständige App in einem beschreibbaren Ordner."
   },
   "es": {
     "nav.main": "Navegación principal",
@@ -2223,7 +2223,6 @@
     "chart.hourly_total": "{count} entradas en las últimas 24 horas",
     "update.title": "Actualizaciones",
     "update.automatic": "Buscar actualizaciones cada día",
-    "update.automatic_description": "Se comprueba cada 24 horas mientras la app está abierta. Tú decides cuándo instalar.",
     "update.automatic_unavailable": "No disponible en modo demo, de solo lectura o con una base de datos independiente.",
     "update.last_checked": "Última comprobación: {time}",
     "update.check": "Buscar actualizaciones",
@@ -2244,9 +2243,6 @@
     "update.failed": "No se pudo actualizar. Comprueba la conexión e inténtalo de nuevo.",
     "update.installed": "Actualizado a {version}",
     "update.failed_last": "La última actualización no terminó. Inténtalo de nuevo.",
-    "update.scoop": "Administrado por Scoop. Cierra ClickPulse y ejecuta: {command}",
-    "update.automatic_scoop": "Comprueba cada 24 horas mientras la aplicación está abierta.",
-    "update.found_scoop": "Consulta los detalles de la actualización en Configuración.",
     "native.hide.linux": "Ocultar en la bandeja del sistema",
     "mini.hide.linux": "Ocultar en la bandeja del sistema y seguir registrando",
     "settings.permission.linux": "Estado de la captura",
@@ -2261,6 +2257,10 @@
     "permission.title.linux": "Se necesita acceso a los dispositivos de entrada de Linux.",
     "action.authorize.linux": "Configurar permisos",
     "action.permissions.linux": "Configurar permisos",
-    "permission.description.linux": "Ejecuta sudo usermod -aG input \"$USER\" en una terminal y cierra e inicia sesión. El grupo input permite que tu cuenta lea los dispositivos de entrada."
+    "permission.description.linux": "Ejecuta sudo usermod -aG input \"$USER\" en una terminal y cierra e inicia sesión. El grupo input permite que tu cuenta lea los dispositivos de entrada.",
+    "update.managed": "Administrado por {manager}. Cierra ClickPulse y ejecuta: {command}",
+    "update.found_managed": "Consulta los detalles de la actualización en Configuración.",
+    "update.ready": "{version} está descargada y lista para instalar.",
+    "update.install_help": "No se pueden instalar actualizaciones aquí. Usa la aplicación completa en una carpeta con permiso de escritura."
   }
 }
