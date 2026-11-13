@@ -20,5 +20,5 @@ class LinuxPackagingTests(unittest.TestCase):
     def test_linux_build_uses_native_packager_and_preserves_explicit_target(self):
         with patch.object(sys,'argv',['build.py','--platform','linux','--target','aarch64-unknown-linux-gnu','--skip-build']),patch('build.subprocess.run') as run:
             build.main();command=run.call_args.args[0]
-            self.assertTrue(any(str(part).endswith('/package_linux.py') for part in command))
+            self.assertEqual(Path(command[1]), Path(package_linux.__file__).resolve())
             self.assertIn('aarch64-unknown-linux-gnu',command);self.assertIn('--skip-build',command)
