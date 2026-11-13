@@ -1,5 +1,5 @@
 {
-    "version": "0.2.1",
+    "version": "0.3.0",
     "description": "Local keyboard and mouse activity statistics",
     "homepage": "https://github.com/endNone/ClickPulse",
     "license": "GPL-3.0-or-later",
@@ -11,9 +11,9 @@
     ],
     "architecture": {
         "64bit": {
-            "url": "https://github.com/endNone/ClickPulse/releases/download/v0.2.1/ClickPulse-0.2.1-windows-x64.zip",
-            "hash": "9169eaedf64e419853dde72678edc54700e38f85cdc5cd2c94f690dcfe99deda",
-            "extract_dir": "ClickPulse-0.2.1-windows-x64"
+            "url": "https://github.com/endNone/ClickPulse/releases/download/v0.3.0/ClickPulse-0.3.0-windows-x64.zip",
+            "hash": "d868069150cbd15516bdfc81b49f476f2f9de40f0108f43b2db15556e4c02574",
+            "extract_dir": "ClickPulse-0.3.0-windows-x64"
         }
     },
     "bin": [
