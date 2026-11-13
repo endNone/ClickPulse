@@ -31,7 +31,8 @@ let data=null,page='overview',range=14,toastTimer;
 let recordingPaused=null;
 let dataOperationBusy=false;
 let updateState={status:'idle',current:'',version:null,can_install:false,update_command:null,automatic:true,received:0,total:0};
-const updateInstalling=()=>['downloading','verifying','preparing','installing'].includes(updateState.status);
+const updateBusy=()=>['downloading','verifying','preparing','installing'].includes(updateState.status);
+const updateInstalling=()=>['preparing','installing'].includes(updateState.status);
 function renderUpdateState(){
   const button=$('check-updates'),status=$('update-status'),details=$('update-details');
   if(!button||!status||!details)return;
@@ -49,14 +50,14 @@ function renderUpdateState(){
   const scheduled=state.automatic!==false;
   const automatic=$('automatic-updates'),last=$('update-last-checked');
   if(automatic){automatic.checked=scheduled&&window.presentationView?.auto_check_updates!==false;automatic.disabled=!scheduled||updateInstalling();}
-  const description=$('update-automatic-description'),unavailable=$('update-automatic-unavailable');
-  if(description&&unavailable){description.hidden=!scheduled;unavailable.hidden=scheduled;description.textContent=t(managed?'update.automatic_managed':'update.automatic_description');}
+  const unavailable=$('update-automatic-unavailable');
+  if(unavailable)unavailable.hidden=scheduled;
   const checked=window.presentationView?.last_update_check;
   const valid=scheduled&&Number.isFinite(checked)&&Math.abs(checked)<=8640000000000;
   if(last){last.hidden=!valid;setSelectableText(last,valid?t('update.last_checked',{time:I.date(checked*1000,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}):'');}
-  button.textContent=t(state.status==='checking'?'update.checking':updateInstalling()?'update.updating':available&&!managed?(state.status==='ready'&&state.can_install?'update.install':'update.download'):'update.check');
-  button.disabled=dataOperationBusy||state.status==='checking'||updateInstalling();
-  button.setAttribute('aria-busy',String(state.status==='checking'||updateInstalling()));
+  button.textContent=t(state.status==='checking'?'update.checking':updateBusy()?'update.updating':available&&!managed?(state.status==='ready'&&state.can_install?'update.install':'update.download'):'update.check');
+  button.disabled=dataOperationBusy||state.status==='checking'||updateBusy();
+  button.setAttribute('aria-busy',String(state.status==='checking'||updateBusy()));
   details.hidden=!available&&state.status!=='error';
 }
 window.renderUpdatePreferences=renderUpdateState;
@@ -70,7 +71,7 @@ window.receiveUpdateNotice=notice=>{
   if(data)renderPermission();
 };
 $('check-updates')?.addEventListener('click',()=>{
-  if(dataOperationBusy||updateInstalling()||updateState.status==='checking')return;
+  if(dataOperationBusy||updateBusy()||updateState.status==='checking')return;
   send(['available','ready'].includes(updateState.status)&&!updateState.update_command?(updateState.can_install?'install_update':'update_release'):'check_updates');
 });
 $('update-details')?.addEventListener('click',event=>{event.preventDefault();send('update_release');});

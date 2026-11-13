@@ -788,7 +788,6 @@ test('Scoop-managed updates keep checks and localized guidance without sending i
     assert.equal(a.get('check-updates').textContent,messages[locale]['update.check']);
     assert.equal(a.get('update-managed').hidden,false);
     assert.ok(a.get('update-managed').textContent.includes('scoop update clickpulse'));
-    assert.equal(a.get('update-automatic-description').textContent,messages[locale]['update.automatic_managed']);
     assert.equal(a.get('automatic-updates').disabled,false);
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
     a.get('update-details').fire();assert.deepEqual(sent.pop(),{action:'update_release'});
@@ -798,7 +797,6 @@ test('Scoop-managed updates keep checks and localized guidance without sending i
     a.window.receiveUpdateState({status:'current'});assert.equal(a.get('update-managed').hidden,false);
     a.window.receiveUpdateState({status:'available',can_install:true,update_command:null});
     assert.equal(a.get('update-managed').hidden,true);
-    assert.equal(a.get('update-automatic-description').textContent,messages[locale]['update.automatic_description']);
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'install_update'});
   }
 });
@@ -863,8 +861,9 @@ test('daily update preference and last attempt survive UI refresh and language c
     a.window.receiveView({auto_check_updates:true});a.window.receive(snapshot());
     assert.equal(a.get('automatic-updates').checked,true);assert.equal(sent.length,0);
     a.window.receiveUpdateState({status:'checking'});assert.equal(a.get('automatic-updates').disabled,false);
-    a.window.receiveUpdateState({status:'downloading'});assert.equal(a.get('automatic-updates').disabled,true);
-    a.get('automatic-updates').fire('change');assert.equal(sent.length,0);
+    a.window.receiveUpdateState({status:'downloading'});assert.equal(a.get('automatic-updates').disabled,false);
+    a.get('automatic-updates').checked=false;a.get('automatic-updates').fire('change');
+    assert.deepEqual(sent.pop(),{action:'automatic_updates',enabled:false});
     for(const last_update_check of [null,undefined,'invalid',Number.MAX_VALUE]){
       a.window.receiveView({last_update_check});assert.equal(a.get('update-last-checked').hidden,true);
     }
@@ -878,7 +877,6 @@ test('demo, read-only and independent sessions cannot change the installed app d
     a.window.receiveUpdateState({status:'current',current:'0.2.0',automatic:false});
     const toggle=a.get('automatic-updates');
     assert.equal(toggle.checked,false);assert.equal(toggle.disabled,true);
-    assert.equal(a.get('update-automatic-description').hidden,true);
     assert.equal(a.get('update-automatic-unavailable').hidden,false);
     assert.equal(a.get('update-last-checked').hidden,true);
     toggle.checked=true;toggle.fire('change');assert.equal(sent.length,0);
@@ -887,12 +885,15 @@ test('demo, read-only and independent sessions cannot change the installed app d
     assert.ok(messages[locale]['update.automatic_unavailable']);
   }
 });
-test('updater progress and data operations exclude concurrent destructive actions',()=>{
+test('background downloads leave data controls available until installation starts',()=>{
   const a=app();a.window.receive(snapshot());
   for(const status of ['downloading','verifying','preparing','installing']){
     a.window.receiveUpdateState({status,current:'0.2.0',received:50,total:100});
     assert.equal(a.get('check-updates').disabled,true);
-    assert.equal(a.get('storage-directory').disabled,true);assert.equal(a.get('import-history').disabled,true);
+    const installing=['preparing','installing'].includes(status);
+    assert.equal(a.get('storage-directory').disabled,installing);assert.equal(a.get('import-history').disabled,installing);
+    assert.equal(a.get('reveal').disabled,installing);
+    assert.equal(a.get('automatic-updates').disabled,installing);
     assert.equal(a.get('check-updates').attributes['aria-busy'],'true');
   }
   a.window.receiveUpdateState({status:'available',version:'0.2.1',can_install:true});a.window.receiveDataBusy(true);

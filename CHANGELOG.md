@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.1 · Unreleased
+## 0.3.1 · 2026-11-13
 
 ### Improved
 
@@ -12,6 +12,8 @@
 - Keep Windows launch-at-login working through WinGet upgrades.
 - Repair missing startup paths when opening ClickPulse, without enabling disabled startup.
 - Explain when the current app location requires a manual update.
+- Keep data controls available while updates download in the background.
+- Refresh downloaded updates when their release files change.
 
 ## 0.3.0 · 2026-11-12
 

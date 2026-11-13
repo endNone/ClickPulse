@@ -636,12 +636,12 @@ impl Controller {
     }
     fn start_install(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> anyhow::Result<()> {
         anyhow::ensure!(!self.busy(), "Update already in progress");
-        let installation = self.install_target()?;
         // A request before the download is ready only downloads. Starting a
         // helper is a separate, explicit confirmation after verification.
         if self.staged.is_none() {
             return self.start_download(proxy);
         }
+        let installation = self.install_target()?;
         let staged = self.staged.take().expect("verified download");
         self.id += 1;
         let id = self.id;
@@ -719,10 +719,7 @@ impl Controller {
                     self.checked_version = Some(Some(candidate.version.clone()));
                     (self.failures, self.retry_at) = (0, None);
                     self.view.version = Some(candidate.version.clone());
-                    if self
-                        .candidate
-                        .as_ref()
-                        .is_none_or(|previous| previous.version != candidate.version)
+                    if self.candidate.as_ref() != Some(&candidate)
                         || self.view.update_command.is_some()
                     {
                         self.staged = None;
