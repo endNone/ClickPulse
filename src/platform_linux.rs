@@ -90,16 +90,19 @@ mod tests {
     use super::*;
     #[test]
     fn xdg_relative_or_empty_values_use_absolute_home() {
+        let directory = tempfile::tempdir().unwrap();
+        let home = directory.path().join("home");
         for value in [None, Some("".into()), Some("relative".into())] {
             assert_eq!(
-                xdg_dir(value, Some("/home/test".into()), ".local/share").unwrap(),
-                PathBuf::from("/home/test/.local/share")
+                xdg_dir(value, Some(home.clone().into_os_string()), ".local/share").unwrap(),
+                home.join(".local/share")
             );
         }
         assert!(xdg_dir(None, Some("relative".into()), ".config").is_err());
+        let data = directory.path().join("data");
         assert_eq!(
-            xdg_dir(Some("/data".into()), None, ".config").unwrap(),
-            PathBuf::from("/data")
+            xdg_dir(Some(data.clone().into_os_string()), None, ".config").unwrap(),
+            data
         );
     }
     #[test]
