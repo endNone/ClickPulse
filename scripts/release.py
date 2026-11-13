@@ -112,16 +112,20 @@ def verify_archive(path, prefix, manifest_name, plan, license_path, license_byte
         return manifest
 
 
-def release_notes(version, repository, revision, private=False):
+def release_notes(version, repository, revision, private=False, *, artwork_revision=None):
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
         raise ValueError('Repository must be a GitHub owner/name.')
     base = 'https://github.com/'+repository+'/blob/v'+version+'/docs/'
     name = 'ClickPulse-'+version
     downloads = f'https://github.com/{repository}/releases/download/v{version}/'
-    artwork = f'https://github.com/{repository}/blob/v{version}/assets/downloads/'
+    if artwork_revision is not None and not re.fullmatch(REVISION, artwork_revision):
+        raise ValueError('Artwork revision must be a full 40-character commit.')
+    artwork_ref = artwork_revision or f'v{version}'
+    artwork = f'https://github.com/{repository}/blob/{artwork_ref}/assets/downloads/'
 
     def button(image, label, asset):
-        return f'[![{label}]({artwork}{image}.svg?raw=true)]({downloads}{asset})'
+        return (f'<a href="{downloads}{asset}">'
+                f'<img src="{artwork}{image}.svg?raw=true" alt="{label}" height="28" align="middle"></a>')
 
     windows = button('windows-portable-x64', 'Windows Portable x64', name+'-windows-x64.zip')
     mac_arm = button('macos-apple-silicon', 'DMG Apple Silicon', name+'-macos-arm64.dmg')
@@ -130,7 +134,9 @@ def release_notes(version, repository, revision, private=False):
     linux = ''
     linux_guide = ''
     if tuple(map(int, version.split('.'))) >= (0, 3, 0):
-        linux = f"- **Ubuntu 22.04 / 24.04:** [x64 ZIP]({downloads}{name}-linux-x64.zip) · [ARM64 ZIP]({downloads}{name}-linux-arm64.zip)\n"
+        linux_x64 = button('linux-x64', 'Linux ZIP x64', name+'-linux-x64.zip')
+        linux_arm64 = button('linux-arm64', 'Linux ZIP ARM64', name+'-linux-arm64.zip')
+        linux = f"- **Ubuntu 22.04 / 24.04:** {linux_x64} {linux_arm64}\n"
         linux_guide = f" · [Ubuntu guide]({base}install-linux.md)"
     changes = (f'- See the [changelog](https://github.com/{repository}/blob/v{version}/CHANGELOG.md) for this release.\n')
     if version == '0.3.0':

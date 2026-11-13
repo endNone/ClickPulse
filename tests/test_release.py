@@ -138,7 +138,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn('macos-x64.dmg', notes)
 
         # Every displayed download must exist in the assembled candidate.
-        linked_assets = re.findall(r'\]\(https://github.com/example/ClickPulse/releases/download/v0\.1\.0/([^()]+)\)', notes)
+        linked_assets = re.findall(r'https://github.com/example/ClickPulse/releases/download/v0\.1\.0/([^()"\s]+)', notes)
         self.assertEqual(len(linked_assets), 4)
         self.assertTrue(set(linked_assets).issubset(files))
         self.assertEqual(set(linked_assets), {
@@ -205,14 +205,16 @@ class ReleaseTests(unittest.TestCase):
 
     def test_download_buttons_pin_images_and_assets_to_the_requested_release(self):
         notes = release.release_notes('1.2.3', 'fixture/RenamedApp', REVISION)
-        buttons = re.findall(r'\[!\[([^\]]+)\]\(([^)]+)\)\]\(([^)]+)\)', notes)
+        buttons = re.findall(r'<a href="([^"]+)"><img src="([^"]+)" alt="([^"]+)" height="28" align="middle"></a>', notes)
         expected = {
             'Windows Portable x64': ('windows-portable-x64', 'windows-x64.zip'),
             'DMG Apple Silicon': ('macos-apple-silicon', 'macos-arm64.dmg'),
             'DMG Intel x64': ('macos-intel-x64', 'macos-x64.dmg'),
+            'Linux ZIP x64': ('linux-x64', 'linux-x64.zip'),
+            'Linux ZIP ARM64': ('linux-arm64', 'linux-arm64.zip'),
         }
         self.assertEqual(len(buttons), len(expected))
-        for label, image, target in buttons:
+        for target, image, label in buttons:
             artwork, asset = expected[label]
             self.assertEqual(image, f'https://github.com/fixture/RenamedApp/blob/v1.2.3/assets/downloads/{artwork}.svg?raw=true')
             self.assertEqual(target, f'https://github.com/fixture/RenamedApp/releases/download/v1.2.3/ClickPulse-1.2.3-{asset}')
@@ -220,6 +222,10 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotIn('/main/', notes)
         self.assertNotIn('/latest/', notes)
         self.assertNotIn('ClickPulse-0.1.0-', notes)
+        corrected = release.release_notes('1.2.3', 'fixture/RenamedApp', REVISION, artwork_revision='b'*40)
+        self.assertEqual(corrected, notes.replace('/blob/v1.2.3/assets/', '/blob/'+('b'*40)+'/assets/'))
+        with self.assertRaisesRegex(ValueError, 'Artwork revision'):
+            release.release_notes('1.2.3', 'fixture/RenamedApp', REVISION, artwork_revision='main')
 
     def test_private_release_explains_repository_access(self):
         private = release.release_notes('0.1.0', 'fixture/ClickPulse', REVISION, private=True)
