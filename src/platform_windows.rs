@@ -2,8 +2,8 @@ use anyhow::{Context, Result, ensure};
 use std::{
     ffi::OsStr,
     hash::{Hash, Hasher},
-    os::windows::ffi::OsStrExt,
-    path::Path,
+    os::windows::ffi::{OsStrExt, OsStringExt},
+    path::{Path, PathBuf},
     ptr::{null, null_mut},
     sync::{
         Arc,
@@ -35,11 +35,14 @@ impl Drop for Key {
     }
 }
 fn read_run() -> Result<Option<Vec<u16>>> {
+    read_run_at(RUN_KEY)
+}
+fn read_run_at(path: &str) -> Result<Option<Vec<u16>>> {
     let mut key = null_mut();
     let result = unsafe {
         RegOpenKeyExW(
             HKEY_CURRENT_USER,
-            wide(RUN_KEY).as_ptr(),
+            wide(path).as_ptr(),
             0,
             KEY_QUERY_VALUE,
             &mut key,
@@ -100,15 +103,80 @@ fn run_command(exe: &Path) -> Vec<u16> {
 }
 pub fn auto_start_enabled() -> bool {
     std::env::current_exe().is_ok_and(|exe| {
-        read_run().is_ok_and(|value| value.is_some_and(|value| value == run_command(&exe)))
+        read_run().is_ok_and(|value| {
+            value
+                .and_then(|value| startup_executable(&value))
+                .is_some_and(|path| crate::windows_installation::same_program(&path, &exe))
+        })
     })
 }
 pub fn set_auto_start(enabled: bool) -> Result<()> {
+    let command = if enabled {
+        Some(run_command(&startup_target(&std::env::current_exe()?)?))
+    } else {
+        None
+    };
+    write_run_at(RUN_KEY, command.as_deref())
+}
+fn startup_target(executable: &Path) -> Result<PathBuf> {
+    Ok(
+        crate::windows_installation::winget_installation(executable)?
+            .and_then(|installation| installation.link)
+            .unwrap_or_else(|| executable.to_path_buf()),
+    )
+}
+fn startup_executable(value: &[u16]) -> Option<PathBuf> {
+    let end = value.iter().rposition(|&c| c != 0)? + 1;
+    let value = &value[..end];
+    if value.first() != Some(&(b'"' as u16)) || value.contains(&0) {
+        return None;
+    }
+    let quote = value[1..].iter().position(|&c| c == b'"' as u16)? + 1;
+    if value[quote + 1..] != " --background".encode_utf16().collect::<Vec<_>>() {
+        return None;
+    }
+    let executable = PathBuf::from(std::ffi::OsString::from_wide(&value[1..quote]));
+    (executable.is_absolute()
+        && executable
+            .file_name()?
+            .to_str()?
+            .eq_ignore_ascii_case("ClickPulse.exe"))
+    .then_some(executable)
+}
+fn repaired_run(value: Option<&[u16]>, executable: &Path, target: &Path) -> Option<Vec<u16>> {
+    let value = value?;
+    let previous = startup_executable(value)?;
+    // Keep absent/disabled settings and other working portable installations.
+    // A missing old executable is repaired only for our exact background command.
+    if !previous.try_exists().ok()?
+        || crate::windows_installation::same_program(&previous, executable)
+    {
+        let desired = run_command(target);
+        if desired != value {
+            return Some(desired);
+        }
+    }
+    None
+}
+pub fn repair_auto_start() -> Result<bool> {
+    let value = read_run()?;
+    if value.is_none() {
+        return Ok(false);
+    }
+    let executable = std::env::current_exe()?;
+    let target = startup_target(&executable)?;
+    if let Some(command) = repaired_run(value.as_deref(), &executable, &target) {
+        write_run_at(RUN_KEY, Some(&command))?;
+        return Ok(true);
+    }
+    Ok(false)
+}
+fn write_run_at(path: &str, command: Option<&[u16]>) -> Result<()> {
     let mut key = null_mut();
     let result = unsafe {
         RegCreateKeyExW(
             HKEY_CURRENT_USER,
-            wide(RUN_KEY).as_ptr(),
+            wide(path).as_ptr(),
             0,
             null(),
             0,
@@ -124,8 +192,7 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
     );
     let key = Key(key);
     let name = wide(RUN_VALUE);
-    let result = if enabled {
-        let command = run_command(&std::env::current_exe()?);
+    let result = if let Some(command) = command {
         unsafe {
             RegSetValueExW(
                 key.0,
@@ -140,7 +207,7 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
         unsafe { RegDeleteValueW(key.0, name.as_ptr()) }
     };
     ensure!(
-        result == ERROR_SUCCESS || (!enabled && result == ERROR_FILE_NOT_FOUND),
+        result == ERROR_SUCCESS || (command.is_none() && result == ERROR_FILE_NOT_FOUND),
         "Update startup command: Windows error {result}"
     );
     Ok(())
@@ -296,5 +363,79 @@ impl Drop for SingleInstance {
             CloseHandle(self.handle);
             CloseHandle(self.running_marker);
         }
+    }
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn missing_startup_paths_are_repaired_without_enabling_or_replacing_other_apps() {
+        let temp = tempfile::tempdir().unwrap();
+        let exe = temp.path().join("new folder/ClickPulse.exe");
+        fs::create_dir_all(exe.parent().unwrap()).unwrap();
+        fs::write(&exe, b"new").unwrap();
+        let old = temp.path().join("old folder/ClickPulse.exe");
+        let stable = temp.path().join("Links/clickpulse.exe");
+        assert!(repaired_run(None, &exe, &stable).is_none());
+        assert_eq!(
+            repaired_run(Some(&run_command(&old)), &exe, &stable),
+            Some(run_command(&stable))
+        );
+        assert_eq!(
+            repaired_run(Some(&run_command(&exe)), &exe, &stable),
+            Some(run_command(&stable))
+        );
+        fs::create_dir_all(old.parent().unwrap()).unwrap();
+        fs::write(&old, b"other copy").unwrap();
+        assert!(repaired_run(Some(&run_command(&old)), &exe, &stable).is_none());
+        assert!(
+            repaired_run(
+                Some(&run_command(&temp.path().join("another.exe"))),
+                &exe,
+                &stable
+            )
+            .is_none()
+        );
+        let custom = wide(format!("\"{}\" --demo", exe.display()));
+        assert!(repaired_run(Some(&custom), &exe, &stable).is_none());
+        assert_eq!(startup_executable(&run_command(&exe)), Some(exe.clone()));
+        assert!(repaired_run(Some(&run_command(&exe)), &exe, &exe).is_none());
+    }
+
+    #[test]
+    fn startup_registry_round_trip_uses_a_private_key_and_retains_disabled_state() {
+        struct TestKey(String);
+        impl Drop for TestKey {
+            fn drop(&mut self) {
+                unsafe {
+                    RegDeleteTreeW(HKEY_CURRENT_USER, wide(&self.0).as_ptr());
+                }
+            }
+        }
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let key = TestKey(format!(
+            "Software\\ClickPulse\\Tests\\Startup-{}-{unique}",
+            std::process::id()
+        ));
+        assert!(read_run_at(&key.0).unwrap().is_none());
+        let temp = tempfile::tempdir().unwrap();
+        let old = temp.path().join("0.3.0/ClickPulse.exe");
+        let exe = temp.path().join("0.3.1/ClickPulse.exe");
+        fs::create_dir_all(exe.parent().unwrap()).unwrap();
+        fs::write(&exe, b"app").unwrap();
+        write_run_at(&key.0, Some(&run_command(&old))).unwrap();
+        let stored = read_run_at(&key.0).unwrap();
+        let repaired = repaired_run(stored.as_deref(), &exe, &exe).unwrap();
+        write_run_at(&key.0, Some(&repaired)).unwrap();
+        assert_eq!(read_run_at(&key.0).unwrap(), Some(run_command(&exe)));
+        write_run_at(&key.0, None).unwrap();
+        assert!(read_run_at(&key.0).unwrap().is_none());
+        assert!(repaired_run(None, &exe, &exe).is_none());
     }
 }

@@ -27,6 +27,9 @@ pub mod updater;
 pub mod version;
 pub mod windows_input;
 
+#[cfg(any(windows, test))]
+mod windows_installation;
+
 #[cfg(target_os = "linux")]
 #[path = "capture_linux.rs"]
 #[cfg_attr(test, allow(dead_code))]

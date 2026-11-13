@@ -1,4 +1,4 @@
-//! Daily or manual release checks; downloading and installing require a user action.
+//! Daily or manual checks and background downloads; installation requires confirmation.
 use anyhow::{Context, Result, bail, ensure};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -287,6 +287,7 @@ pub(crate) struct Manifest {
     pub code_license: String,
     pub files: BTreeMap<String, String>,
 }
+#[derive(Debug)]
 pub struct StagedUpdate {
     pub(crate) directory: tempfile::TempDir,
     pub(crate) manifest: Manifest,

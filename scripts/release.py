@@ -138,6 +138,10 @@ def release_notes(version, repository, revision, private=False):
                    '- Enjoy clearer controls and smoother Mini transitions across platforms.\n'
                    '- Reduce background refreshes and disk activity.\n'
                    '- Count physical Caps Lock presses correctly on macOS.\n')
+    elif version == '0.3.1':
+        changes = ('- Download updates automatically; install and restart when you confirm.\n'
+                   '- Keep WinGet installations updated through their package manager.\n'
+                   '- Restore missing Windows startup paths when ClickPulse opens.\n')
     return f'''Local keyboard and mouse activity statistics. Fully offline.
 {access}
 ## Downloads

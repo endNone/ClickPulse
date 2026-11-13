@@ -1,4 +1,4 @@
-use clickpulse::updater::{self, ApplyGuard, Candidate, Installation, Target};
+use clickpulse::updater::{self, ApplyGuard, Candidate, Installation, StagedUpdate, Target};
 use serde::Serialize;
 use std::{
     cell::Cell,
@@ -19,8 +19,9 @@ pub(super) enum Event {
         received: u64,
         total: u64,
     },
-    Preparing {
+    Downloaded {
         id: u64,
+        result: Result<StagedUpdate, String>,
     },
     Prepared {
         id: u64,
@@ -39,33 +40,133 @@ mod tests {
     use super::*;
 
     #[test]
-    fn scoop_updates_keep_checks_and_reminders_but_reject_install_requests() {
+    fn managed_updates_keep_checks_but_never_download_or_install() {
+        for command in [
+            "scoop update clickpulse",
+            "winget upgrade --id endNone.ClickPulse --exact",
+        ] {
+            let mut controller = Controller::new(false);
+            controller.automatic_allowed = true;
+            controller.view.update_command = Some(command);
+            // Even a stale installable result must not override package ownership.
+            controller.installation = Ok(Installation {
+                root: PathBuf::from("unused"),
+                target: Target::WindowsX64,
+            });
+            assert!(controller.automatic_due(true, None, 100_000));
+            assert!(controller.begin_check(100_000, CheckSource::Automatic));
+            controller.receive(Event::Checked {
+                id: controller.id,
+                result: Ok(Some(Box::new(Candidate::placeholder("9.9.9")))),
+            });
+            assert_eq!(controller.view.status, "available");
+            assert!(!controller.view.can_install);
+            assert!(
+                controller
+                    .install_target()
+                    .unwrap_err()
+                    .to_string()
+                    .contains(command)
+            );
+            let mut notices = updater::UpdateNotifications::default();
+            assert!(controller.sync_notifications(&mut notices));
+            assert_eq!(notices.pending(), Some("9.9.9"));
+            assert!(controller.guard.is_none());
+            assert!(!controller.download_available());
+        }
+    }
+
+    #[test]
+    fn only_installable_owned_updates_download_and_failed_downloads_do_not_restart() {
         let mut controller = Controller::new(false);
-        controller.automatic_allowed = true;
-        controller.view.update_command = Some("scoop update clickpulse");
-        // Even a stale installable result must not override package ownership.
         controller.installation = Ok(Installation {
             root: PathBuf::from("unused"),
-            target: Target::WindowsX64,
+            target: Target::MacArm64,
         });
-        assert!(controller.automatic_due(true, None, 100_000));
-        assert!(controller.begin_check(100_000, CheckSource::Automatic));
+        controller.begin_check(1, CheckSource::Automatic);
         controller.receive(Event::Checked {
             id: controller.id,
             result: Ok(Some(Box::new(Candidate::placeholder("9.9.9")))),
         });
-        assert_eq!(controller.view.status, "available");
-        assert!(!controller.view.can_install);
+        assert!(!controller.download_available());
+        controller.automatic_allowed = true;
+        assert!(controller.download_available());
+        controller.view.status = "downloading";
+        assert!(controller.busy());
         assert!(
-            controller
-                .install_target()
-                .unwrap_err()
-                .to_string()
-                .contains("Scoop")
+            !controller.installing(),
+            "downloads must not prevent normal quit"
         );
-        let mut notices = updater::UpdateNotifications::default();
-        assert!(controller.sync_notifications(&mut notices));
-        assert_eq!(notices.pending(), Some("9.9.9"));
+        assert!(!controller.receive(Event::Downloaded {
+            id: controller.id + 1,
+            result: Err("obsolete".into())
+        }));
+        assert_eq!(controller.view.status, "downloading");
+        assert!(!controller.receive(Event::Downloaded {
+            id: controller.id,
+            result: Err("download interrupted".into())
+        }));
+        assert_eq!(controller.view.status, "error");
+        assert!(!controller.download_available());
+        assert!(controller.guard.is_none());
+        assert!(controller.staged.is_none());
+        controller.begin_check(2, CheckSource::Manual);
+        controller.receive(Event::Checked {
+            id: controller.id,
+            result: Ok(None),
+        });
+        assert_eq!(controller.view.status, "current");
+        assert!(!controller.download_available());
+    }
+
+    #[test]
+    #[ignore = "Downloads a public update to verify the confirmation boundary without installing"]
+    fn downloaded_public_update_waits_for_confirmation_and_rechecks_keep_it() {
+        let target = Target::current().unwrap();
+        let candidate = updater::check("0.0.0", target).unwrap().unwrap();
+        let version = candidate.version.clone();
+        let mut controller = Controller::new(false);
+        controller.automatic_allowed = true;
+        controller.installation = Ok(Installation {
+            root: PathBuf::from("never-installed"),
+            target,
+        });
+        controller.begin_check(1, CheckSource::Automatic);
+        controller.receive(Event::Checked {
+            id: controller.id,
+            result: Ok(Some(Box::new(candidate.clone()))),
+        });
+        assert!(controller.download_available());
+        let staged = updater::stage(&candidate, |_, _| {}).unwrap();
+        assert!(!controller.receive(Event::Downloaded {
+            id: controller.id,
+            result: Ok(staged)
+        }));
+        assert_eq!(controller.view.status, "ready");
+        assert!(controller.staged.is_some());
+        assert!(
+            controller.guard.is_none(),
+            "downloading must never start an installer"
+        );
+        assert!(!controller.installing());
+        assert!(!controller.download_available());
+        controller.begin_check(90_000, CheckSource::Automatic);
+        controller.receive(Event::Checked {
+            id: controller.id,
+            result: Ok(Some(Box::new(candidate))),
+        });
+        assert_eq!(controller.view.status, "ready");
+        assert_eq!(controller.view.version.as_deref(), Some(version.as_str()));
+        assert!(controller.staged.is_some());
+        controller.begin_check(180_000, CheckSource::Automatic);
+        controller.receive(Event::Checked {
+            id: controller.id,
+            result: Ok(None),
+        });
+        assert!(
+            controller.staged.is_none(),
+            "withdrawn offers must discard staged files"
+        );
         assert!(controller.guard.is_none());
     }
 
@@ -346,6 +447,7 @@ pub(super) struct Controller {
     log_path: Option<PathBuf>,
     view: View,
     candidate: Option<Candidate>,
+    staged: Option<StagedUpdate>,
     installation: Result<Installation, String>,
     automatic_allowed: bool,
     attempted_at: i64,
@@ -374,6 +476,7 @@ impl Controller {
                 total: 0,
             },
             candidate: None,
+            staged: None,
             automatic_allowed: allowed,
             attempted_at: 0,
             check_source: CheckSource::Manual,
@@ -395,13 +498,10 @@ impl Controller {
         }
     }
     pub fn installing(&self) -> bool {
-        matches!(
-            self.view.status,
-            "downloading" | "verifying" | "preparing" | "installing"
-        )
+        matches!(self.view.status, "preparing" | "installing")
     }
     fn busy(&self) -> bool {
-        self.installing() || self.view.status == "checking"
+        self.installing() || matches!(self.view.status, "checking" | "downloading" | "verifying")
     }
     /// Only normal installed-app sessions schedule checks or persist update
     /// preferences; other sessions must not alter the installed app's state.
@@ -472,6 +572,13 @@ impl Controller {
         if !self.begin_check(now, source) {
             return false;
         }
+        if self.automatic_allowed {
+            self.view.update_command = updater::package_update_command();
+            self.installation = updater::installation().map_err(|e| format!("{e:#}"));
+            if let Err(error) = &self.installation {
+                self.log_failure(source, "installation-unavailable", error);
+            }
+        }
         let id = self.id;
         if let Err(error) = std::thread::Builder::new()
             .name("clickpulse-update-check".into())
@@ -493,7 +600,11 @@ impl Controller {
             self.view.status = "error";
         } else if let Some(candidate) = &self.candidate {
             self.view.version = Some(candidate.version.clone());
-            self.view.status = "available";
+            self.view.status = if self.staged.is_some() {
+                "ready"
+            } else {
+                "available"
+            };
         } else {
             self.view.status = "idle";
         }
@@ -518,13 +629,57 @@ impl Controller {
     fn install_target(&self) -> anyhow::Result<Installation> {
         anyhow::ensure!(
             self.view.update_command.is_none(),
-            "Use Scoop to update this installation"
+            "Use the package manager to update this installation: {}",
+            self.view.update_command.unwrap_or_default()
         );
         self.installation.clone().map_err(anyhow::Error::msg)
     }
     fn start_install(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> anyhow::Result<()> {
         anyhow::ensure!(!self.busy(), "Update already in progress");
         let installation = self.install_target()?;
+        // A request before the download is ready only downloads. Starting a
+        // helper is a separate, explicit confirmation after verification.
+        if self.staged.is_none() {
+            return self.start_download(proxy);
+        }
+        let staged = self.staged.take().expect("verified download");
+        self.id += 1;
+        let id = self.id;
+        self.view.status = "preparing";
+        let result = std::thread::Builder::new()
+            .name("clickpulse-update-install".into())
+            .spawn(move || {
+                let result =
+                    updater::launch_installer(staged, installation).map_err(|e| format!("{e:#}"));
+                let _ = proxy.send_event(super::UiEvent::Update(Event::Prepared { id, result }));
+            });
+        if let Err(error) = result {
+            self.view.status = "error";
+            return Err(error.into());
+        }
+        Ok(())
+    }
+    fn download_available(&self) -> bool {
+        self.automatic_allowed
+            && self.view.status == "available"
+            && self.view.can_install
+            && self.view.update_command.is_none()
+            && self.staged.is_none()
+            && self.candidate.is_some()
+    }
+    pub fn download_if_available(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> bool {
+        if !self.download_available() {
+            return false;
+        }
+        if let Err(error) = self.start_download(proxy) {
+            self.view.status = "error";
+            self.log_failure(self.check_source, "download-start", &format!("{error:#}"));
+        }
+        true
+    }
+    fn start_download(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> anyhow::Result<()> {
+        anyhow::ensure!(!self.busy(), "Update already in progress");
+        self.install_target()?;
         let candidate = self
             .candidate
             .clone()
@@ -546,12 +701,8 @@ impl Controller {
                         }));
                     }
                 })
-                .and_then(|staged| {
-                    let _ = proxy.send_event(super::UiEvent::Update(Event::Preparing { id }));
-                    updater::launch_installer(staged, installation)
-                })
                 .map_err(|e| format!("{e:#}"));
-                let _ = proxy.send_event(super::UiEvent::Update(Event::Prepared { id, result }));
+                let _ = proxy.send_event(super::UiEvent::Update(Event::Downloaded { id, result }));
             });
         if let Err(error) = result {
             self.view.status = "error";
@@ -568,7 +719,19 @@ impl Controller {
                     self.checked_version = Some(Some(candidate.version.clone()));
                     (self.failures, self.retry_at) = (0, None);
                     self.view.version = Some(candidate.version.clone());
-                    self.view.status = "available";
+                    if self
+                        .candidate
+                        .as_ref()
+                        .is_none_or(|previous| previous.version != candidate.version)
+                        || self.view.update_command.is_some()
+                    {
+                        self.staged = None;
+                    }
+                    self.view.status = if self.staged.is_some() {
+                        "ready"
+                    } else {
+                        "available"
+                    };
                     self.view.can_install =
                         self.installation.is_ok() && self.view.update_command.is_none();
                     self.candidate = Some(candidate);
@@ -577,6 +740,7 @@ impl Controller {
                     self.checked_version = Some(None);
                     (self.failures, self.retry_at) = (0, None);
                     self.candidate = None;
+                    self.staged = None;
                     self.view.status = "current";
                 }
                 Err(error) => {
@@ -597,7 +761,16 @@ impl Controller {
                     "downloading"
                 };
             }
-            Event::Preparing { id } if id == self.id => self.view.status = "preparing",
+            Event::Downloaded { id, result } if id == self.id => match result {
+                Ok(staged) => {
+                    self.staged = Some(staged);
+                    self.view.status = "ready";
+                }
+                Err(error) => {
+                    self.log_failure(self.check_source, "download", &error);
+                    self.view.status = "error";
+                }
+            },
             Event::Prepared { id, result } if id == self.id => match result {
                 Ok(guard) => {
                     self.guard = Some(guard);

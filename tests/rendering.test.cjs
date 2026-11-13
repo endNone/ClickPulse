@@ -775,7 +775,7 @@ test('manual checks remain available and an offered update never installs withou
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
     a.window.receiveUpdateState({status:'checking'});a.get('check-updates').fire();assert.equal(sent.length,0);
     a.window.receiveUpdateState({status:'available',version:'0.2.1',can_install:true});assert.equal(sent.length,0);
-    assert.equal(a.get('check-updates').textContent,messages.en['update.install']);
+    assert.equal(a.get('check-updates').textContent,messages.en['update.download']);
     assert.equal(a.get('update-details').hidden,false);
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'install_update'});
   }
@@ -788,11 +788,11 @@ test('Scoop-managed updates keep checks and localized guidance without sending i
     assert.equal(a.get('check-updates').textContent,messages[locale]['update.check']);
     assert.equal(a.get('update-managed').hidden,false);
     assert.ok(a.get('update-managed').textContent.includes('scoop update clickpulse'));
-    assert.equal(a.get('update-automatic-description').textContent,messages[locale]['update.automatic_scoop']);
+    assert.equal(a.get('update-automatic-description').textContent,messages[locale]['update.automatic_managed']);
     assert.equal(a.get('automatic-updates').disabled,false);
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
     a.get('update-details').fire();assert.deepEqual(sent.pop(),{action:'update_release'});
-    a.window.receiveUpdateAvailable('9.9.9');assert.equal(a.get('toast').textContent,messages[locale]['update.found_scoop']);
+    a.window.receiveUpdateAvailable('9.9.9');assert.equal(a.get('toast').textContent,messages[locale]['update.found_managed']);
     assert.ok(!a.get('toast').textContent.includes('scoop update clickpulse'),'the update command is shown only in Settings');
     assert.equal(sent.length,0);
     a.window.receiveUpdateState({status:'current'});assert.equal(a.get('update-managed').hidden,false);
@@ -800,6 +800,32 @@ test('Scoop-managed updates keep checks and localized guidance without sending i
     assert.equal(a.get('update-managed').hidden,true);
     assert.equal(a.get('update-automatic-description').textContent,messages[locale]['update.automatic_description']);
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'install_update'});
+  }
+});
+test('downloaded updates await confirmation in every language and never open a browser',()=>{
+  for(const platform of ['macos','windows','linux'])for(const locale of Object.keys(messages)){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+    a.window.receiveView({locale,language_preference:locale});
+    a.window.receiveUpdateState({status:'downloading',version:'0.3.1',can_install:true});
+    a.window.receiveUpdateState({status:'ready',version:'0.3.1',can_install:true});
+    assert.equal(sent.length,0);
+    assert.equal(a.get('check-updates').textContent,messages[locale]['update.install']);
+    assert.equal(a.get('check-updates').disabled,false);
+    assert.equal(a.get('update-status').textContent,createI18n(messages,locale).t('update.ready',{version:'0.3.1'}));
+    assert.equal(a.get('update-install-help').hidden,true);
+    a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'install_update'});
+  }
+});
+test('WinGet guidance replaces Scoop branding without offering an in-app installer',()=>{
+  for(const locale of Object.keys(messages)){
+    const a=app('windows'),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+    a.window.receiveView({locale,language_preference:locale});
+    const command='winget upgrade --id endNone.ClickPulse --exact';
+    a.window.receiveUpdateState({status:'available',version:'0.3.1',can_install:true,update_command:command});
+    assert.ok(a.get('update-managed').textContent.includes('WinGet'));
+    assert.ok(a.get('update-managed').textContent.includes(command));
+    assert.ok(!a.get('update-managed').textContent.includes('Scoop'));
+    a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
   }
 });
 test('background failure keeps version copy and only explicit error states show failures',()=>{
@@ -878,6 +904,8 @@ test('unsupported installations open release downloads and errors can be retried
   const a=app(),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
   a.window.receiveUpdateState({status:'available',version:'0.2.1',can_install:false});
   assert.equal(a.get('check-updates').textContent,messages.en['update.download']);
+  assert.equal(a.get('update-install-help').hidden,false);
+  assert.equal(a.get('update-install-help').textContent,messages.en['update.install_help']);
   a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'update_release'});
   a.window.receiveUpdateState({status:'error'});a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
   a.window.receiveUpdateState({status:'current'});assert.equal(a.get('update-status').textContent,messages.en['update.current']);

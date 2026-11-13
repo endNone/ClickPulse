@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.1 · Unreleased
+
+### Improved
+
+- Download updates automatically; install and restart only when you confirm.
+- Keep WinGet installations current through `winget upgrade --id endNone.ClickPulse --exact`.
+
+### Fixed
+
+- Keep Windows launch-at-login working through WinGet upgrades.
+- Repair missing startup paths when opening ClickPulse, without enabling disabled startup.
+- Explain when the current app location requires a manual update.
+
 ## 0.3.0 · 2026-11-12
 
 ### New
