@@ -19,11 +19,15 @@ def coalition(pid):
 def procs():
  rows=subprocess.check_output(['ps','-axo','pid=,comm='],text=True).splitlines()
  return [(int(row.strip().split(None,1)[0]),row.strip().split(None,1)[1]) for row in rows if len(row.strip().split(None,1))==2]
+class Timebase(ctypes.Structure):
+ _fields_=[('numer',ctypes.c_uint32),('denom',ctypes.c_uint32)]
+timebase=Timebase()
+ctypes.CDLL('/usr/lib/libSystem.B.dylib').mach_timebase_info(ctypes.byref(timebase))
 def mem(pid):
  b=ctypes.create_string_buffer(4096)
  if lib.proc_pid_rusage(pid,0,b):return None
  v=(ctypes.c_uint64*10).from_buffer(b,16)
- return {'rss_bytes':v[6],'footprint_bytes':v[7]}
+ return {'rss_bytes':v[6],'footprint_bytes':v[7],'cpu_ns':(v[0]+v[1])*timebase.numer/timebase.denom}
 subprocess.run(['open','-n','-g','--env','CLICKPULSE_MEMORY_PROBE='+str(out),str(app),'--args','--demo','--background'],check=True)
 start=time.monotonic()
 while not (out/'pid').exists():
@@ -48,12 +52,15 @@ try:
   samples=[]
   for _ in range(5):
    members=[{'pid':p,'name':n,**m} for p,n in procs() if coalition(p)==group and (m:=mem(p))]
-   samples.append({'processes':members,'main_bytes':sum(p['footprint_bytes'] for p in members if p['pid']==pid),'webview_bytes':sum(p['footprint_bytes'] for p in members if p['pid']!=pid),'total_bytes':sum(p['footprint_bytes'] for p in members)})
+   samples.append({'at_ns':time.monotonic_ns(),'processes':members,'main_bytes':sum(p['footprint_bytes'] for p in members if p['pid']==pid),'webview_bytes':sum(p['footprint_bytes'] for p in members if p['pid']!=pid),'total_bytes':sum(p['footprint_bytes'] for p in members)})
    time.sleep(1)
   ids=[str(p['pid']) for p in samples[-1]['processes']]
   fp=subprocess.run(['footprint','--noCategories','-f','bytes',*ids],text=True,capture_output=True)
   (out/(stage+'-footprint.txt')).write_text(fp.stdout+fp.stderr)
   report['states'][stage]={'samples':samples,'median_main_bytes':statistics.median(s['main_bytes'] for s in samples),'median_webview_bytes':statistics.median(s['webview_bytes'] for s in samples),'median_total_bytes':statistics.median(s['total_bytes'] for s in samples)}
+  first,last=samples[0],samples[-1]
+  initial={p['pid']:p['cpu_ns'] for p in first['processes']}
+  report['states'][stage]['main_cpu_percent']=100*sum(p['cpu_ns']-initial[p['pid']] for p in last['processes'] if p['pid']==pid and p['pid'] in initial)/(last['at_ns']-first['at_ns'])
   if lifecycle and stage=='background' and any(row['webview_bytes'] for row in samples): raise RuntimeError('Background launch created WebKit processes')
   if lifecycle and stage=='reopened': report['reopen_ready_ms']=int((out/'ui-ready').read_text())-int((out/'reopened.started').read_text())
   (out/'measurements.json').write_text(json.dumps(report,indent=2)+'\n')
@@ -62,6 +69,9 @@ try:
  deadline=time.monotonic()+15
  while mem(pid) is not None and time.monotonic()<deadline:time.sleep(.1)
  if mem(pid) is not None:raise RuntimeError('Probe did not exit after Save and quit')
+ report['normal_quit_requested']=(out/'quit-requested').exists()
+ report['exited_after_quit']=True
+ (out/'measurements.json').write_text(json.dumps(report,indent=2)+'\n')
 finally:
  if mem(pid) is not None:
   command=subprocess.check_output(['ps','-p',str(pid),'-o','comm='],text=True).strip()

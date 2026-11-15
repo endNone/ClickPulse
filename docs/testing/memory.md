@@ -10,6 +10,10 @@ between operating systems: their memory accounting differs.
 copy that uses synthetic data, default preferences, native tray actions and an isolated
 renderer cache. It never records input or modifies the installed app. Build that copy
 with `cargo build --release --locked --manifest-path DISPOSABLE_COPY/Cargo.toml`.
+Use separate target directories for different source copies, or run `cargo clean
+--release -p clickpulse --manifest-path DISPOSABLE_COPY/Cargo.toml` before switching.
+Preserved timestamps can otherwise reuse a different same-version executable.
+Keep binary hashes as well as source revisions.
 
 Run the executable with `scripts/measure_memory.py run BINARY OUTPUT --label REVISION`
 on Linux or Windows; Windows requires `psutil==7.2.2`. On macOS use
@@ -20,7 +24,9 @@ The states are unopened background, full English, full Chinese, Mini, hidden for
 seconds, and reopened. Each visible state settles for 35 seconds. Take five samples at
 one-second intervals and report the median. Preserve process-level samples and source
 revisions. The probe also checks decoded brand images, loaded font faces, view disposal,
-and the new page's ready acknowledgement after recreation.
+and the new page's ready acknowledgement after recreation. The final report records
+normal quit separately from an unexpected process exit. macOS also samples main-process
+CPU time, converting `libproc` Mach ticks with the host's timebase.
 
 Report the main process, the rendering process family, and their combined measured
 footprint. Include helper processes even if they become reparented:

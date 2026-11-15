@@ -70,6 +70,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/scripts/measure_memory.py run build/release/clickpulse.exe results/baseline --label "$env:BASELINE_REF"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +stable clean --release -p clickpulse --manifest-path candidate-probe/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo +stable build --release --locked --manifest-path candidate-probe/Cargo.toml
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/scripts/measure_memory.py run build/release/clickpulse.exe results/candidate --label "$env:CANDIDATE_REF"
@@ -122,6 +124,8 @@ jobs:
           cargo +stable build --release --locked --bin memory_runtime --manifest-path baseline-probe/Cargo.toml
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/scripts/measure_runtime_memory.py run build/release/memory_runtime.exe results/baseline --label "$env:BASELINE_REF"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +stable clean --release -p clickpulse --manifest-path candidate-probe/Cargo.toml
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo +stable build --release --locked --bin memory_runtime --manifest-path candidate-probe/Cargo.toml
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

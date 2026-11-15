@@ -4,6 +4,7 @@ Prepare a disposable source copy, build it, then run its executable. The probe
 uses the normal UI actions with demo data and cannot touch recording/history.
 """
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -44,6 +45,7 @@ HOOK = r'''
                 std::fs::write(path.join(format!("{name}.ready")), "ready").unwrap();
                 while !path.join(format!("{name}.measured")).exists() { std::thread::sleep(Duration::from_millis(100)); }
             }
+            std::fs::write(path.join("quit-requested"), "normal quit").unwrap();
             let _ = proxy.send_event(UiEvent::Menu(MenuEvent { id: quit_id }));
         });
     }
@@ -145,7 +147,7 @@ def run(binary, output, label):
     log = (output/'app.log').open('w')
     app = subprocess.Popen([str(binary.resolve()), '--demo', '--background'], env=env, stdout=log, stderr=subprocess.STDOUT)
     known = {app.pid}
-    report = {'label': label, 'platform': sys.platform, 'system': __import__('platform').platform(), 'demo': True, 'metric': 'private working set (USS)' if sys.platform == 'win32' else 'proportional resident size (PSS)', 'states': {}}
+    report = {'label': label, 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(), 'platform': sys.platform, 'system': __import__('platform').platform(), 'demo': True, 'metric': 'private working set (USS)' if sys.platform == 'win32' else 'proportional resident size (PSS)', 'states': {}}
     try:
         for stage in ['background', 'full_en', 'full_zh', 'mini', 'hidden_10m', 'reopened']:
             deadline = time.monotonic()+750
@@ -186,6 +188,9 @@ def run(binary, output, label):
             print(stage, round(report['states'][stage]['median_total_bytes']/2**20, 1), 'MiB', flush=True)
         app.wait(timeout=30)
         if app.returncode: raise RuntimeError('Probe failed to exit cleanly')
+        report['exit_code'] = app.returncode
+        report['normal_quit_requested'] = (output/'quit-requested').exists()
+        (output/'measurements.json').write_text(json.dumps(report, indent=2)+'\n')
     finally:
         if app.poll() is None: app.terminate(); app.wait(timeout=15)
         log.close()
