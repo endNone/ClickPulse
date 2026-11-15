@@ -65,10 +65,12 @@ assert.equal(physical.reduce((n,k)=>n+k.count,0), lifetime.keyboard);
 assert.deepEqual(sum(history), lifetime);
 const scripts = ['i18n.js','themes.js','dropdown.js','history.js','keyboard.js','sport.js','app.js','presentation.js'];
 const styles = ['style.css','history.css','compact.css','themes.css','dropdown.css','sport.css'];
-const fonts = [['ClickPulse UI','Inter.ttf'],['ClickPulse Sans','NotoSansSC.ttf'],['ClickPulse Mono','NotoSansMono.ttf']];
+const fonts = [['ClickPulse UI','Inter.woff2'],['ClickPulse Mono','NotoSansMono.woff2']];
 fs.mkdirSync(path.join(output,'fonts'),{recursive:true});
+fs.mkdirSync(path.join(output,'images'),{recursive:true});
+fs.copyFileSync(path.join(root,'assets/clickpulse-mark-blue-transparent-v1-128.png'),path.join(output,'images/brand-mark.png'));
 for (const [,name] of fonts) fs.copyFileSync(path.join(root,'assets','fonts',name),path.join(output,'fonts',name));
-const fontCSS = fonts.map(([family,name]) => `@font-face{font-family:'${family}';src:url('fonts/${name}') format('truetype');font-weight:100 900;font-style:normal;font-display:swap}`).join('\n');
+const fontCSS = fs.readFileSync(path.join(root,'ui/fonts.css'),'utf8');
 // Full-page documentation capture reveals scrollable content without changing
 // the App's card geometry. Optional density renders original text/vectors at
 // more pixels; it does not enlarge an already-compressed screenshot.
@@ -136,7 +138,7 @@ const boot = `(() => {
 })();`;
 let html = fs.readFileSync(path.join(root,'ui/index.html'),'utf8')
   .replaceAll('__LOCALE__','en').replaceAll('__PLATFORM__','macos').replaceAll('__THEME__','blue').replaceAll('__VERSION__',version)
-  .replaceAll('__BRAND_MARK__','data:image/png;base64,'+fs.readFileSync(path.join(root,'assets/clickpulse-mark-blue-transparent-v1-1024.png')).toString('base64'))
+  .replaceAll('__BRAND_MARK__','images/brand-mark.png')
   .replace('/*__MESSAGES__*/',fs.readFileSync(path.join(root,'ui/locales.json'),'utf8'))
   .replace('/*__STYLE__*/',fontCSS+'\n'+styles.map(name=>fs.readFileSync(path.join(root,'ui',name),'utf8')).join('\n')+'\n'+captureCSS)
   .replace('/*__SCRIPT__*/',scripts.map(name=>fs.readFileSync(path.join(root,'ui',name),'utf8')).join('\n')+'\n'+boot);

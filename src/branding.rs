@@ -2,46 +2,15 @@
 use std::io::Cursor;
 
 use anyhow::{Context, Result, ensure};
-use base64::{Engine, engine::general_purpose::STANDARD};
-
 const MARK: &[u8] = include_bytes!("../assets/clickpulse-mark-blue-transparent-v1-1024.png");
 pub const TRAY_SIZE: u32 = 44;
 
-pub fn mark_data_url() -> String {
-    format!("data:image/png;base64,{}", STANDARD.encode(MARK))
+pub fn ui_mark_png() -> &'static [u8] {
+    include_bytes!("../assets/clickpulse-mark-blue-transparent-v1-128.png")
 }
 
-pub fn font_css() -> String {
-    #[cfg(target_os = "windows")]
-    let fonts = [
-        ("ClickPulse UI", "fonts/Inter.ttf".to_owned()),
-        ("ClickPulse Sans", "fonts/NotoSansSC.ttf".to_owned()),
-        ("ClickPulse Mono", "fonts/NotoSansMono.ttf".to_owned()),
-    ];
-    #[cfg(not(target_os = "windows"))]
-    let fonts = [
-        (
-            "ClickPulse UI",
-            include_bytes!("../assets/fonts/Inter.ttf").as_slice(),
-        ),
-        (
-            "ClickPulse Sans",
-            include_bytes!("../assets/fonts/NotoSansSC.ttf").as_slice(),
-        ),
-        (
-            "ClickPulse Mono",
-            include_bytes!("../assets/fonts/NotoSansMono.ttf").as_slice(),
-        ),
-    ]
-    .map(|(family, bytes)| {
-        (
-            family,
-            format!("data:font/ttf;base64,{}", STANDARD.encode(bytes)),
-        )
-    });
-    fonts.into_iter().map(|(family, source)| {
-        format!("@font-face{{font-family:'{family}';src:url('{source}') format('truetype');font-weight:100 900;font-style:normal;font-display:swap}}")
-    }).collect::<Vec<_>>().join("\n")
+pub fn font_css() -> &'static str {
+    include_str!("../ui/fonts.css")
 }
 
 pub fn tray_rgba() -> Result<Vec<u8>> {

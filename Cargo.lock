@@ -318,7 +318,6 @@ name = "clickpulse"
 version = "0.3.1"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
  "chrono",
  "chrono-tz",
  "clap",

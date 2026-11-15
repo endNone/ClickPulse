@@ -8,8 +8,10 @@ Install the system libraries:
 
 ```sh
 sudo apt update
-sudo apt install libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-1 libxdo3
+sudo apt install libgtk-3-0 libwebkit2gtk-4.1-0 libayatana-appindicator3-1 libxdo3 fonts-noto-cjk
 ```
+
+Chinese, Japanese and Korean use system fonts. `fonts-noto-cjk` prevents missing characters on minimal Ubuntu installations.
 
 Extract the complete portable ZIP to a permanent folder such as `~/.local/opt/ClickPulse`, then run `./clickpulse` from that folder. Keep its manifest and license files beside the program. The optional `.desktop` file needs an absolute Exec and Icon path before installing it into `~/.local/share/applications/`.
 

@@ -218,7 +218,7 @@ pub fn run(
     let proxy = event_loop.create_proxy();
     let html = include_str!("../ui/index.html")
         .replace("__VERSION__", clickpulse::version::PUBLIC)
-        .replace("__BRAND_MARK__", &clickpulse::branding::mark_data_url())
+        .replace("__BRAND_MARK__", "images/brand-mark.png")
         .replace("__LOCALE__", locale.code())
         .replace("__THEME__", preferences.theme.code())
         .replace("__PLATFORM__", clickpulse::platform::name())
@@ -254,7 +254,10 @@ pub fn run(
     let mut web_context =
         wry::WebContext::new(Some(clickpulse::platform::data_dir()?.join("webview")));
     #[cfg(target_os = "windows")]
-    let builder = WebViewBuilder::new_with_web_context(&mut web_context)
+    let builder = WebViewBuilder::new_with_web_context(&mut web_context);
+    #[cfg(not(target_os = "windows"))]
+    let builder = WebViewBuilder::new();
+    let builder = builder
         .with_custom_protocol("clickpulse".into(), move |_, request| {
             use std::borrow::Cow;
             let (content_type, body, status): (&str, Cow<'static, [u8]>, u16) =
@@ -264,19 +267,19 @@ pub fn run(
                         Cow::Owned(html.as_bytes().to_vec()),
                         200,
                     ),
-                    "/fonts/NotoSansSC.ttf" => (
-                        "font/ttf",
-                        Cow::Borrowed(include_bytes!("../assets/fonts/NotoSansSC.ttf")),
+                    "/images/brand-mark.png" => (
+                        "image/png",
+                        Cow::Borrowed(clickpulse::branding::ui_mark_png()),
                         200,
                     ),
-                    "/fonts/NotoSansMono.ttf" => (
-                        "font/ttf",
-                        Cow::Borrowed(include_bytes!("../assets/fonts/NotoSansMono.ttf")),
+                    "/fonts/Inter.woff2" => (
+                        "font/woff2",
+                        Cow::Borrowed(include_bytes!("../assets/fonts/Inter.woff2")),
                         200,
                     ),
-                    "/fonts/Inter.ttf" => (
-                        "font/ttf",
-                        Cow::Borrowed(include_bytes!("../assets/fonts/Inter.ttf")),
+                    "/fonts/NotoSansMono.woff2" => (
+                        "font/woff2",
+                        Cow::Borrowed(include_bytes!("../assets/fonts/NotoSansMono.woff2")),
                         200,
                     ),
                     _ => ("text/plain", Cow::Borrowed(b"Not found"), 404),
@@ -288,8 +291,6 @@ pub fn run(
                 .expect("static resource response")
         })
         .with_url("clickpulse://localhost/index.html");
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let builder = WebViewBuilder::new().with_html(html);
     let builder = builder
         .with_transparent(cfg!(any(target_os = "macos", target_os = "linux")))
         .with_navigation_handler(|url| {

@@ -1,6 +1,6 @@
 :root {
   --bg:#f3f6fc; --surface:#fff; --text:#172b4a; --muted:#63758e; --line:#e1e8f3;
-  --blue:#2563eb; --cyan:#38bdf8; --navy:#102543; --sans:"ClickPulse UI","ClickPulse Sans",sans-serif; --mono:"ClickPulse Mono","ClickPulse Sans",monospace;
+  --blue:#2563eb; --cyan:#38bdf8; --navy:#102543; --sans:"ClickPulse UI",system-ui,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif; --mono:"ClickPulse Mono",ui-monospace,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",monospace;
   --ui-label-size:14px; --ui-detail-size:12px; --ui-section-size:16px;
   font-family:var(--sans);
   color:var(--text);font-size:13px;

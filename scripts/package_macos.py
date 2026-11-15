@@ -89,7 +89,7 @@ def main():
         shutil.copy2(ROOT/'LICENSE', resources/'LICENSE.txt')
         for file in sorted((ROOT/'assets/fonts').glob('*-OFL.txt')):
             shutil.copy2(file, licenses/file.name)
-        (resources/'THIRD-PARTY-NOTICES.txt').write_text('ClickPulse third-party notices\n\nFonts: Inter, Noto Sans SC and Noto Sans Mono. Full SIL OFL licenses are in Licenses/.\n\n'+rust_notices(metadata, ROOT), encoding='utf-8')
+        (resources/'THIRD-PARTY-NOTICES.txt').write_text('ClickPulse third-party notices\n\nFonts: Inter and Noto Sans Mono (subsets). Full SIL OFL licenses are in Licenses/.\n\n'+rust_notices(metadata, ROOT), encoding='utf-8')
         shutil.copytree(ROOT/'assets/localizations', resources, dirs_exist_ok=True)
         run([sys.executable, 'scripts/make_icon.py', str(resources/'ClickPulseLogo.icns')])
         run(['codesign', '--force', '--sign', '-', '--identifier', 'app.clickpulse.desktop', str(app)])

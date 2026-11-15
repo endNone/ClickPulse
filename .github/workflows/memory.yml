@@ -1,0 +1,79 @@
+name: Memory comparison
+
+on:
+  push:
+    branches: [codex/memory-assets-20261115]
+    paths: [.github/workflows/memory.yml, scripts/measure_memory.py]
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Published baseline tag
+        default: v0.3.0
+        required: true
+      candidate:
+        description: Exact optimized source revision
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: memory-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASELINE_REF: ${{ inputs.baseline || 'v0.3.0' }}
+  CANDIDATE_REF: ${{ inputs.candidate || github.sha }}
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: tools
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.baseline || 'v0.3.0' }}
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.candidate || github.sha }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal
+      - name: Prepare isolated probes
+        shell: pwsh
+        run: |
+          python -m pip install psutil==7.2.2
+          python tools/scripts/measure_memory.py prepare baseline baseline-probe
+          python tools/scripts/measure_memory.py prepare candidate candidate-probe
+          New-Item -ItemType Directory -Path results | Out-Null
+          systeminfo | Out-File results/system.txt
+          git -C baseline rev-parse HEAD | Out-File results/baseline-source.txt
+          git -C candidate rev-parse HEAD | Out-File results/candidate-source.txt
+      - name: Measure 0.3.0 then optimized 0.3.1 on the same machine
+        shell: pwsh
+        run: |
+          $env:CARGO_TARGET_DIR = Join-Path $pwd 'build'
+          cargo +stable build --release --locked --manifest-path baseline-probe/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/scripts/measure_memory.py run build/release/clickpulse.exe results/baseline --label "$env:BASELINE_REF"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +stable build --release --locked --manifest-path candidate-probe/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/scripts/measure_memory.py run build/release/clickpulse.exe results/candidate --label "$env:CANDIDATE_REF"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: windows-memory-comparison
+          path: results/
+          retention-days: 14
