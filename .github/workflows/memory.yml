@@ -1,9 +1,6 @@
 name: Memory comparison
 
 on:
-  push:
-    branches: [codex/memory-assets-20261115]
-    paths: [.github/workflows/memory.yml, scripts/measure_memory.py]
   workflow_dispatch:
     inputs:
       baseline:

@@ -80,7 +80,8 @@ def memory(pid):
             return None
     try:
         lines = Path(f'/proc/{pid}/smaps_rollup').read_text().splitlines()
-        values = {line.split(':')[0]: int(line.split()[1])*1024 for line in lines if ':' in line}
+        fields = {'Rss:', 'Pss:', 'Private_Clean:', 'Private_Dirty:'}
+        values = {parts[0][:-1]: int(parts[1])*1024 for line in lines if len(parts := line.split()) >= 2 and parts[0] in fields}
         return {'resident_bytes': values['Rss'], 'private_bytes': values['Private_Clean']+values['Private_Dirty'], 'measured_bytes': values['Pss']}
     except (FileNotFoundError, PermissionError, ProcessLookupError):
         return None
