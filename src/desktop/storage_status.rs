@@ -1,6 +1,8 @@
 //! Keep save failures visible even when database snapshots cannot be read.
 use super::{VisibleWebView, tray_icon};
 use clickpulse::{localization::Locale, runtime::CaptureStatus};
+#[cfg(any(target_os = "macos", test))]
+use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 use tray_icon::{Icon, TrayIcon};
 
@@ -29,10 +31,7 @@ impl StorageAlert {
         if let Ok(json) = serde_json::to_string(capture) {
             let _ = view.evaluate_script(&format!("window.receiveCapture?.({json});"));
         }
-        if !warning {
-            self.notified = false;
-        } else if capture.storage_blocked.load(Ordering::Relaxed) && !self.notified {
-            self.notified = true;
+        if self.should_notify(warning, capture.storage_blocked.load(Ordering::Relaxed)) {
             let body = locale.text("error.storage_waiting");
             // A notification service may be unavailable or disabled by the user.
             // The persistent tray warning and in-app message remain regardless.
@@ -47,6 +46,16 @@ impl StorageAlert {
                 eprintln!("Cannot start recording notification: {error}");
             }
         }
+    }
+
+    fn should_notify(&mut self, warning: bool, blocked: bool) -> bool {
+        if !warning {
+            self.notified = false;
+        } else if blocked && !self.notified {
+            self.notified = true;
+            return true;
+        }
+        false
     }
 }
 
@@ -70,10 +79,117 @@ fn notify(body: &str) -> anyhow::Result<()> {
     notification.summary("ClickPulse").body(body);
     #[cfg(target_os = "windows")]
     notification.app_id(clickpulse::platform::windows::notification_app_id()?);
-    #[cfg(target_os = "macos")]
-    notify_rust::set_application("app.clickpulse.desktop")?;
     #[cfg(target_os = "linux")]
     notification.appname("ClickPulse").icon("dialog-warning");
-    notification.show()?;
-    Ok(())
+
+    let show = || {
+        notification.show()?;
+        Ok(())
+    };
+    #[cfg(target_os = "macos")]
+    {
+        // mac-notification-sys rejects every subsequent set_application call.
+        // Cache initialization, not delivery: each new outage still gets a notice.
+        static APPLICATION: OnceLock<Result<(), String>> = OnceLock::new();
+        show_after_initialization(
+            &APPLICATION,
+            || {
+                notify_rust::set_application("app.clickpulse.desktop")?;
+                Ok(())
+            },
+            show,
+        )
+    }
+    #[cfg(not(target_os = "macos"))]
+    show()
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn show_after_initialization(
+    application: &OnceLock<Result<(), String>>,
+    initialize: impl FnOnce() -> anyhow::Result<()>,
+    show: impl FnOnce() -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    application
+        .get_or_init(|| initialize().map_err(|error| error.to_string()))
+        .as_ref()
+        .map_err(|error| anyhow::anyhow!("Cannot initialize notification application: {error}"))?;
+    show()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn separate_storage_outages_each_show_a_notification() -> anyhow::Result<()> {
+        let mut alert = StorageAlert::default();
+        let application = OnceLock::new();
+        let initializations = Cell::new(0);
+        let deliveries = Cell::new(0);
+        for _ in 0..2 {
+            assert!(!alert.should_notify(true, false)); // Retrying, not paused yet.
+            assert!(alert.should_notify(true, true));
+            show_after_initialization(
+                &application,
+                || {
+                    initializations.set(initializations.get() + 1);
+                    anyhow::ensure!(initializations.get() == 1, "AlreadySet");
+                    Ok(())
+                },
+                || {
+                    deliveries.set(deliveries.get() + 1);
+                    Ok(())
+                },
+            )?;
+            assert!(!alert.should_notify(true, true)); // No repeat within an outage.
+            assert!(!alert.should_notify(false, false)); // Saving recovered.
+        }
+        assert_eq!(initializations.get(), 1);
+        assert_eq!(deliveries.get(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn initialization_failure_remains_visible_without_attempting_delivery() {
+        let application = OnceLock::new();
+        for _ in 0..2 {
+            let result = show_after_initialization(
+                &application,
+                || anyhow::bail!("CouldNotSet"),
+                || panic!("Cannot deliver with an uninitialized application"),
+            );
+            assert!(result.unwrap_err().to_string().contains("CouldNotSet"));
+        }
+    }
+
+    #[test]
+    fn delivery_failure_does_not_repeat_application_initialization() -> anyhow::Result<()> {
+        let application = OnceLock::new();
+        assert!(
+            show_after_initialization(
+                &application,
+                || Ok(()),
+                || anyhow::bail!("Notification service unavailable"),
+            )
+            .is_err()
+        );
+        show_after_initialization(
+            &application,
+            || panic!("Application was already initialized"),
+            || Ok(()),
+        )?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires an isolated desktop notification service; run by Linux CI"]
+    fn linux_notification_service_accepts_repeated_alerts() -> anyhow::Result<()> {
+        // Exercise the production zbus transport without starting capture or a database.
+        notify("ClickPulse notification test: first storage pause")?;
+        notify("ClickPulse notification test: storage paused again after recovery")?;
+        Ok(())
+    }
 }

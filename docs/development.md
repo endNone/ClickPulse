@@ -8,7 +8,9 @@ macOS packaging needs Xcode Command Line Tools and the system `ditto`, `sips`, `
 
 Native Windows builds need the Rust MSVC toolchain, Visual Studio C++ Build Tools and Windows SDK. Windows packaging produces the portable ZIP.
 
-Linux builds need `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libxdo-dev`. Build native ARM64 or x64 packages on Ubuntu 22.04 to retain the older glibc baseline, then test the same package on Ubuntu 24.04. When using a VM shared checkout, keep `CARGO_TARGET_DIR` on the guest’s own filesystem. The Linux packager supports Python 3.10, as shipped by Ubuntu 22.04.
+Linux builds need `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libxdo-dev libdbus-1-dev`. Build native ARM64 or x64 packages on Ubuntu 22.04 to retain the older glibc baseline, then test the same package on Ubuntu 24.04. When using a VM shared checkout, keep `CARGO_TARGET_DIR` on the guest’s own filesystem. The Linux packager supports Python 3.10, as shipped by Ubuntu 22.04.
+
+Notifications use the pure Rust `zbus` backend, but the window library still needs `libdbus-1-dev`. Linux checks also install `notification-daemon`, `xvfb` and `dbus-x11` to verify two notification deliveries on an isolated desktop session; these are test dependencies, not additional build requirements.
 
 ## Common build entry point
 

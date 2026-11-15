@@ -56,13 +56,23 @@ jobs:
         run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
       - name: Linux desktop dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libxdo-dev
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libxdo-dev libdbus-1-dev notification-daemon xvfb dbus-x11
       - name: Format
         run: cargo +stable fmt --check
       - name: Rust tests
         env:
           CLICKPULSE_REQUIRE_SYMLINK_TEST: '1'
         run: cargo +stable test --all-targets --locked
+      - name: Linux notification delivery
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a dbus-run-session -- bash -euo pipefail -c '
+            /usr/lib/notification-daemon/notification-daemon &
+            notification_pid=$!
+            trap "kill $notification_pid 2>/dev/null || true" EXIT
+            gdbus wait --session --timeout 10 org.freedesktop.Notifications
+            cargo +stable test --locked --bin clickpulse desktop::storage_status::tests::linux_notification_service_accepts_repeated_alerts -- --ignored --exact
+          '
       - name: Clippy
         run: cargo +stable clippy --all-targets --locked -- -D warnings
       - name: Portable interface tests
