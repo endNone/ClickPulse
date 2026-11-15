@@ -984,17 +984,53 @@ test('recreated views restore navigation and filters after fresh data arrives',(
 
 test('recreation restores history, trend and keyboard choices and clamps removed year filters',()=>{
   for(const page of ['overview','history','keys']){
-    const a=app();a.window.restoreSessionState({page,settings_section:'personalization-settings',trend_days:90,calendar_range:'90',history_range:'1000',history_page:100,keyboard_view:'treemap',scroll_top:120});
+    const a=app(),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+    a.window.restoreSessionState({page,settings_section:'personalization-settings',trend_days:90,calendar_range:'90',history_range:'1000',history_page:100,keyboard_view:'treemap',scroll_top:120});
     a.window.receive(snapshot());
     assert.equal(a.get(page).hidden,false);
     assert.equal(a.get('history-range-select').value,'all');
-    const sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));a.window.captureSessionState();
+    a.window.captureSessionState();
     assert.equal(sent.at(-1).state.trend_days,90);assert.equal(sent.at(-1).state.keyboard_view,'treemap');
     assert.equal(sent.at(-1).state.calendar_range,'90');
     if(page==='history')assert.ok(sent.at(-1).state.history_page<100);
     const count=sent.length;a.window.receiveView({visible:false});a.get('main').scrollTop=0;a.window.captureSessionState();
     assert.equal(sent.length,count,'Hidden layout changes must not overwrite scroll state');
   }
+});
+
+test('cold-view scrolling waits for fonts instead of saving a clamped position',async()=>{
+  const a=app('windows'),sent=[];let fontsReady,top=0,max=420;
+  a.context.document.fonts={ready:new Promise(resolve=>{fontsReady=resolve;})};
+  Object.defineProperty(a.get('main'),'scrollTop',{get:()=>top,set:value=>{top=Math.min(value,max);}});
+  a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+  a.window.restoreSessionState({page:'settings',settings_section:'app-settings',trend_days:90,calendar_range:'90',history_range:'all',history_page:0,keyboard_view:'layout',scroll_top:434});
+  a.window.receive(snapshot());a.window.captureSessionState();
+  assert.equal(top,420);assert.equal(sent.length,0,'do not replace the saved position with the fallback-font clamp');
+  max=434;fontsReady();await Promise.resolve();
+  assert.equal(top,434);
+  assert.equal(sent.at(-1).state.scroll_top,434);
+  assert.equal(a.get('main').style.values['overflow-anchor'],'auto');
+});
+
+test('late fonts cannot pull the user back after navigating away',async()=>{
+  const a=app('windows');let fontsReady;
+  a.context.document.fonts={ready:new Promise(resolve=>{fontsReady=resolve;})};
+  a.window.restoreSessionState({page:'settings',settings_section:'app-settings',trend_days:14,calendar_range:'all',history_range:'all',history_page:0,keyboard_view:'layout',scroll_top:434});
+  a.window.receive(snapshot());a.navigate('history');a.get('main').scrollTop=80;
+  fontsReady();await Promise.resolve();
+  assert.equal(a.get('main').scrollTop,80);
+  assert.equal(a.get('history').hidden,false);
+});
+
+test('font completion while hidden preserves the pending full-window scroll',async()=>{
+  const a=app('windows');let fontsReady;
+  a.context.document.fonts={ready:new Promise(resolve=>{fontsReady=resolve;})};
+  a.window.restoreSessionState({page:'settings',settings_section:'app-settings',trend_days:14,calendar_range:'all',history_range:'all',history_page:0,keyboard_view:'layout',scroll_top:434});
+  a.window.receive(snapshot());a.window.receiveView({compact:true});a.get('main').scrollTop=0;
+  fontsReady();await Promise.resolve();
+  assert.equal(a.get('main').scrollTop,0);
+  a.window.receiveView({compact:false});a.window.receive(snapshot());
+  assert.equal(a.get('main').scrollTop,434);
 });
 
 test('local brand images are permitted without allowing remote image sources',()=>{

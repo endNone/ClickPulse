@@ -201,12 +201,14 @@ function syncSettingsNavigation(){
 for(const link of settingsLinks)link.addEventListener('click',()=>{
   const target=$(link.dataset.settingsSection);
   if(page!=='settings'||target.hidden)return;
+  cancelSessionScrollRestore();
   Dropdowns.closeAll();settingsSection=link.dataset.settingsSection;syncSettingsNavigation();
   target.focus({preventScroll:true});
   target.scrollIntoView({block:'start',behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
   window.captureSessionState?.();
 });
 document.querySelectorAll('nav button[data-page]').forEach(button=>button.addEventListener('click',()=>{
+  cancelSessionScrollRestore();
   Dropdowns.closeAll();
   page=button.dataset.page;
   document.querySelectorAll('nav button[data-page]').forEach(b=>b.classList.toggle('selected',b===button));
@@ -252,14 +254,43 @@ window.renderMiniSnapshot=()=>{
   if(miniData&&miniData.timezone===(window.presentationView?.timezone||'system'))window.presentationStats?.(miniData);
 };
 // Navigation survives renderer disposal, without saving history or input text.
-let pendingSessionState=null,lastSessionState='',scrollStateTimer;
+let pendingSessionState=null,pendingSessionScroll=null,lastSessionState='',scrollStateTimer;
 window.captureSessionState=()=>{
-  if(!data||pendingSessionState||window.presentationView?.compact||window.presentationView?.visible===false)return;
+  if(!data||pendingSessionState||pendingSessionScroll||window.presentationView?.compact||window.presentationView?.visible===false)return;
   const state={page,settings_section:settingsSection,trend_days:range,calendar_range:calendarRange,history_range:historyRange,history_page:historyPage,keyboard_view:keyboardView,scroll_top:Math.max(0,Math.round(document.querySelector('main').scrollTop||0))};
   const encoded=JSON.stringify(state);
   if(encoded!==lastSessionState){lastSessionState=encoded;send('session_state',{state});}
 };
-window.restoreSessionState=state=>{pendingSessionState=state;};
+window.restoreSessionState=state=>{cancelSessionScrollRestore();pendingSessionState=state;};
+function cancelSessionScrollRestore(){
+  if(pendingSessionScroll)document.querySelector('main').style.setProperty('overflow-anchor','auto');
+  pendingSessionScroll=null;
+}
+function applySessionScroll(){
+  const pending=pendingSessionScroll;
+  if(!pending?.ready||window.presentationView?.compact||window.presentationView?.visible===false)return;
+  document.querySelector('main').scrollTop=pending.scrollTop;
+  cancelSessionScrollRestore();window.captureSessionState();
+}
+function restoreSessionScroll(state){
+  cancelSessionScrollRestore();
+  const main=document.querySelector('main'),pending={scrollTop:state.scroll_top,ready:false};
+  pendingSessionScroll=pending;
+  // A fallback font can make the page shorter and clamp a near-bottom position.
+  // Suppress anchoring and transient state saves until the real fonts are laid out.
+  main.style.setProperty('overflow-anchor','none');main.scrollTop=pending.scrollTop;
+  const finish=()=>{
+    if(pendingSessionScroll!==pending)return;
+    pending.ready=true;applySessionScroll();
+  };
+  const afterLayout=()=>window.requestAnimationFrame
+    ?window.requestAnimationFrame(()=>window.requestAnimationFrame(finish)):finish();
+  if(document.fonts)document.fonts.ready.then(afterLayout,afterLayout);
+  else finish();
+}
+// User interaction always takes priority over a delayed cold-view restoration.
+for(const event of ['pointerdown','wheel','touchstart','keydown'])
+  document.addEventListener?.(event,cancelSessionScrollRestore,{capture:true,passive:true});
 function applySessionState(state){
   page=state.page;range=state.trend_days;settingsSection=state.settings_section;
   historyPage=state.history_page;keyboardView=state.keyboard_view;
@@ -314,7 +345,8 @@ window.receive=snapshot=>{
   }else if(page==='keys'){
     renderChanged('keyboard',data.keyboard_stats||data.top_keys,renderKeyboard);
   }
-  if(restoring)document.querySelector('main').scrollTop=restoring.scroll_top;
+  if(restoring)restoreSessionScroll(restoring);
+  else applySessionScroll();
 };
 function renderPermission(){
   if(onLinux)$('permission-reset').hidden=true;
