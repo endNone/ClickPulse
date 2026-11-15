@@ -60,6 +60,8 @@ jobs:
       - name: Format
         run: cargo +stable fmt --check
       - name: Rust tests
+        env:
+          CLICKPULSE_REQUIRE_SYMLINK_TEST: '1'
         run: cargo +stable test --all-targets --locked
       - name: Clippy
         run: cargo +stable clippy --all-targets --locked -- -D warnings
