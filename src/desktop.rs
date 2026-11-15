@@ -170,12 +170,16 @@ pub fn run(
         Some(Runtime::start(path, legacy, paused)?)
     };
 
+    if let Some(runtime) = &runtime {
+        runtime.set_ignore_software_input(preferences.ignore_software_input);
+    }
+
     let builder = WindowBuilder::new()
         .with_title(locale.text("native.full_title"))
         .with_transparent(cfg!(any(target_os = "macos", target_os = "linux")))
         .with_inner_size(LogicalSize::new(1160.0, 840.0))
         .with_min_inner_size(LogicalSize::new(900.0, 680.0))
-        .with_visible(!options.background && !preferences.compact);
+        .with_visible(false);
     #[cfg(target_os = "macos")]
     let builder = {
         use tao::platform::macos::WindowBuilderExtMacOS;
@@ -216,9 +220,6 @@ pub fn run(
     } else {
         "native.full_title"
     }));
-    if !options.background {
-        window.set_visible(true);
-    }
     // Tao's macOS proxy clone registers a source and wakes the run loop.
     // Share one proxy so idle checks and snapshot replies cannot wake themselves.
     let ui_proxy = Arc::new(event_loop.create_proxy());
@@ -292,6 +293,7 @@ pub fn run(
     let mut session_state = session::SessionState::default();
     let mut demo_paused = false;
     let mut visible = !options.background;
+    let mut pending_presentation = visible.then(|| Instant::now() + Duration::from_millis(1500));
     let snapshot_proxy = ui_proxy;
     let mut snapshots = SnapshotGate::default();
     let mut sport_samples = SnapshotGate::default();
@@ -315,7 +317,7 @@ pub fn run(
         );
     }
     let handle_event = move |event: Event<'_, UiEvent>,
-                             target: &EventLoopWindowTarget<UiEvent>,
+                             _target: &EventLoopWindowTarget<UiEvent>,
                              flow: &mut ControlFlow| {
         let _ = &profile_lock;
         if !matches!(*flow, ControlFlow::ExitWithCode(_)) {
@@ -323,7 +325,11 @@ pub fn run(
         }
         let previous_compact = preferences.compact;
         let previously_active = webview.is_active();
-        webview.set_active(visible && window.is_visible() && !window.is_minimized());
+        webview.set_active(
+            visible
+                && (window.is_visible() || pending_presentation.is_some())
+                && !window.is_minimized(),
+        );
         let mut refresh = !previously_active && webview.is_active();
         let mut view_changed = refresh;
         match event {
@@ -479,26 +485,50 @@ pub fn run(
                 }
             }
             Event::Reopen { .. } => {
-                present_window(target, &window, &mut layout, &mut preferences, false);
+                present_window(
+                    &window,
+                    &mut layout,
+                    &mut preferences,
+                    false,
+                    &mut pending_presentation,
+                );
                 visible = true;
                 view_changed = true;
                 refresh = true;
             }
             #[cfg(target_os = "windows")]
             Event::UserEvent(UiEvent::Activate) => {
-                present_window(target, &window, &mut layout, &mut preferences, false);
+                present_window(
+                    &window,
+                    &mut layout,
+                    &mut preferences,
+                    false,
+                    &mut pending_presentation,
+                );
                 visible = true;
                 view_changed = true;
                 refresh = true;
             }
             Event::UserEvent(UiEvent::Menu(event)) => {
                 if event.id == show.id() {
-                    present_window(target, &window, &mut layout, &mut preferences, false);
+                    present_window(
+                        &window,
+                        &mut layout,
+                        &mut preferences,
+                        false,
+                        &mut pending_presentation,
+                    );
                     visible = true;
                     view_changed = true;
                     refresh = true;
                 } else if event.id == mini.id() {
-                    present_window(target, &window, &mut layout, &mut preferences, true);
+                    present_window(
+                        &window,
+                        &mut layout,
+                        &mut preferences,
+                        true,
+                        &mut pending_presentation,
+                    );
                     visible = true;
                     view_changed = true;
                     refresh = true;
@@ -592,11 +622,11 @@ pub fn run(
                         }
                         mode @ (Request::Compact {} | Request::Expand {}) => {
                             present_window(
-                                target,
                                 &window,
                                 &mut layout,
                                 &mut preferences,
                                 matches!(mode, Request::Compact {}),
+                                &mut pending_presentation,
                             );
                             visible = true;
                             view_changed = true;
@@ -663,6 +693,13 @@ pub fn run(
                             view_changed = true;
                         }
                         Request::Refresh {} => refresh = true,
+                        Request::IgnoreSoftwareInput { enabled } => {
+                            preferences.ignore_software_input = enabled;
+                            if let Some(runtime) = &runtime {
+                                runtime.set_ignore_software_input(enabled);
+                            }
+                            view_changed = true;
+                        }
                         Request::Sport { enabled } => {
                             preferences.sport_enabled = enabled && preferences.sport_visible;
                             view_changed = true;
@@ -750,6 +787,9 @@ pub fn run(
                                         Ok(new_path) => {
                                             match Runtime::start_owned(&new_path, false) {
                                                 Ok(rt) => {
+                                                    rt.set_ignore_software_input(
+                                                        preferences.ignore_software_input,
+                                                    );
                                                     runtime = Some(rt);
                                                     source_mode = false;
                                                     setup_pending = false;
@@ -949,7 +989,9 @@ pub fn run(
         {
             updates.publish(&webview);
         }
-        let active = visible && window.is_visible() && !window.is_minimized();
+        let active = visible
+            && (window.is_visible() || pending_presentation.is_some())
+            && !window.is_minimized();
         if active && !webview.is_active() {
             view_changed = true;
             refresh = true;
@@ -1060,7 +1102,7 @@ pub fn run(
             mini.set_text(locale.text("action.mini"));
             hide.set_text(locale.text("native.hide"));
             quit.set_text(locale.text("native.quit"));
-            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
+            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"ignore_software_input":preferences.ignore_software_input,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
             if webview.is_ready() {
                 let _ = webview.evaluate_script(&format!(
                     "window.receiveView({view});window.receiveDataBusy?.({});",
@@ -1130,8 +1172,27 @@ pub fn run(
                 }
             }
         }
+        if !visible || window.is_minimized() {
+            pending_presentation = None;
+        }
         if !matches!(*flow, ControlFlow::ExitWithCode(_)) {
-            *flow = ControlFlow::WaitUntil(next_refresh);
+            if pending_presentation
+                .is_some_and(|deadline| webview.is_ready() || Instant::now() >= deadline)
+            {
+                // Apply language, theme and restored navigation before exposing
+                // the new renderer. A failed Ready cannot hide the app forever.
+                #[cfg(target_os = "macos")]
+                {
+                    use tao::platform::macos::EventLoopWindowTargetExtMacOS;
+                    _target.show_application();
+                }
+                window.set_visible(true);
+                window.set_focus();
+                pending_presentation = None;
+            }
+            *flow = ControlFlow::WaitUntil(
+                pending_presentation.map_or(next_refresh, |deadline| deadline.min(next_refresh)),
+            );
         }
     };
     #[cfg(target_os = "windows")]

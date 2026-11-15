@@ -338,11 +338,23 @@ test('both keyboard footers share visible used keys across hidden counts, live a
 });
 test('Windows settings report native capture without offering macOS permission controls',()=>{
   const a=app('windows');a.window.receive(snapshot());a.navigate('settings');
-  assert.equal(a.get('permission-row').hidden,true);assert.equal(a.get('capture-settings').hidden,true);
+  assert.equal(a.get('permission-row').hidden,true);assert.equal(a.get('capture-settings').hidden,false);
   assert.equal(a.get('permission-description').textContent,messages.en['settings.windows_capture']);
   assert.equal(a.get('autostart-row').hidden,false);
   a.window.receive({...snapshot(),capture:{listening:false,error:'failure'}});
   assert.equal(a.get('permission-description').textContent,messages.en['status.unavailable']);
+});
+test('software-input filtering defaults off and is available only for supported capture backends',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+    a.window.receive(snapshot());a.navigate('settings');
+    assert.equal(a.get('ignore-software-row').hidden,platform==='linux');
+    assert.equal(a.get('ignore-software-input').checked,false);
+    a.window.receiveView({ignore_software_input:true});
+    assert.equal(a.get('ignore-software-input').checked,true);
+    a.get('ignore-software-input').checked=false;a.get('ignore-software-input').fire('change');
+    assert.deepEqual(sent.at(-1),{action:'ignore_software_input',enabled:false});
+  }
 });
 
 test('macOS access guidance explains stale grants and names a completed update',()=>{
@@ -730,7 +742,7 @@ test('Settings section links expand only on Settings and jump without navigating
     const a=app(platform);a.window.receive(snapshot());a.navigate('settings');
     assert.equal(a.get('settings-subnav').hidden,false);
     assert.equal(a.get('settings-nav').attributes['aria-expanded'],'true');
-    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='capture-settings').hidden,platform==='windows');
+    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='capture-settings').hidden,false);
     assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='handoff-settings').hidden,true);
     a.jumpTo('storage-settings');
     assert.equal(a.get('page-title').textContent,messages.en['page.settings']);

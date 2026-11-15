@@ -61,6 +61,7 @@ pub struct Preferences {
     pub sport_enabled: bool,
     pub sport_visible: bool,
     pub sport_skin: SportSkin,
+    pub ignore_software_input: bool,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -77,6 +78,7 @@ impl Default for Preferences {
             sport_enabled: false,
             sport_visible: false,
             sport_skin: Default::default(),
+            ignore_software_input: false,
         }
     }
 }
@@ -254,6 +256,7 @@ mod tests {
         assert_eq!(prefs.theme, Theme::Blue);
         assert_eq!(prefs.close_action, CloseAction::Ask);
         assert!(!prefs.sport_enabled);
+        assert!(!prefs.ignore_software_input);
         assert!(!prefs.sport_visible);
         assert_eq!(prefs.sport_skin, SportSkin::Warp);
         assert!(prefs.compact);

@@ -14,6 +14,20 @@ pub struct WindowsKeyboard {
     held: HashSet<(usize, u16)>,
 }
 impl WindowsKeyboard {
+    /// Missing keyboard device identity is treated as software input only when
+    /// opted in. Never apply this rule to mouse packets: Precision Touchpads
+    /// legitimately use a null device handle too.
+    pub fn filtered_event(
+        &mut self,
+        device: usize,
+        make: u16,
+        flags: u16,
+        vk: u16,
+        ignore: bool,
+    ) -> Option<u32> {
+        let event = self.event(device, make, flags, vk);
+        if ignore && device == 0 { None } else { event }
+    }
     pub fn event(&mut self, device: usize, make: u16, flags: u16, vk: u16) -> Option<u32> {
         if vk >= 255 || make == 0xff {
             return None;
@@ -190,6 +204,22 @@ pub fn mouse_buttons(flags: u16) -> impl Iterator<Item = u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn software_filter_is_optional_and_preserves_physical_keys_and_release_state() {
+        let mut keys = WindowsKeyboard::default();
+        assert!(keys.filtered_event(0, 0x1e, 0, 0x41, false).is_some());
+        assert!(
+            keys.filtered_event(0, 0x1e, RI_KEY_BREAK, 0x41, true)
+                .is_none()
+        );
+        assert!(keys.filtered_event(0, 0x1e, 0, 0x41, true).is_none());
+        assert!(keys.filtered_event(10, 0x1e, 0, 0x41, true).is_some());
+        // Turning the filter off during a hold does not turn repeats into presses.
+        assert!(keys.filtered_event(0, 0x1e, 0, 0x41, false).is_none());
+        keys.filtered_event(0, 0x1e, RI_KEY_BREAK, 0x41, false);
+        assert!(keys.filtered_event(0, 0x1e, 0, 0x41, false).is_some());
+    }
     #[test]
     fn repeats_shifted_releases_and_distinct_devices_keep_physical_identity() {
         let mut keyboard = WindowsKeyboard::default();

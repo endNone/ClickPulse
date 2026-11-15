@@ -1,10 +1,6 @@
 //! Native window geometry, decorations and display-scale transitions.
-use super::UiEvent;
 use std::sync::Arc;
-use tao::{
-    dpi::{LogicalSize, PhysicalPosition, PhysicalSize, Position},
-    event_loop::EventLoopWindowTarget,
-};
+use tao::dpi::{LogicalSize, PhysicalPosition, PhysicalSize, Position};
 
 pub(super) struct WindowLayout {
     pub(super) full_size: LogicalSize<f64>,
@@ -78,24 +74,18 @@ pub(super) fn fix_compact_size(window: &tao::window::Window) {
     window.set_inner_size(COMPACT_SIZE);
 }
 pub(super) fn present_window(
-    _target: &EventLoopWindowTarget<UiEvent>,
     window: &Arc<tao::window::Window>,
     layout: &mut WindowLayout,
     preferences: &mut clickpulse::presentation::Preferences,
     compact: bool,
+    pending: &mut Option<std::time::Instant>,
 ) {
     // Visibility and focus do not deminiaturize a Cocoa window. Restore it
     // before applying the requested mode, including when reopening from Dock.
     window.set_minimized(false);
     preferences.compact = compact;
     set_compact(window, layout, compact, preferences.pinned);
-    #[cfg(target_os = "macos")]
-    {
-        use tao::platform::macos::EventLoopWindowTargetExtMacOS;
-        _target.show_application();
-    }
-    window.set_visible(true);
-    window.set_focus();
+    *pending = Some(std::time::Instant::now() + std::time::Duration::from_millis(1500));
 }
 pub(super) fn set_compact(
     window: &Arc<tao::window::Window>,

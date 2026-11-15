@@ -75,6 +75,7 @@ $('check-updates')?.addEventListener('click',()=>{
   send(['available','ready'].includes(updateState.status)&&!updateState.update_command?(updateState.can_install?'install_update':'update_release'):'check_updates');
 });
 $('update-details')?.addEventListener('click',event=>{event.preventDefault();send('update_release');});
+$('ignore-software-input')?.addEventListener('change',event=>send('ignore_software_input',{enabled:event.target.checked}));
 $('automatic-updates')?.addEventListener('change',event=>{
   if(updateInstalling()||updateState.automatic===false)return;
   send('automatic_updates',{enabled:event.target.checked});
@@ -331,7 +332,9 @@ function renderSettings(){
   $('permission-description').textContent=t(onLinux?(data.capture.listening&&!data.capture.permission_needed?'settings.authorized':'settings.permission_description'):onWindows?(data.capture.listening?'settings.windows_capture':'status.unavailable'):data.source_mode && !data.setup_pending?'settings.source_permission':data.capture.listening?'settings.authorized':'settings.permission_description');
   $('permission-row').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
   $('permission-reset-settings').hidden=onLinux || $('permission-row').hidden || data.capture.listening;
-  $('capture-settings').hidden=onWindows || (!!data.source_mode && !data.setup_pending);
+  $('capture-settings').hidden=!!data.source_mode && !data.setup_pending;
+  $('ignore-software-row').hidden=onLinux || !!data.source_mode;
+  $('ignore-software-input').checked=!!window.presentationView?.ignore_software_input;
   $('handoff-settings').hidden=!data.setup_pending;
   $('takeover').disabled=dataOperationBusy || !data.capture.listening || data.capture.permission_needed;
   $('handoff-description').textContent=t(data.capture.listening?'settings.takeover_ready':'settings.takeover_wait');

@@ -82,6 +82,8 @@ pub struct CaptureStatus {
     pub storage_error: Option<String>,
     #[serde(skip)]
     pub storage_blocked: Arc<AtomicBool>,
+    #[serde(skip)]
+    pub ignore_software_input: Arc<AtomicBool>,
 }
 
 impl CaptureStatus {
@@ -624,6 +626,14 @@ impl Runtime {
 
     pub fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::Relaxed);
+    }
+
+    pub fn set_ignore_software_input(&self, ignore: bool) {
+        if let Ok(status) = self.status.lock() {
+            status
+                .ignore_software_input
+                .store(ignore, Ordering::Relaxed);
+        }
     }
 
     pub fn capture_status(&self) -> Result<CaptureStatus> {
