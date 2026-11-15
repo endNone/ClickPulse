@@ -55,7 +55,7 @@ HOOK = r'''
 def prepare(source, output):
     shutil.copytree(source, output, ignore=shutil.ignore_patterns('.git', 'target', 'dist', '.Codex', '__pycache__'))
     path = output/'src/desktop.rs'
-    text = path.read_text()
+    text = path.read_text(encoding='utf-8')
     lifecycle = 'generation: u64, body: String' in text or 'generation: u64,\n        body: String' in text
     anchor = '    let mut next_refresh = Instant::now();'
     assert text.count(anchor) == 1
@@ -73,12 +73,12 @@ def prepare(source, output):
     text = text.replace('                        Request::Ready {} => {', ready.replace('__GENERATION__', 'std::fs::write(path.join("generation"), generation.to_string()).unwrap();' if lifecycle else ''))
     if lifecycle:
         view = output/'src/desktop/webview.rs'
-        body = view.read_text().replace('        self.inner.take();', '''        self.inner.take();
+        body = view.read_text(encoding='utf-8').replace('        self.inner.take();', '''        self.inner.take();
         if let Ok(directory) = std::env::var("CLICKPULSE_MEMORY_PROBE") {
             std::fs::write(std::path::Path::new(&directory).join("disposed"), self.generation.to_string()).unwrap();
         }''')
         body = body.replace('clickpulse::platform::data_dir()?.join("webview")', 'std::path::PathBuf::from(std::env::var("CLICKPULSE_MEMORY_PROBE").expect("probe directory")).join("webview")')
-        view.write_text(body)
+        view.write_text(body, encoding='utf-8')
     else:
         text = text.replace('clickpulse::platform::data_dir()?.join("webview")', 'std::path::PathBuf::from(std::env::var("CLICKPULSE_MEMORY_PROBE").expect("probe directory")).join("webview")')
     if lifecycle:
@@ -90,14 +90,14 @@ def prepare(source, output):
                 }
             }''', 1)
         view = output/'src/desktop/webview.rs'
-        body = view.read_text().replace('.with_ipc_handler(move |req| {', '''.with_ipc_handler(move |req| {
+        body = view.read_text(encoding='utf-8').replace('.with_ipc_handler(move |req| {', '''.with_ipc_handler(move |req| {
             if let Some(body) = req.body().strip_prefix("probe-assets:") {
                 let _ = proxy.send_event(UiEvent::ProbeAssets(body.into()));
                 return;
             }''')
-        view.write_text(body)
+        view.write_text(body, encoding='utf-8')
         app = output/'ui/app.js'
-        app.write_text(app.read_text()+'''\nwindow.addEventListener('load', async()=>{
+        app.write_text(app.read_text(encoding='utf-8')+'''\nwindow.addEventListener('load', async()=>{
           const images = await Promise.all(Array.from(document.images).map(async image=>{
             try { await image.decode(); return {src:image.getAttribute('src'),width:image.naturalWidth}; }
             catch(error) { return {src:image.getAttribute('src'),width:0,error:String(error)}; }
@@ -107,11 +107,11 @@ def prepare(source, output):
             catch(error) { return {family,loaded:false,error:String(error)}; }
           }));
           window.ipc.postMessage('probe-assets:'+JSON.stringify({images,fonts}));
-        });\n''')
-    path.write_text(text)
+        });\n''', encoding='utf-8')
+    path.write_text(text, encoding='utf-8')
     path = output/'src/desktop/window.rs'
-    text = path.read_text().replace('        _target.show_application();', '        if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { _target.show_application(); }').replace('    window.set_focus();', '    if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { window.set_focus(); }')
-    path.write_text(text)
+    text = path.read_text(encoding='utf-8').replace('        _target.show_application();', '        if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { _target.show_application(); }').replace('    window.set_focus();', '    if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { window.set_focus(); }')
+    path.write_text(text, encoding='utf-8')
 
 
 def processes():
@@ -131,7 +131,7 @@ def memory(pid):
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return None
     try:
-        lines = Path(f'/proc/{pid}/smaps_rollup').read_text().splitlines()
+        lines = Path(f'/proc/{pid}/smaps_rollup').read_text(encoding='utf-8').splitlines()
         fields = {'Rss:', 'Pss:', 'Private_Clean:', 'Private_Dirty:'}
         values = {parts[0][:-1]: int(parts[1])*1024 for line in lines if len(parts := line.split()) >= 2 and parts[0] in fields}
         return {'resident_bytes': values['Rss'], 'private_bytes': values['Private_Clean']+values['Private_Dirty'], 'measured_bytes': values['Pss']}
@@ -144,7 +144,7 @@ def run(binary, output, label):
         raise RuntimeError('Use measure_macos_memory.py to launch an isolated app coalition on macOS')
     output.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ, CLICKPULSE_MEMORY_PROBE=str(output.resolve()))
-    log = (output/'app.log').open('w')
+    log = (output/'app.log').open('w', encoding='utf-8')
     app = subprocess.Popen([str(binary.resolve()), '--demo', '--background'], env=env, stdout=log, stderr=subprocess.STDOUT)
     known = {app.pid}
     report = {'label': label, 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(), 'platform': sys.platform, 'system': __import__('platform').platform(), 'demo': True, 'metric': 'private working set (USS)' if sys.platform == 'win32' else 'proportional resident size (PSS)', 'states': {}}
@@ -153,7 +153,7 @@ def run(binary, output, label):
             deadline = time.monotonic()+750
             while not (output/(stage+'.ready')).exists():
                 if app.poll() is not None:
-                    raise RuntimeError('App exited before '+stage+': '+(output/'app.log').read_text())
+                    raise RuntimeError('App exited before '+stage+': '+(output/'app.log').read_text(encoding='utf-8'))
                 if time.monotonic()>deadline:
                     raise RuntimeError('Timed out at '+stage)
                 time.sleep(1)
@@ -162,10 +162,10 @@ def run(binary, output, label):
                 raise RuntimeError('WebView never acknowledged the loaded interface')
             if lifecycle and stage == 'hidden_10m' and not (output/'disposed').exists():
                 raise RuntimeError('Hidden renderer was not disposed')
-            if lifecycle and stage == 'reopened' and int((output/'generation').read_text()) < 2:
+            if lifecycle and stage == 'reopened' and int((output/'generation').read_text(encoding='utf-8')) < 2:
                 raise RuntimeError('Renderer did not recreate and acknowledge Ready')
             if lifecycle and stage in ['full_en','mini','reopened']:
-                assets = json.loads((output/'assets.json').read_text())
+                assets = json.loads((output/'assets.json').read_text(encoding='utf-8'))
                 if any(image['width'] != 128 for image in assets['images']) or not all(font['loaded'] for font in assets['fonts']):
                     raise RuntimeError('Native resources failed to load: '+json.dumps(assets))
             samples = []
@@ -182,15 +182,15 @@ def run(binary, output, label):
             if lifecycle and stage == 'background' and any(sample['webview_bytes'] for sample in samples):
                 raise RuntimeError('Background launch unexpectedly created renderer processes')
             if lifecycle and stage == 'reopened':
-                report['reopen_ready_ms'] = int((output/'ui-ready').read_text()) - int((output/'reopened.started').read_text())
-            (output/'measurements.json').write_text(json.dumps(report, indent=2)+'\n')
-            (output/(stage+'.measured')).write_text('ok')
+                report['reopen_ready_ms'] = int((output/'ui-ready').read_text(encoding='utf-8')) - int((output/'reopened.started').read_text(encoding='utf-8'))
+            (output/'measurements.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
+            (output/(stage+'.measured')).write_text('ok', encoding='utf-8')
             print(stage, round(report['states'][stage]['median_total_bytes']/2**20, 1), 'MiB', flush=True)
         app.wait(timeout=30)
         if app.returncode: raise RuntimeError('Probe failed to exit cleanly')
         report['exit_code'] = app.returncode
         report['normal_quit_requested'] = (output/'quit-requested').exists()
-        (output/'measurements.json').write_text(json.dumps(report, indent=2)+'\n')
+        (output/'measurements.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
     finally:
         if app.poll() is None: app.terminate(); app.wait(timeout=15)
         log.close()

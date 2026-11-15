@@ -33,7 +33,7 @@ start=time.monotonic()
 while not (out/'pid').exists():
  if time.monotonic()-start>60:raise RuntimeError('Probe failed to launch')
  time.sleep(.25)
-pid=int((out/'pid').read_text());group=coalition(pid)
+pid=int((out/'pid').read_text(encoding='utf-8'));group=coalition(pid)
 assert group and group!=coalition(os.getpid()),'Launch must isolate the app coalition'
 report={'platform':subprocess.check_output(['sw_vers'],text=True),'architecture':'arm64','source_version':label,'pid':pid,'coalition':group,'demo':True,'note':'Controlled UI scenarios, no recording or user preferences; includes every process in the app resource coalition. macOS footprint includes compressed memory. The renderer group includes WebKit and its audio helpers, even when reparented.','binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'states':{}}
 try:
@@ -45,9 +45,9 @@ try:
   lifecycle=(out/'lifecycle').exists()
   if not (lifecycle and stage=='background') and label!='0.3.0' and not (out/'ui-ready').exists(): raise RuntimeError('WebView did not acknowledge the loaded interface')
   if lifecycle and stage=='hidden_10m' and not (out/'disposed').exists(): raise RuntimeError('Hidden renderer was not disposed')
-  if lifecycle and stage=='reopened' and int((out/'generation').read_text())<2: raise RuntimeError('Renderer did not recreate')
+  if lifecycle and stage=='reopened' and int((out/'generation').read_text(encoding='utf-8'))<2: raise RuntimeError('Renderer did not recreate')
   if lifecycle and stage in ['full_en','mini','reopened']:
-   assets=json.loads((out/'assets.json').read_text())
+   assets=json.loads((out/'assets.json').read_text(encoding='utf-8'))
    if any(image['width']!=128 for image in assets['images']) or not all(font['loaded'] for font in assets['fonts']): raise RuntimeError('Native resource failure: '+json.dumps(assets))
   samples=[]
   for _ in range(5):
@@ -56,22 +56,22 @@ try:
    time.sleep(1)
   ids=[str(p['pid']) for p in samples[-1]['processes']]
   fp=subprocess.run(['footprint','--noCategories','-f','bytes',*ids],text=True,capture_output=True)
-  (out/(stage+'-footprint.txt')).write_text(fp.stdout+fp.stderr)
+  (out/(stage+'-footprint.txt')).write_text(fp.stdout+fp.stderr, encoding='utf-8')
   report['states'][stage]={'samples':samples,'median_main_bytes':statistics.median(s['main_bytes'] for s in samples),'median_webview_bytes':statistics.median(s['webview_bytes'] for s in samples),'median_total_bytes':statistics.median(s['total_bytes'] for s in samples)}
   first,last=samples[0],samples[-1]
   initial={p['pid']:p['cpu_ns'] for p in first['processes']}
   report['states'][stage]['main_cpu_percent']=100*sum(p['cpu_ns']-initial[p['pid']] for p in last['processes'] if p['pid']==pid and p['pid'] in initial)/(last['at_ns']-first['at_ns'])
   if lifecycle and stage=='background' and any(row['webview_bytes'] for row in samples): raise RuntimeError('Background launch created WebKit processes')
-  if lifecycle and stage=='reopened': report['reopen_ready_ms']=int((out/'ui-ready').read_text())-int((out/'reopened.started').read_text())
-  (out/'measurements.json').write_text(json.dumps(report,indent=2)+'\n')
-  (out/(stage+'.measured')).write_text('ok')
+  if lifecycle and stage=='reopened': report['reopen_ready_ms']=int((out/'ui-ready').read_text(encoding='utf-8'))-int((out/'reopened.started').read_text(encoding='utf-8'))
+  (out/'measurements.json').write_text(json.dumps(report,indent=2)+'\n', encoding='utf-8')
+  (out/(stage+'.measured')).write_text('ok', encoding='utf-8')
   print(stage,round(report['states'][stage]['median_total_bytes']/2**20,1),'MiB',flush=True)
  deadline=time.monotonic()+15
  while mem(pid) is not None and time.monotonic()<deadline:time.sleep(.1)
  if mem(pid) is not None:raise RuntimeError('Probe did not exit after Save and quit')
  report['normal_quit_requested']=(out/'quit-requested').exists()
  report['exited_after_quit']=True
- (out/'measurements.json').write_text(json.dumps(report,indent=2)+'\n')
+ (out/'measurements.json').write_text(json.dumps(report,indent=2)+'\n', encoding='utf-8')
 finally:
  if mem(pid) is not None:
   command=subprocess.check_output(['ps','-p',str(pid),'-o','comm='],text=True).strip()

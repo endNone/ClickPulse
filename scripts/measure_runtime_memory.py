@@ -39,23 +39,23 @@ fn main() -> anyhow::Result<()> {
 def prepare(source, output):
     shutil.copytree(source, output, ignore=shutil.ignore_patterns('.git', 'target', 'dist', '.Codex', '__pycache__'))
     path = output/'src/runtime.rs'
-    text = path.read_text()
+    text = path.read_text(encoding='utf-8')
     old = 'path: crate::platform::log_path().ok(),'
     assert text.count(old) == 1, 'Status log must remain isolated'
-    path.write_text(text.replace(old, 'path: Some(std::path::PathBuf::from(std::env::var("CLICKPULSE_MEMORY_PROBE").expect("isolated probe directory")).join("runtime.log")),', 1))
+    path.write_text(text.replace(old, 'path: Some(std::path::PathBuf::from(std::env::var("CLICKPULSE_MEMORY_PROBE").expect("isolated probe directory")).join("runtime.log")),', 1), encoding='utf-8')
     (output/'src/bin').mkdir(exist_ok=True)
-    (output/'src/bin/memory_runtime.rs').write_text(RUST)
+    (output/'src/bin/memory_runtime.rs').write_text(RUST, encoding='utf-8')
 
 
 def run(binary, output, label):
     output.mkdir(parents=True, exist_ok=False)
-    with (output/'app.log').open('w') as log:
+    with (output/'app.log').open('w', encoding='utf-8') as log:
         app = subprocess.Popen([str(binary.resolve())], env=dict(os.environ, CLICKPULSE_MEMORY_PROBE=str(output.resolve())), stdout=log, stderr=subprocess.STDOUT)
         try:
             deadline = time.monotonic()+60
             while not (output/'ready.json').exists():
                 if app.poll() is not None or time.monotonic()>deadline:
-                    raise RuntimeError('Recorder probe did not become ready: '+(output/'app.log').read_text())
+                    raise RuntimeError('Recorder probe did not become ready: '+(output/'app.log').read_text(encoding='utf-8'))
                 time.sleep(.25)
             samples = []
             for _ in range(10):
@@ -70,9 +70,9 @@ def run(binary, output, label):
                 if sample is None: raise RuntimeError('Recorder disappeared')
                 samples.append(sample)
                 time.sleep(1)
-            report = {'label': label, 'platform': __import__('platform').platform(), 'metric': {'darwin':'physical footprint','win32':'private working set (USS)'}.get(sys.platform,'proportional resident size (PSS)'), 'capture': json.loads((output/'ready.json').read_text()), 'median_bytes': statistics.median(s['measured_bytes'] for s in samples), 'samples':samples, 'note':'Recorder-only process; empty isolated database initially. Native input permission/status reported, never assume capture is active. Do not add to the separate UI measurement.'}
-            (output/'measurements.json').write_text(json.dumps(report, indent=2)+'\n')
-            (output/'measured').write_text('ok')
+            report = {'label': label, 'platform': __import__('platform').platform(), 'metric': {'darwin':'physical footprint','win32':'private working set (USS)'}.get(sys.platform,'proportional resident size (PSS)'), 'capture': json.loads((output/'ready.json').read_text(encoding='utf-8')), 'median_bytes': statistics.median(s['measured_bytes'] for s in samples), 'samples':samples, 'note':'Recorder-only process; empty isolated database initially. Native input permission/status reported, never assume capture is active. Do not add to the separate UI measurement.'}
+            (output/'measurements.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
+            (output/'measured').write_text('ok', encoding='utf-8')
             app.wait(timeout=15)
             if app.returncode: raise RuntimeError('Recorder shutdown failed')
             print(json.dumps({k:report[k] for k in ['label','median_bytes','capture']}), flush=True)
