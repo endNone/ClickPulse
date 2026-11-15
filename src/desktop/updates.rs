@@ -162,6 +162,17 @@ mod tests {
         controller.begin_check(180_000, CheckSource::Automatic);
         controller.receive(Event::Checked {
             id: controller.id,
+            result: Err("network disconnected after downloading".into()),
+        });
+        assert_eq!(controller.view.status, "ready");
+        assert_eq!(controller.view.version.as_deref(), Some(version.as_str()));
+        assert!(controller.view.can_install);
+        assert!(controller.staged.is_some());
+        assert!(!controller.download_available());
+        assert!(controller.guard.is_none());
+        controller.begin_check(270_000, CheckSource::Automatic);
+        controller.receive(Event::Checked {
+            id: controller.id,
             result: Ok(None),
         });
         assert!(
