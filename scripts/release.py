@@ -136,7 +136,7 @@ def release_notes(version, repository, revision, private=False, *, artwork_revis
     if tuple(map(int, version.split('.'))) >= (0, 3, 0):
         linux_x64 = button('linux-x64', 'Linux ZIP x64', name+'-linux-x64.zip')
         linux_arm64 = button('linux-arm64', 'Linux ZIP ARM64', name+'-linux-arm64.zip')
-        linux = f"- **Ubuntu 22.04 / 24.04:** {linux_x64} {linux_arm64}\n"
+        linux = f"| Ubuntu 22.04 / 24.04 | {linux_x64} |\n| | {linux_arm64} |\n"
         linux_guide = f" · [Ubuntu guide]({base}install-linux.md)"
     changes = (f'- See the [changelog](https://github.com/{repository}/blob/v{version}/CHANGELOG.md) for this release.\n')
     if version == '0.3.0':
@@ -152,9 +152,11 @@ def release_notes(version, repository, revision, private=False, *, artwork_revis
 {access}
 ## Downloads
 
-- **macOS 12+, Apple Silicon:** {mac_arm}
-- **macOS 12+, Intel:** {mac_intel}
-- **Windows 10/11, x64:** {windows}
+| Platform | Download |
+| --- | --- |
+| Windows 10/11 | {windows} |
+| macOS 12+ | {mac_arm} |
+| | {mac_intel} |
 {linux}
 [Source code]({downloads}{name}-source.zip) · [Build from source]({base}development.md)
 
