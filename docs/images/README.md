@@ -58,7 +58,7 @@ The fixed random seed generates 191 calendar days, ending on 2026-10-08. Daily, 
 
 ## Sport: C to SS on the desktop
 
-The README embeds [sport-desktop-en.gif](sport-desktop-en.gif), a 9-second **C → B → A → S → SS** loop at original (1×) speed and 50 fps, with a [static SS preview](sport-desktop-ss-en.jpg). It uses the same mountain-lake scenery and fictional notes window as the Mini demonstration above. The Mini iframe renders the production HTML/CSS/fonts, speed meter and Warp effect in English/default blue. SS adds the red accent and particles without shake. No live screen, database, listener or saved preferences are used.
+The README embeds [sport-desktop-en.gif](sport-desktop-en.gif), a 9-second **C → B → A → S → SS** loop at original (1×) speed and 50 fps, with a [static SS preview](sport-desktop-ss-en.jpg). It uses the same mountain-lake scenery and fictional notes window as the Mini demonstration above. The Mini iframe renders the production HTML/CSS/fonts, speed meter and Warp effect in English/default blue. The grade and CPS appear at the right; the footer contains only the Pause button, without a duplicate Sport status caption. SS adds the red accent and particles without shake. No live screen, database, listener or saved preferences are used.
 
 Capture at **2160 × 1360** pixels: a 1080 × 680 scene at 2× density. The original 320 × 208 Mini layout occupies 384 × 249.6 logical pixels in this scene, or about 768 × 499 captured pixels. Render the iframe at 3× density and reduce it within the scene so text and canvas remain crisp. This replaces the standalone 640 × 416 Sport showcase; the scenery source itself remains the original 1672 × 941 illustration, not a new high-resolution photograph.
 
@@ -80,11 +80,11 @@ ffmpeg -framerate 60 -i /path/to/frames/frame-%03d.jpg -vf 'fps=50,palettegen=st
 ffmpeg -framerate 60 -i /path/to/frames/frame-%03d.jpg -i /path/to/palette.png -filter_complex '[0:v]fps=50[v];[v][1:v]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle' -frames:v 450 -loop 0 -final_delay 2 docs/images/sport-desktop-en.gif
 ```
 
-Validate 2160 × 1360 dimensions, 450 frames, 20 ms per frame, 9,000 ms total duration and infinite looping. The selected GIF is approximately 10.7 MB. Its 50 fps timing fits GIF’s 10 ms time units without very short delays. The earlier [WebP](sport-desktop-en.webp) remains an alternative at 2.5× speed; it is not the current README hero. This synthetic browser example is separate from native GUI or physical-input validation. The fixed-rank preview remains at `app.html?page=mini&locale=en&rank=SS`.
+Validate 2160 × 1360 dimensions, 450 frames, 20 ms per frame, 9,000 ms total duration and infinite looping. The selected GIF is approximately 10.4 MB. Its 50 fps timing fits GIF’s 10 ms time units without very short delays. The [WebP](sport-desktop-en.webp) remains an alternative at 2.5× speed; it is not the current README hero. Both formats and the static preview were refreshed from the current UI. This synthetic browser example is separate from native GUI or physical-input validation. The fixed-rank preview remains at `app.html?page=mini&locale=en&rank=SS`.
 
 ## Sport video alternative
 
-[sport-desktop-en.mp4](sport-desktop-en.mp4) uses 360 source frames at 1.5× speed: 2160 × 1360, 60 fps, 6 seconds, H.264, no audio. It is encoded directly from the captured JPEG sequence, with constant frame timing and the playback index at the start of the file. The original WebP remains available.
+[sport-desktop-en.mp4](sport-desktop-en.mp4) uses 360 source frames at 1.5× speed: 2160 × 1360, 60 fps, 6 seconds, H.264, no audio. It is encoded directly from the same refreshed JPEG sequence, with constant frame timing and the playback index at the start of the file. The WebP alternative remains available.
 
 Prepare a 1.5× sequence from the original 540-frame capture: output frame `i` uses source frame `round(i × 1.5)`, for 360 frames. Then encode with FFmpeg:
 

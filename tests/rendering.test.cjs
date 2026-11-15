@@ -136,7 +136,6 @@ test('all eight languages update Mini Sport, access names and deferred settings 
     a.window.receiveSport({keyboard:100,mouse:20,available:true});a.setTime(250);a.window.receiveSport({keyboard:102,mouse:20,available:true});
     assert.equal(a.root.lang,locale);
     assert.equal(a.get('mini-sport').attributes['aria-label'],messages[locale]['sport.disable']);
-    assert.equal(a.get('mini-sport-caption').textContent,'Sport · '+messages[locale]['sport.rank_b']);
     assert.equal(a.get('mini-sport-readout').attributes['aria-label'],createI18n(messages,locale).t('sport.mini_readout',{rank:'B',speed:createI18n(messages,locale).decimal(2,1)}));
     a.window.receiveView({compact:false});a.navigate('settings');
     assert.equal(a.get('mini-widget').dataset.sportSkin,'warp');

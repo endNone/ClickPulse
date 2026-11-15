@@ -100,7 +100,6 @@ const ClickPulseSport=(() => {
       widget.classList.toggle('sport-hit',moving&&now-lastHit<160);
       widget.style.setProperty('--sport-strike',String(moving?Math.max(0,1-(now-lastHit)/220):0));
       el('mini-sport-grade').textContent=rank;el('mini-sport-cps').textContent=formatSpeed(s.cps);
-      el('mini-sport-caption').textContent=paused?t('sport.paused'):available?'Sport · '+t('sport.rank_'+rank.toLowerCase()):t('sport.waiting');
       el('mini-sport-readout').setAttribute('aria-label',t('sport.mini_readout',{rank,speed:formatSpeed(s.cps)}));
       return s;
     }
@@ -117,7 +116,7 @@ const ClickPulseSport=(() => {
       // still creates a rectangular selection/compositing surface in the WebView.
       canvas.hidden=!value;
       el('mini-sport-layer').hidden=!value;el('mini-sport-readout').hidden=!value;
-      el('mini-sport-caption').hidden=!value;el('mini-status').hidden=value;
+      el('mini-status').hidden=value;
       if(active===value){render();return;}
       active=value;meter.suspend();marks=[];lastFrame=0;lastHit=-Infinity;
       if(active){resize();paint(0);request();poll=win.setInterval?.(()=>{request();render();},250);}

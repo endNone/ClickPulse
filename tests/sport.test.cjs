@@ -80,7 +80,7 @@ function scene(reducedMotion=false,initialView={compact:true,sport_enabled:true}
 test('first Mini entry with only the Sport switch enabled has no animation surface',()=>{
   const a=scene(false,null);
   const expectLayers=active=>{
-    for(const id of ['sport-canvas','mini-sport-layer','mini-sport-readout','mini-sport-caption'])assert.equal(a.node(id).hidden,!active,id);
+    for(const id of ['sport-canvas','mini-sport-layer','mini-sport-readout'])assert.equal(a.node(id).hidden,!active,id);
     assert.equal(a.node('mini-status').hidden,active);
     assert.equal(a.view.active,active);
     assert.equal(a.timers.size,active?1:0);
