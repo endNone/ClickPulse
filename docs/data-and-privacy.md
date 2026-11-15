@@ -47,8 +47,7 @@ The reference is [Project Gutenberg’s English edition, number 1342](https://ww
 
 Temporary save failures are retried while pending activity stays in memory. After a prolonged failure, recording pauses with a tray warning and a notification attempt. Check the data folder and free space; saving and recording resume automatically when possible. Keep ClickPulse running until saving recovers: unsaved activity cannot survive quitting or a power loss.
 
-
-SQLite uses WAL. A persistence or queue failure stops capture and shows an error. Auxiliary log failures retry without blocking the database. Normal exit stops input and drains pending records first.
+SQLite uses WAL. Save failures retry automatically as described above. A full or disconnected input queue still stops capture and shows an error. Auxiliary log failures retry without blocking the database. Normal exit stops input and drains pending records first.
 
 First launch creates the standard user-data directory. Program updates and uninstalling retain its history and preferences; startup does not automatically import a developer folder or backup.
 
