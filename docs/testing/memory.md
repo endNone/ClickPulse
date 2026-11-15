@@ -54,5 +54,8 @@ Do not add this standalone process measurement to the separate UI measurement an
 the sum an observed installed-app total.
 
 The manual `Memory comparison` workflow accepts an exact 40-character candidate revision
-and either the `interface` or `recorder` scope. It measures both versions on the same
-Windows host and retains the raw reports as artifacts. Publication is a separate action.
+and either the `interface` or `recorder` scope. Select a Windows host or Ubuntu 24.04
+x64 with Xvfb, Openbox and software rendering. It measures both versions on the same
+host and retains the raw reports as artifacts. A hosted Linux recorder may have no
+input devices; retain its capture status and do not claim active recording in that case.
+Publication is a separate action.
