@@ -26,6 +26,46 @@ fn wide(value: impl AsRef<OsStr>) -> Vec<u16> {
 }
 const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const RUN_VALUE: &str = "ClickPulse";
+
+/// Register this portable app's notification name without borrowing another app's identity.
+pub fn notification_app_id() -> Result<&'static str> {
+    const ID: &str = "app.clickpulse.desktop";
+    let mut raw = null_mut();
+    let result = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            wide(format!("Software\\Classes\\AppUserModelId\\{ID}")).as_ptr(),
+            0,
+            null(),
+            0,
+            KEY_SET_VALUE,
+            null(),
+            &mut raw,
+            null_mut(),
+        )
+    };
+    ensure!(
+        result == ERROR_SUCCESS,
+        "Register notification identity: Windows error {result}"
+    );
+    let key = Key(raw);
+    let value = wide("ClickPulse");
+    let result = unsafe {
+        RegSetValueExW(
+            key.0,
+            wide("DisplayName").as_ptr(),
+            0,
+            REG_SZ,
+            value.as_ptr().cast(),
+            (value.len() * 2) as u32,
+        )
+    };
+    ensure!(
+        result == ERROR_SUCCESS,
+        "Set notification name: Windows error {result}"
+    );
+    Ok(ID)
+}
 struct Key(HKEY);
 impl Drop for Key {
     fn drop(&mut self) {

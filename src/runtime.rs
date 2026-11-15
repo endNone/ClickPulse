@@ -77,6 +77,26 @@ pub struct CaptureStatus {
     pub permission_needed: bool,
     pub error: Option<String>,
     pub error_code: Option<&'static str>,
+    /// Storage health is independent of device/permission health.
+    #[serde(skip)]
+    pub storage_error: Option<String>,
+    #[serde(skip)]
+    pub storage_blocked: Arc<AtomicBool>,
+}
+
+impl CaptureStatus {
+    fn for_display(&self) -> Self {
+        let mut result = self.clone();
+        if let Some(error) = &self.storage_error {
+            result.error = Some(error.clone());
+            result.error_code = Some(if self.storage_blocked.load(Ordering::Relaxed) {
+                "error.storage_waiting"
+            } else {
+                "error.storage_retrying"
+            });
+        }
+        result
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -131,7 +151,7 @@ impl SportDelivery {
                 "keyboard": counts.keyboard,
                 "mouse": counts.mouse,
                 "paused": self.paused.load(Ordering::Relaxed),
-                "available": capture.listening && capture.error.is_none(),
+                "available": capture.listening && capture.error.is_none() && capture.storage_error.is_none(),
             }))?)
         })();
         if let Some(reply) = self.reply.take() {
@@ -169,7 +189,7 @@ impl SnapshotDelivery {
                 .capture
                 .lock()
                 .map_err(|_| anyhow!("Capture status is unavailable"))?
-                .clone();
+                .for_display();
             Ok(serde_json::to_string(&serde_json::json!({
                 "today": today,
                 "timezone": self.timezone,
@@ -193,7 +213,7 @@ impl SnapshotDelivery {
                     .capture
                     .lock()
                     .map_err(|_| anyhow!("Capture status is unavailable"))?
-                    .clone(),
+                    .for_display(),
                 paused: self.paused.load(Ordering::Relaxed),
                 database_path: self.path.display().to_string(),
                 database_mode: self.database_mode,
@@ -293,7 +313,7 @@ impl Runtime {
         let writer = thread::Builder::new()
             .name("clickpulse-storage".into())
             .spawn(move || {
-                let result = storage_loop(db, rx);
+                let result = storage_loop(db, rx, writer_status.clone());
                 if let Err(error) = &result {
                     writer_stop.store(true, Ordering::Relaxed);
                     if let Ok(mut status) = writer_status.lock() {
@@ -611,7 +631,7 @@ impl Runtime {
             .status
             .lock()
             .map_err(|_| anyhow!("Capture status is unavailable"))?
-            .clone())
+            .for_display())
     }
 
     pub fn is_paused(&self) -> bool {
@@ -771,7 +791,7 @@ fn source_loop_inner(
 
 #[cfg(test)]
 fn writer_loop(db: EventDb, rx: Receiver<Command>) -> Result<()> {
-    storage_loop(Storage::Independent(db), rx)
+    storage_loop(Storage::Independent(db), rx, Default::default())
 }
 
 enum Storage {
@@ -779,6 +799,12 @@ enum Storage {
     App(CollectorDb),
 }
 impl Storage {
+    fn busy_timeout(&self, timeout: Duration) -> Result<()> {
+        match self {
+            Self::Independent(db) => db.busy_timeout(timeout),
+            Self::App(db) => Ok(db.conn.busy_timeout(timeout)?),
+        }
+    }
     fn today_in_timezone(
         &self,
         now: chrono::DateTime<Local>,
@@ -963,6 +989,7 @@ impl StorageWorker {
         run: impl FnOnce(&mut Storage) -> Box<dyn FnOnce() + Send> + Send + 'static,
     ) -> Result<()> {
         let db = self.db.take().context("Storage is unavailable")?;
+        db.busy_timeout(Duration::from_secs(5))?;
         let (tx, rx) = bounded(1);
         self.helper
             .tx
@@ -1020,6 +1047,10 @@ impl StorageWorker {
         let (db, reply) = finished;
         self.db = Some(db);
         self.job = None;
+        self.db
+            .as_ref()
+            .unwrap()
+            .busy_timeout(Duration::from_millis(100))?;
         let input_result = self.flush();
         // The job has already committed or rolled back. An unrelated buffered
         // input write failure must not turn a committed import into "failed".
@@ -1044,7 +1075,75 @@ impl StorageWorker {
     }
 }
 
-fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
+/// Retry without blocking capture delivery. Persistent failure pauses new input;
+/// already accepted events remain buffered until the database can save again.
+#[derive(Default)]
+struct StorageRetry {
+    since: Option<Instant>,
+    next: Option<Instant>,
+}
+
+impl StorageRetry {
+    fn failed(&mut self, status: &Mutex<CaptureStatus>, now: Instant, error: &anyhow::Error) {
+        let first = self.since.is_none();
+        self.since.get_or_insert(now);
+        let mut state = status.lock().unwrap_or_else(|e| e.into_inner());
+        state.storage_error = Some(format!("Saving failed; retrying: {error:#}"));
+        let blocked = now.duration_since(self.since.unwrap()) >= Duration::from_secs(60)
+            || state.storage_blocked.load(Ordering::Relaxed);
+        state.storage_blocked.store(blocked, Ordering::Relaxed);
+        self.next = Some(now + Duration::from_secs(if blocked { 60 } else { 1 }));
+        if first {
+            eprintln!("ClickPulse cannot save; retaining pending input: {error:#}");
+        }
+    }
+
+    fn limit_buffer(&self, status: &Mutex<CaptureStatus>, pending: usize) {
+        // Includes a further bounded channel's worth of in-flight events.
+        // Normally the 60-second deadline is reached long before this limit.
+        if self.since.is_some() && pending >= 65_536 {
+            status
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .storage_blocked
+                .store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn recovered(&mut self, status: &Mutex<CaptureStatus>) {
+        if self.since.take().is_some() {
+            let mut state = status.lock().unwrap_or_else(|e| e.into_inner());
+            state.storage_error = None;
+            state.storage_blocked.store(false, Ordering::Relaxed);
+            eprintln!("ClickPulse saving recovered; pending input saved.");
+        }
+        self.next = None;
+    }
+}
+
+fn reject_while_retrying(command: Command) {
+    let error = || anyhow!("Saving is temporarily unavailable; pending input is being retained");
+    match command {
+        Command::Snapshot(reply) => {
+            let _ = reply.send(Err(error()));
+        }
+        Command::SnapshotAsync(reply) => reply.complete(Err(error())),
+        Command::MiniSnapshot(reply) => reply.complete_mini(Err(error())),
+        Command::SportSample(reply) => reply.complete(Err(error())),
+        Command::Import(_, _, reply) => reply.complete(Err(error())),
+        Command::Relocate(_, _, _, reply) => reply.complete(Err(error())),
+        Command::Input(_) | Command::Stop => unreachable!(),
+    }
+}
+
+fn storage_loop(
+    db: Storage,
+    rx: Receiver<Command>,
+    status: Arc<Mutex<CaptureStatus>>,
+) -> Result<()> {
+    // Short busy waits let the loop drain capture while another process holds a
+    // write lock. User-requested data jobs restore their normal five-second wait.
+    db.busy_timeout(Duration::from_millis(100))?;
     let mut worker = StorageWorker {
         helper: DataWorker::new()?,
         db: Some(db),
@@ -1057,11 +1156,8 @@ fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
     let mut cache_cleanup = Instant::now();
     let mut log = Instant::now();
     let mut status_log = StatusLog::for_runtime();
-    worker
-        .db
-        .as_ref()
-        .context("Storage is unavailable")?
-        .log_status(&mut status_log)?;
+    let mut retry = StorageRetry::default();
+    let mut heartbeat_due = true;
     loop {
         let job = worker.job.clone().unwrap_or_else(|| idle.clone());
         let mut select = crossbeam_channel::Select::new();
@@ -1070,7 +1166,12 @@ fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
         let mut wait = crate::collector::HEARTBEAT_INTERVAL
             .saturating_sub(log.elapsed())
             .min(Duration::from_secs(3600).saturating_sub(cache_cleanup.elapsed()));
-        if worker.job.is_some() {
+        if heartbeat_due {
+            wait = Duration::ZERO;
+        }
+        if let Some(next) = retry.next {
+            wait = next.saturating_duration_since(Instant::now());
+        } else if worker.job.is_some() {
             // Completion/input channels wake us; database deadlines wait for the job.
             wait = crate::collector::HEARTBEAT_INTERVAL;
         } else if !worker.batch.is_empty() {
@@ -1088,33 +1189,62 @@ fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
                     }
                     break;
                 }
-                Ok(command) => worker.handle(command)?,
+                Ok(command) if retry.since.is_some() => reject_while_retrying(command),
+                Ok(command) => {
+                    if let Err(error) = worker.handle(command) {
+                        retry.failed(&status, Instant::now(), &error);
+                    }
+                }
             },
             Ok(operation) => {
                 let finished = operation
                     .recv(&job)
                     .map_err(|_| anyhow!("Data operation worker stopped"))?;
-                worker.finish(finished)?;
+                if let Err(error) = worker.finish(finished) {
+                    retry.failed(&status, Instant::now(), &error);
+                }
             }
             Err(_) => {}
         }
         // Periodic database work waits while a job owns the connection.
-        let Some(db) = &mut worker.db else {
+        if worker.db.is_none() {
             continue;
-        };
-        // A deadline flushes even during continuous input: no dependence on idle gaps.
-        if worker.batch.len() >= 128 || flush.elapsed() >= Duration::from_millis(200) {
-            db.insert(&worker.batch)?;
-            worker.batch.clear();
-            flush = Instant::now();
         }
-        if cache_cleanup.elapsed() >= Duration::from_secs(3600) {
-            db.prune_rolling_cache(Local::now().timestamp_millis())?;
-            cache_cleanup = Instant::now();
+        retry.limit_buffer(&status, worker.batch.len());
+        if retry.next.is_some_and(|next| Instant::now() < next) {
+            continue;
         }
-        if log.elapsed() >= crate::collector::HEARTBEAT_INTERVAL {
-            db.log_status(&mut status_log)?;
-            log = Instant::now();
+        let attempt = (|| -> Result<()> {
+            if retry.since.is_some()
+                || worker.batch.len() >= 128
+                || flush.elapsed() >= Duration::from_millis(200)
+            {
+                // insert is transactional; only a successful commit clears the batch.
+                worker.flush()?;
+                flush = Instant::now();
+            }
+            let db = worker.db.as_mut().unwrap();
+            if cache_cleanup.elapsed() >= Duration::from_secs(3600) {
+                db.prune_rolling_cache(Local::now().timestamp_millis())?;
+                cache_cleanup = Instant::now();
+            }
+            if heartbeat_due || log.elapsed() >= crate::collector::HEARTBEAT_INTERVAL {
+                db.log_status(&mut status_log)?;
+                heartbeat_due = false;
+                log = Instant::now();
+            }
+            // Requests queued during a data job resume only after its captured
+            // input is safely committed. Newly arriving requests fail promptly.
+            while worker.job.is_none()
+                && let Some(command) = worker.deferred.pop_front()
+            {
+                worker.handle(command)?;
+            }
+            Ok(())
+        })();
+        match attempt {
+            Ok(()) => retry.recovered(&status),
+            Err(error) => retry.failed(&status, Instant::now(), &error),
         }
     }
     Ok(())
@@ -1123,6 +1253,134 @@ fn storage_loop(db: Storage, rx: Receiver<Command>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exclusive_lock_for_ten_seconds_retains_input_and_recovers() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("locked.sqlite3");
+        let mut runtime = Runtime::start_owned(&path, false).unwrap();
+        runtime.snapshot().unwrap();
+        let external = rusqlite::Connection::open(&path).unwrap();
+        external.execute_batch("BEGIN EXCLUSIVE").unwrap();
+        let started = Instant::now();
+        let mut count = 0;
+        while started.elapsed() < Duration::from_secs(10) {
+            runtime
+                .tx
+                .send(Command::Input(InputEvent {
+                    ts_ms: Local::now().timestamp_millis(),
+                    device: crate::input::Device::Keyboard,
+                    code: 4,
+                }))
+                .unwrap();
+            count += 1;
+            thread::sleep(Duration::from_millis(50));
+        }
+        assert!(runtime.capture_status().unwrap().storage_error.is_some());
+        assert!(!runtime.stop_capture.load(Ordering::Relaxed));
+        assert_eq!(
+            external
+                .query_row("SELECT SUM(cnt) FROM lifetime_totals", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        runtime.set_paused(true);
+        external.execute_batch("ROLLBACK").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(4);
+        while runtime.capture_status().unwrap().storage_error.is_some() {
+            assert!(Instant::now() < deadline, "storage failed to recover");
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(runtime.is_paused());
+        assert_eq!(runtime.snapshot().unwrap().stats.lifetime.keyboard, count);
+        runtime.shutdown().unwrap();
+        assert_eq!(
+            external
+                .query_row("SELECT SUM(cnt) FROM lifetime_totals", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            count
+        );
+    }
+
+    #[test]
+    fn storage_retry_backoff_preserves_device_errors() {
+        let state = Mutex::new(CaptureStatus {
+            error_code: Some("error.capture"),
+            error: Some("device disconnected".into()),
+            ..Default::default()
+        });
+        let mut retry = StorageRetry::default();
+        let start = Instant::now();
+        retry.failed(&state, start, &anyhow!("disk unavailable"));
+        assert_eq!(retry.next, Some(start + Duration::from_secs(1)));
+        assert_eq!(
+            state.lock().unwrap().for_display().error_code,
+            Some("error.storage_retrying")
+        );
+        retry.failed(
+            &state,
+            start + Duration::from_secs(60),
+            &anyhow!("disk unavailable"),
+        );
+        assert_eq!(retry.next, Some(start + Duration::from_secs(120)));
+        assert!(
+            state
+                .lock()
+                .unwrap()
+                .storage_blocked
+                .load(Ordering::Relaxed)
+        );
+        retry.recovered(&state);
+        assert!(
+            !state
+                .lock()
+                .unwrap()
+                .storage_blocked
+                .load(Ordering::Relaxed)
+        );
+        assert_eq!(
+            state.lock().unwrap().for_display().error_code,
+            Some("error.capture")
+        );
+    }
+
+    #[test]
+    fn failed_transaction_retries_without_double_counting() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("transaction.sqlite3");
+        let mut runtime = Runtime::start_owned(&path, false).unwrap();
+        runtime.snapshot().unwrap();
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("CREATE TRIGGER fail_recent BEFORE INSERT ON recent_counts BEGIN SELECT RAISE(FAIL,'test failure after totals'); END;").unwrap();
+        for _ in 0..20 {
+            runtime
+                .tx
+                .send(Command::Input(InputEvent {
+                    ts_ms: Local::now().timestamp_millis(),
+                    device: crate::input::Device::Keyboard,
+                    code: 4,
+                }))
+                .unwrap();
+        }
+        // This query flushes, fails, and returns promptly while the worker stays alive.
+        assert!(runtime.snapshot().is_err());
+        assert_eq!(
+            conn.query_row("SELECT SUM(cnt) FROM lifetime_totals", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        conn.execute_batch("DROP TRIGGER fail_recent;").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(4);
+        while runtime.capture_status().unwrap().storage_error.is_some() {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(runtime.snapshot().unwrap().stats.lifetime.keyboard, 20);
+        runtime.shutdown().unwrap();
+    }
 
     #[test]
     fn mini_snapshot_flushes_counts_without_history_and_heartbeat_clears_on_exit() {

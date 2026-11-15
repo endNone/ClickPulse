@@ -66,6 +66,11 @@ pub(crate) fn spawn(
     stop: Arc<AtomicBool>,
     status: Arc<Mutex<CaptureStatus>>,
 ) -> Result<JoinHandle<()>> {
+    let storage_blocked = status
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Capture status is unavailable"))?
+        .storage_blocked
+        .clone();
     Ok(thread::Builder::new()
         .name("clickpulse-input".into())
         .spawn(move || {
@@ -107,6 +112,7 @@ pub(crate) fn spawn(
                 let cb_status = status.clone();
                 let cb_tx = tx.clone();
                 let cb_paused = paused.clone();
+                let cb_storage_blocked = storage_blocked.clone();
                 let cb_stop = stop.clone();
                 let tap = CGEventTap::new(
                     CGEventTapLocation::Session,
@@ -176,7 +182,8 @@ pub(crate) fn spawn(
                             )),
                             _ => None,
                         };
-                        if !cb_paused.load(Ordering::Relaxed)
+                        if !cb_storage_blocked.load(Ordering::Relaxed)
+                            && !cb_paused.load(Ordering::Relaxed)
                             && !cb_stop.load(Ordering::Relaxed)
                             && let Some((device, code)) = input
                         {

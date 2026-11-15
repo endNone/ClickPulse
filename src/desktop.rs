@@ -17,6 +17,7 @@ mod edit_menu;
 mod ipc;
 mod refresh;
 mod session;
+mod storage_status;
 mod updates;
 mod webview;
 mod window;
@@ -252,6 +253,7 @@ pub fn run(
         &PredefinedMenuItem::separator(),
         &quit,
     ])?;
+    let mut storage_alert = storage_status::StorageAlert::default();
     let tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_icon(tray_icon()?)
@@ -400,6 +402,11 @@ pub fn run(
                                     if compact { "receiveMini" } else { "receive" }
                                 ));
                             }
+                            Err(_)
+                                if runtime
+                                    .as_ref()
+                                    .and_then(|rt| rt.capture_status().ok())
+                                    .is_some_and(|capture| capture.storage_error.is_some()) => {}
                             Err(error) => {
                                 eprintln!("error.stats: {error}");
                                 toast(&webview, &locale.text("error.stats"));
@@ -1080,6 +1087,7 @@ pub fn run(
                 && let Ok(capture) = rt.capture_status()
             {
                 update_status(&tray, &pause, locale, source_mode, rt.is_paused(), &capture);
+                storage_alert.update(&tray, &webview, locale, &capture);
             }
             if ready && webview.is_active() && data_job.is_none() {
                 if let Some(rt) = &runtime {
@@ -1343,9 +1351,7 @@ fn demo_snapshot_in_timezone(
         },
         capture: CaptureStatus {
             listening: true,
-            permission_needed: false,
-            error: None,
-            error_code: None,
+            ..Default::default()
         },
         paused,
         database_path: "Demo data · no database".into(),

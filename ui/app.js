@@ -275,6 +275,12 @@ function applySessionState(state){
 document.querySelector('main').addEventListener('scroll',()=>{
   clearTimeout(scrollStateTimer);scrollStateTimer=setTimeout(()=>window.captureSessionState(),100);
 },{passive:true});
+window.receiveCapture=capture=>{
+  if(data){data.capture=capture;renderRecordingState();renderPermission();if(page==='settings')renderSettings();}
+  if(miniData){miniData.capture=capture;window.presentationStats?.(miniData);}
+  $('error-banner').hidden=!capture.error;
+  if(capture.error)$('error-banner').textContent=t(capture.error_code||'error.recording');
+};
 window.receive=snapshot=>{
   if(snapshot.timezone && snapshot.timezone!==(window.presentationView?.timezone||'system'))return;
   if(!window.setInterfaceTimeZone(snapshot.timezone||window.presentationView?.timezone||'system'))return;

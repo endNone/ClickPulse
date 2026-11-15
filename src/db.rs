@@ -245,6 +245,10 @@ impl EventDb {
         Ok(())
     }
 
+    pub(crate) fn busy_timeout(&self, timeout: Duration) -> Result<()> {
+        Ok(self.conn.busy_timeout(timeout)?)
+    }
+
     fn query_counts(&self, sql: &str, values: impl rusqlite::Params) -> Result<Counts> {
         let mut counts = Counts::default();
         let mut stmt = self.conn.prepare(sql)?;

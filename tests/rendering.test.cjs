@@ -566,6 +566,17 @@ test('a failed snapshot updates mini status, preserves last counts and clears af
   assert.equal(a.get('mini-status').textContent,messages.en['status.recording']);
   assert.equal(a.get('today').textContent,'122');
 });
+test('storage health reaches full and mini views without a readable snapshot',()=>{
+  const a=app(),s=snapshot();a.window.receiveView({compact:true});a.window.receive(s);
+  a.window.receiveCapture({listening:true,error:'locked',error_code:'error.storage_retrying'});
+  assert.equal(a.get('mini-status').textContent,messages.en['status.recording_error']);
+  assert.equal(a.get('mini-today').textContent,'120');
+  a.window.receiveView({compact:false});
+  assert.equal(a.get('error-banner').textContent,messages.en['error.storage_retrying']);
+  a.window.receiveCapture({listening:true,error:null});
+  assert.equal(a.get('error-banner').hidden,true);
+  assert.equal(a.get('mini-status').textContent,messages.en['status.recording']);
+});
 test('grouped arrows retain unique per-key counts through refresh, theme and language changes on both platforms',()=>{
   for(const platform of ['macos','windows']){
     const a=app(platform),s=snapshot();

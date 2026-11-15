@@ -85,6 +85,11 @@ pub(crate) fn spawn(
     stop: Arc<AtomicBool>,
     status: Arc<Mutex<CaptureStatus>>,
 ) -> Result<JoinHandle<()>> {
+    let storage_blocked = status
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Capture status is unavailable"))?
+        .storage_blocked
+        .clone();
     Ok(thread::Builder::new()
         .name("clickpulse-input".into())
         .spawn(move || {
@@ -142,7 +147,10 @@ pub(crate) fn spawn(
                 devices.retain(|_, reader| match reader.read() {
                     Ok(events) => {
                         for (device, code) in events {
-                            if !paused.load(Ordering::Relaxed) && !stop.load(Ordering::Relaxed) {
+                            if !storage_blocked.load(Ordering::Relaxed)
+                                && !paused.load(Ordering::Relaxed)
+                                && !stop.load(Ordering::Relaxed)
+                            {
                                 let input = InputEvent {
                                     ts_ms: Local::now().timestamp_millis(),
                                     device,

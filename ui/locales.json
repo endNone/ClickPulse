@@ -280,7 +280,9 @@
     "update.managed": "由 {manager} 管理，请退出后运行：{command}",
     "update.found_managed": "更新详情请见设置。",
     "update.ready": "已下载 {version}，可安装并重启。",
-    "update.install_help": "当前位置无法安装更新。请使用完整 App，并确认所在文件夹可写。"
+    "update.install_help": "当前位置无法安装更新。请使用完整 App，并确认所在文件夹可写。",
+    "error.storage_retrying": "暂时无法保存，正在重试。请保持 ClickPulse 运行。",
+    "error.storage_waiting": "无法保存，记录已暂停。请检查数据目录和磁盘空间，恢复后会自动继续。"
   },
   "en": {
     "nav.main": "Main navigation",
@@ -563,7 +565,9 @@
     "update.managed": "Managed by {manager}. Quit ClickPulse, then run: {command}",
     "update.found_managed": "View update details in Settings.",
     "update.ready": "{version} is downloaded and ready to install.",
-    "update.install_help": "Updates cannot install here. Use the complete app in a writable folder."
+    "update.install_help": "Updates cannot install here. Use the complete app in a writable folder.",
+    "error.storage_retrying": "Saving is temporarily unavailable. Retrying; keep ClickPulse running.",
+    "error.storage_waiting": "Recording paused because saving failed. Check the data folder and disk space; recording resumes automatically."
   },
   "zh-TW": {
     "nav.main": "主導覽",
@@ -846,7 +850,9 @@
     "update.managed": "由 {manager} 管理，請結束後執行：{command}",
     "update.found_managed": "更新詳情請見設定。",
     "update.ready": "已下載 {version}，可安裝並重新啟動。",
-    "update.install_help": "目前位置無法安裝更新。請使用完整 App，並確認所在資料夾可寫入。"
+    "update.install_help": "目前位置無法安裝更新。請使用完整 App，並確認所在資料夾可寫入。",
+    "error.storage_retrying": "暫時無法儲存，正在重試。請保持 ClickPulse 執行。",
+    "error.storage_waiting": "無法儲存，記錄已暫停。請檢查資料目錄與磁碟空間，恢復後會自動繼續。"
   },
   "ja": {
     "nav.main": "メインナビゲーション",
@@ -1129,7 +1135,9 @@
     "update.managed": "{manager}で管理されています。ClickPulseを終了してから実行してください：{command}",
     "update.found_managed": "更新の詳細は設定で確認できます。",
     "update.ready": "{version} のダウンロードが完了しました。インストールできます。",
-    "update.install_help": "この場所では更新をインストールできません。完全なアプリを書き込み可能なフォルダーに置いてください。"
+    "update.install_help": "この場所では更新をインストールできません。完全なアプリを書き込み可能なフォルダーに置いてください。",
+    "error.storage_retrying": "保存できません。再試行中です。ClickPulseを終了しないでください。",
+    "error.storage_waiting": "保存できないため記録を一時停止しました。保存先と空き容量を確認してください。復旧後に自動再開します。"
   },
   "ko": {
     "nav.main": "기본 탐색",
@@ -1412,7 +1420,9 @@
     "update.managed": "{manager}에서 관리합니다. ClickPulse를 종료한 후 실행하세요: {command}",
     "update.found_managed": "설정에서 업데이트 내용을 확인하세요.",
     "update.ready": "{version} 다운로드가 완료되었습니다. 설치할 수 있습니다.",
-    "update.install_help": "이 위치에는 업데이트를 설치할 수 없습니다. 전체 앱을 쓰기 가능한 폴더에 두세요."
+    "update.install_help": "이 위치에는 업데이트를 설치할 수 없습니다. 전체 앱을 쓰기 가능한 폴더에 두세요.",
+    "error.storage_retrying": "일시적으로 저장할 수 없어 다시 시도 중입니다. ClickPulse를 실행 상태로 유지하세요.",
+    "error.storage_waiting": "저장에 실패하여 기록을 일시 중지했습니다. 데이터 폴더와 디스크 공간을 확인하세요. 복구되면 자동으로 재개됩니다."
   },
   "fr": {
     "nav.main": "Navigation principale",
@@ -1695,7 +1705,9 @@
     "update.managed": "Géré par {manager}. Quittez ClickPulse, puis exécutez : {command}",
     "update.found_managed": "Consultez les détails de la mise à jour dans les réglages.",
     "update.ready": "{version} est téléchargée et prête à être installée.",
-    "update.install_help": "Installation impossible ici. Placez l’application complète dans un dossier accessible en écriture."
+    "update.install_help": "Installation impossible ici. Placez l’application complète dans un dossier accessible en écriture.",
+    "error.storage_retrying": "Sauvegarde indisponible. Nouvelle tentative en cours ; laissez ClickPulse ouvert.",
+    "error.storage_waiting": "Enregistrement en pause. Vérifiez le dossier de données et l’espace disque ; il reprendra automatiquement."
   },
   "de": {
     "nav.main": "Hauptnavigation",
@@ -1978,7 +1990,9 @@
     "update.managed": "Von {manager} verwaltet. Beende ClickPulse und führe dann aus: {command}",
     "update.found_managed": "Details zum Update findest du in den Einstellungen.",
     "update.ready": "{version} ist heruntergeladen und bereit zur Installation.",
-    "update.install_help": "Hier sind keine Updates installierbar. Verwende die vollständige App in einem beschreibbaren Ordner."
+    "update.install_help": "Hier sind keine Updates installierbar. Verwende die vollständige App in einem beschreibbaren Ordner.",
+    "error.storage_retrying": "Speichern derzeit nicht möglich. Erneuter Versuch läuft; ClickPulse geöffnet lassen.",
+    "error.storage_waiting": "Aufzeichnung pausiert. Datenordner und freien Speicher prüfen; nach Behebung wird sie automatisch fortgesetzt."
   },
   "es": {
     "nav.main": "Navegación principal",
@@ -2261,6 +2275,8 @@
     "update.managed": "Administrado por {manager}. Cierra ClickPulse y ejecuta: {command}",
     "update.found_managed": "Consulta los detalles de la actualización en Configuración.",
     "update.ready": "{version} está descargada y lista para instalar.",
-    "update.install_help": "No se pueden instalar actualizaciones aquí. Usa la aplicación completa en una carpeta con permiso de escritura."
+    "update.install_help": "No se pueden instalar actualizaciones aquí. Usa la aplicación completa en una carpeta con permiso de escritura.",
+    "error.storage_retrying": "No se puede guardar temporalmente. Reintentando; mantén ClickPulse abierto.",
+    "error.storage_waiting": "Registro pausado. Comprueba la carpeta de datos y el espacio libre; se reanudará automáticamente."
   }
 }
