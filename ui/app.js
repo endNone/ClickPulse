@@ -165,7 +165,7 @@ function updateKeyboardView(){
   }
 }
 $('keyboard-view-toggle').addEventListener('click',()=>{
-  keyboardView=keyboardView==='layout'?'treemap':'layout';updateKeyboardView();
+  keyboardView=keyboardView==='layout'?'treemap':'layout';updateKeyboardView();window.captureSessionState?.();
   if(data)renderKeyboard();
 });
 if(typeof ResizeObserver==='function')new ResizeObserver(()=>{
@@ -203,6 +203,7 @@ for(const link of settingsLinks)link.addEventListener('click',()=>{
   Dropdowns.closeAll();settingsSection=link.dataset.settingsSection;syncSettingsNavigation();
   target.focus({preventScroll:true});
   target.scrollIntoView({block:'start',behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  window.captureSessionState?.();
 });
 document.querySelectorAll('nav button[data-page]').forEach(button=>button.addEventListener('click',()=>{
   Dropdowns.closeAll();
@@ -213,19 +214,20 @@ document.querySelectorAll('nav button[data-page]').forEach(button=>button.addEve
   document.querySelector('main').scrollTop=0;
   window.updateSportActivity();
   if(data)window.receive(data);
+  window.captureSessionState?.();
 }));
 document.querySelectorAll('[data-range]').forEach(button=>button.addEventListener('click',()=>{
-  range=Number(button.dataset.range);document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('selected',b===button));if(data)renderTrend($('trend-chart'),data.days.slice(-range));
+  range=Number(button.dataset.range);document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('selected',b===button));if(data)renderTrend($('trend-chart'),data.days.slice(-range));window.captureSessionState?.();
 }));
 $('pause').addEventListener('click',()=>send('pause'));
 for(const id of ['permission','settings-permission'])$(id).addEventListener('click',()=>send('permission'));
 $('storage-directory').addEventListener('click',()=>send('storage_directory'));
 $('import-history').addEventListener('click',()=>send('import_history'));
 $('reveal').addEventListener('click',()=>send('reveal'));
-$('calendar-range-select').addEventListener('change',event=>{calendarRange=event.target.value;if(data)renderCalendar()});
-$('history-range-select').addEventListener('change',event=>{historyRange=event.target.value;historyPage=0;if(data)renderHistory()});
-$('history-prev').addEventListener('click',()=>{historyPage--;if(data)renderHistory()});
-$('history-next').addEventListener('click',()=>{historyPage++;if(data)renderHistory()});
+$('calendar-range-select').addEventListener('change',event=>{calendarRange=event.target.value;if(data)renderCalendar();window.captureSessionState?.();});
+$('history-range-select').addEventListener('change',event=>{historyRange=event.target.value;historyPage=0;if(data)renderHistory();window.captureSessionState?.();});
+$('history-prev').addEventListener('click',()=>{historyPage--;if(data)renderHistory();window.captureSessionState?.();});
+$('history-next').addEventListener('click',()=>{historyPage++;if(data)renderHistory();window.captureSessionState?.();});
 window.toast=(message,duration=4500)=>{$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,duration)};
 window.failure=message=>{
   sportView?.receive({available:false});
@@ -248,12 +250,39 @@ window.receiveMini=snapshot=>{
 window.renderMiniSnapshot=()=>{
   if(miniData&&miniData.timezone===(window.presentationView?.timezone||'system'))window.presentationStats?.(miniData);
 };
+// Navigation survives renderer disposal, without saving history or input text.
+let pendingSessionState=null,lastSessionState='',scrollStateTimer;
+window.captureSessionState=()=>{
+  if(!data||pendingSessionState||window.presentationView?.compact||window.presentationView?.visible===false)return;
+  const state={page,settings_section:settingsSection,trend_days:range,calendar_range:calendarRange,history_range:historyRange,history_page:historyPage,keyboard_view:keyboardView,scroll_top:Math.max(0,Math.round(document.querySelector('main').scrollTop||0))};
+  const encoded=JSON.stringify(state);
+  if(encoded!==lastSessionState){lastSessionState=encoded;send('session_state',{state});}
+};
+window.restoreSessionState=state=>{pendingSessionState=state;};
+function applySessionState(state){
+  page=state.page;range=state.trend_days;settingsSection=state.settings_section;
+  historyPage=state.history_page;keyboardView=state.keyboard_view;
+  document.querySelectorAll('nav button[data-page]').forEach(b=>b.classList.toggle('selected',b.dataset.page===page));
+  document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==page);
+  document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('selected',Number(b.dataset.range)===range));
+  for(const [id,value,recent] of [['calendar-range-select',state.calendar_range,true],['history-range-select',state.history_range,false]]){
+    const select=$(id);updateRangeOptions(select,recent);
+    select.value=Array.from(select.options).some(option=>option.value===value)?value:'all';Dropdowns.sync(select);
+  }
+  calendarRange=$('calendar-range-select').value;historyRange=$('history-range-select').value;
+  updateHeading();syncSettingsNavigation();updateKeyboardView();
+}
+document.querySelector('main').addEventListener('scroll',()=>{
+  clearTimeout(scrollStateTimer);scrollStateTimer=setTimeout(()=>window.captureSessionState(),100);
+},{passive:true});
 window.receive=snapshot=>{
   if(snapshot.timezone && snapshot.timezone!==(window.presentationView?.timezone||'system'))return;
   if(!window.setInterfaceTimeZone(snapshot.timezone||window.presentationView?.timezone||'system'))return;
   data=recordingPaused===null?snapshot:{...snapshot,paused:recordingPaused};
   window.presentationStats?.(data);
   if(window.presentationView?.compact){miniData={...data,timezone:data.timezone||'system'};return;}
+  const restoring=pendingSessionState;
+  if(restoring){pendingSessionState=null;applySessionState(restoring);}
   const now=new Date(data.now);$('date').textContent=I.date(now,{year:'numeric',month:'long',day:'numeric',weekday:'long'});
   const demo=!!data.demo;$('demo-badge').hidden=!demo;
   renderRecordingState();
@@ -278,6 +307,7 @@ window.receive=snapshot=>{
   }else if(page==='keys'){
     renderChanged('keyboard',data.keyboard_stats||data.top_keys,renderKeyboard);
   }
+  if(restoring)document.querySelector('main').scrollTop=restoring.scroll_top;
 };
 function renderPermission(){
   if(onLinux)$('permission-reset').hidden=true;

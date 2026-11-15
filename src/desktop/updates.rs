@@ -532,16 +532,22 @@ impl Controller {
                 || self.retry_at.is_some_and(|at| now >= at))
     }
     pub fn publish(&mut self, webview: &super::webview::VisibleWebView) {
-        if !webview.is_active() {
+        if !webview.is_ready() {
             return;
         }
         if let Ok(state) = serde_json::to_string(&self.view) {
             let _ = webview.evaluate_script(&format!("window.receiveUpdateState?.({state});"));
         }
-        if let Some(notice) = self.notice.take()
-            && let Ok(notice) = serde_json::to_string(&notice)
+    }
+    pub fn publish_notice(&mut self, webview: &super::webview::VisibleWebView) {
+        if webview.is_ready()
+            && let Some(notice) = &self.notice
+            && let Ok(notice) = serde_json::to_string(notice)
+            && webview
+                .evaluate_script(&format!("window.receiveUpdateNotice?.({notice});"))
+                .is_ok()
         {
-            let _ = webview.evaluate_script(&format!("window.receiveUpdateNotice?.({notice});"));
+            self.notice = None;
         }
     }
     fn begin_check(&mut self, now: i64, source: CheckSource) -> bool {

@@ -940,3 +940,37 @@ test('Linux permission guidance and close decisions remain usable without macOS 
   a.window.receive(s);assert.equal(a.get('permission-banner').hidden,true);
   assert.equal(a.get('permission-description').textContent,messages.en['settings.authorized.linux']);
 });
+
+test('recreated views restore navigation and filters after fresh data arrives',()=>{
+  const a=app(),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+  a.window.receive(snapshot());a.navigate('settings');a.jumpTo('app-settings');
+  a.get('main').scrollTop=240;a.window.captureSessionState();
+  const saved=sent.filter(message=>message.action==='session_state').at(-1).state;
+  assert.equal(saved.page,'settings');assert.equal(saved.settings_section,'app-settings');
+  assert.equal(saved.scroll_top,240);
+  const b=app(),restored=[];b.window.ipc.postMessage=body=>restored.push(JSON.parse(body));
+  b.window.restoreSessionState(saved);
+  b.window.receiveView({compact:true});b.window.captureSessionState();
+  assert.equal(restored.length,0,'Mini must not overwrite the pending full-window state');
+  b.window.receiveView({compact:false});b.window.receive(snapshot());
+  assert.equal(b.get('settings').hidden,false);assert.equal(b.get('overview').hidden,true);
+  assert.equal(b.get('main').scrollTop,240);
+  assert.equal(b.settingsLinks.find(link=>link.dataset.settingsSection==='app-settings').attributes['aria-current'],'location');
+  b.window.captureSessionState();
+  assert.equal(restored.at(-1).state.settings_section,'app-settings');
+});
+
+test('recreation restores history, trend and keyboard choices and clamps removed year filters',()=>{
+  for(const page of ['overview','history','keys']){
+    const a=app();a.window.restoreSessionState({page,settings_section:'personalization-settings',trend_days:90,calendar_range:'90',history_range:'1000',history_page:100,keyboard_view:'treemap',scroll_top:120});
+    a.window.receive(snapshot());
+    assert.equal(a.get(page).hidden,false);
+    assert.equal(a.get('history-range-select').value,'all');
+    const sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));a.window.captureSessionState();
+    assert.equal(sent.at(-1).state.trend_days,90);assert.equal(sent.at(-1).state.keyboard_view,'treemap');
+    assert.equal(sent.at(-1).state.calendar_range,'90');
+    if(page==='history')assert.ok(sent.at(-1).state.history_page<100);
+    const count=sent.length;a.window.receiveView({visible:false});a.get('main').scrollTop=0;a.window.captureSessionState();
+    assert.equal(sent.length,count,'Hidden layout changes must not overwrite scroll state');
+  }
+});

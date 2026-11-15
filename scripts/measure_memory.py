@@ -17,26 +17,34 @@ HOOK = r'''
     // Measurement copy only; never part of the distributed App.
     if let Ok(directory) = std::env::var("CLICKPULSE_MEMORY_PROBE") {
         assert!(demo, "Memory measurements require isolated demo data");
-        let proxy = proxy.clone();
+        let proxy = event_loop.create_proxy();
+        let (open_id, mini_id, hide_id, quit_id) = (show.id().clone(), mini.id().clone(), hide.id().clone(), quit.id().clone());
         std::thread::spawn(move || {
             let path = std::path::PathBuf::from(directory);
             std::fs::write(path.join("pid"), std::process::id().to_string()).unwrap();
+            if __LIFECYCLE__ { std::fs::write(path.join("lifecycle"), "true").unwrap(); }
             for (name, action, seconds) in [
-                ("background", None, 35),
-                ("full_en", Some(r#"{"action":"expand"}"#), 35),
-                ("full_zh", Some(r#"{"action":"language","language":"zh-CN"}"#), 35),
-                ("mini", Some(r#"{"action":"compact"}"#), 35),
-                ("hidden_10m", Some(r#"{"action":"hide"}"#), 610),
+                ("background", "", 35),
+                ("full_en", "open", 35),
+                ("full_zh", "language", 35),
+                ("mini", "mini", 35),
+                ("hidden_10m", "hide", 610),
+                ("reopened", "open", 35),
             ] {
-                if let Some(body) = action { let _ = proxy.send_event(UiEvent::Ipc(body.into())); }
+                let started = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis();
+                std::fs::write(path.join(format!("{name}.started")), started.to_string()).unwrap();
+                let menu = match action { "open" => Some(&open_id), "mini" => Some(&mini_id), "hide" => Some(&hide_id), _ => None };
+                if let Some(id) = menu { let _ = proxy.send_event(UiEvent::Menu(MenuEvent { id: id.clone() })); }
+                if action == "language" {
+                    let body = r#"{"action":"language","language":"zh-CN"}"#.to_owned();
+                    __SEND_IPC__
+                }
                 std::fs::write(path.join("stage"), name).unwrap();
                 std::thread::sleep(Duration::from_secs(seconds));
                 std::fs::write(path.join(format!("{name}.ready")), "ready").unwrap();
-                while !path.join(format!("{name}.measured")).exists() {
-                    std::thread::sleep(Duration::from_millis(100));
-                }
+                while !path.join(format!("{name}.measured")).exists() { std::thread::sleep(Duration::from_millis(100)); }
             }
-            let _ = proxy.send_event(UiEvent::Ipc(r#"{"action":"quit"}"#.into()));
+            let _ = proxy.send_event(UiEvent::Menu(MenuEvent { id: quit_id }));
         });
     }
 '''
@@ -46,16 +54,31 @@ def prepare(source, output):
     shutil.copytree(source, output, ignore=shutil.ignore_patterns('.git', 'target', 'dist', '.Codex', '__pycache__'))
     path = output/'src/desktop.rs'
     text = path.read_text()
-    anchor = '    let html = include_str!("../ui/index.html")'
+    lifecycle = 'generation: u64, body: String' in text or 'generation: u64,\n        body: String' in text
+    anchor = '    let mut next_refresh = Instant::now();'
     assert text.count(anchor) == 1
-    text = text.replace(anchor, HOOK+'\n'+anchor)
+    send = 'let generation = std::fs::read_to_string(path.join("generation")).unwrap().parse().unwrap(); let _ = proxy.send_event(UiEvent::Ipc { generation, body });' if lifecycle else 'let _ = proxy.send_event(UiEvent::Ipc(body));'
+    hook = HOOK.replace('__LIFECYCLE__', str(lifecycle).lower()).replace('__SEND_IPC__', send)
+    text = text.replace(anchor, hook+'\n'+anchor)
     text = text.replace('        (clickpulse::presentation::Preferences::default(), None)', '        ({ let mut p = clickpulse::presentation::Preferences::default(); p.language = clickpulse::localization::LanguagePreference::English; p }, None)')
-    text = text.replace('                        Request::Ready {} => {', '''                        Request::Ready {} => {
+    ready = '''                        Request::Ready {} => {
                             if let Ok(directory) = std::env::var("CLICKPULSE_MEMORY_PROBE") {
-                                std::fs::write(std::path::Path::new(&directory).join("ui-ready"), "ready").unwrap();
-                            }''')
-    # Keep Windows renderer data isolated from any installed copy.
-    text = text.replace('wry::WebContext::new(Some(clickpulse::platform::data_dir()?.join("webview")))', 'wry::WebContext::new(Some(std::path::PathBuf::from(std::env::var("CLICKPULSE_MEMORY_PROBE").expect("probe directory")).join("webview")))')
+                                let path = std::path::Path::new(&directory);
+                                let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis();
+                                std::fs::write(path.join("ui-ready"), ms.to_string()).unwrap();
+                                __GENERATION__
+                            }'''
+    text = text.replace('                        Request::Ready {} => {', ready.replace('__GENERATION__', 'std::fs::write(path.join("generation"), generation.to_string()).unwrap();' if lifecycle else ''))
+    if lifecycle:
+        view = output/'src/desktop/webview.rs'
+        body = view.read_text().replace('        self.inner.take();', '''        self.inner.take();
+        if let Ok(directory) = std::env::var("CLICKPULSE_MEMORY_PROBE") {
+            std::fs::write(std::path::Path::new(&directory).join("disposed"), self.generation.to_string()).unwrap();
+        }''')
+        body = body.replace('clickpulse::platform::data_dir()?.join("webview")', 'std::path::PathBuf::from(std::env::var("CLICKPULSE_MEMORY_PROBE").expect("probe directory")).join("webview")')
+        view.write_text(body)
+    else:
+        text = text.replace('clickpulse::platform::data_dir()?.join("webview")', 'std::path::PathBuf::from(std::env::var("CLICKPULSE_MEMORY_PROBE").expect("probe directory")).join("webview")')
     path.write_text(text)
     path = output/'src/desktop/window.rs'
     text = path.read_text().replace('        _target.show_application();', '        if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { _target.show_application(); }').replace('    window.set_focus();', '    if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { window.set_focus(); }')
@@ -95,7 +118,7 @@ def run(binary, output, label):
     known = {app.pid}
     report = {'label': label, 'platform': sys.platform, 'system': __import__('platform').platform(), 'demo': True, 'metric': 'private working set (USS)' if sys.platform == 'win32' else 'proportional resident size (PSS)', 'states': {}}
     try:
-        for stage in ['background', 'full_en', 'full_zh', 'mini', 'hidden_10m']:
+        for stage in ['background', 'full_en', 'full_zh', 'mini', 'hidden_10m', 'reopened']:
             deadline = time.monotonic()+750
             while not (output/(stage+'.ready')).exists():
                 if app.poll() is not None:
@@ -103,8 +126,13 @@ def run(binary, output, label):
                 if time.monotonic()>deadline:
                     raise RuntimeError('Timed out at '+stage)
                 time.sleep(1)
-            if not (output/'ui-ready').exists():
+            lifecycle = (output/'lifecycle').exists()
+            if not (lifecycle and stage == 'background') and not (output/'ui-ready').exists():
                 raise RuntimeError('WebView never acknowledged the loaded interface')
+            if lifecycle and stage == 'hidden_10m' and not (output/'disposed').exists():
+                raise RuntimeError('Hidden renderer was not disposed')
+            if lifecycle and stage == 'reopened' and int((output/'generation').read_text()) < 2:
+                raise RuntimeError('Renderer did not recreate and acknowledge Ready')
             samples = []
             for _ in range(5):
                 table = processes()
@@ -116,6 +144,10 @@ def run(binary, output, label):
                 samples.append({'processes': rows, 'main_bytes': sum(p['measured_bytes'] for p in rows if p['pid'] == app.pid), 'webview_bytes': sum(p['measured_bytes'] for p in rows if p['pid'] != app.pid), 'total_bytes': sum(p['measured_bytes'] for p in rows)})
                 time.sleep(1)
             report['states'][stage] = {'samples': samples, **{'median_'+k: statistics.median(s[k] for s in samples) for k in ['main_bytes', 'webview_bytes', 'total_bytes']}}
+            if lifecycle and stage == 'background' and any(sample['webview_bytes'] for sample in samples):
+                raise RuntimeError('Background launch unexpectedly created renderer processes')
+            if lifecycle and stage == 'reopened':
+                report['reopen_ready_ms'] = int((output/'ui-ready').read_text()) - int((output/'reopened.started').read_text())
             (output/'measurements.json').write_text(json.dumps(report, indent=2)+'\n')
             (output/(stage+'.measured')).write_text('ok')
             print(stage, round(report['states'][stage]['median_total_bytes']/2**20, 1), 'MiB', flush=True)

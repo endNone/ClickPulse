@@ -47,8 +47,8 @@ defers view destruction while they or native dialogs are active.
 - Windows: make the renderer invisible before `TrySuspend`; resume before publishing
   UI state. An in-flight suspension callback needs a generation/visibility check so a
   rapid reopen cannot leave a visible page suspended.
-- `TrySuspend` already changes the memory target to Low. Use Low/Normal alone as a
-  fallback when suspension is unavailable; do not run two redundant state machines.
+- `TrySuspend` changes the memory target to Low. Also set Low/Normal at the visibility
+  transition, so unsupported or rejected suspension still uses the reduced target.
 - Wry 0.55.1's Windows `InnerWebView::drop` already calls `controller.Close()`. Release
   all WebView/controller/context clones and observe the associated process family;
   do not assume calling `Close` alone synchronously removes every browser process.

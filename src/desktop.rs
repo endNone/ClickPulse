@@ -16,6 +16,7 @@ mod data_settings;
 mod edit_menu;
 mod ipc;
 mod refresh;
+mod session;
 mod updates;
 mod webview;
 mod window;
@@ -37,12 +38,14 @@ use window::update_windows_region;
 use window::{
     COMPACT_SIZE, WindowLayout, fix_compact_size, present_window, saved_full_position, set_compact,
 };
-use wry::WebViewBuilder;
 
 #[derive(Debug)]
 enum UiEvent {
     Update(updates::Event),
-    Ipc(String),
+    Ipc {
+        generation: u64,
+        body: String,
+    },
     Menu(MenuEvent),
     Snapshot {
         id: u64,
@@ -216,106 +219,10 @@ pub fn run(
         window.set_visible(true);
     }
     let proxy = event_loop.create_proxy();
-    let html = include_str!("../ui/index.html")
-        .replace("__VERSION__", clickpulse::version::PUBLIC)
-        .replace("__BRAND_MARK__", "images/brand-mark.png")
-        .replace("__LOCALE__", locale.code())
-        .replace("__THEME__", preferences.theme.code())
-        .replace("__PLATFORM__", clickpulse::platform::name())
-        .replace("/*__MESSAGES__*/", include_str!("../ui/locales.json"))
-        .replace(
-            "/*__STYLE__*/",
-            &format!(
-                "{}\n{}\n{}\n{}\n{}\n{}\n{}",
-                clickpulse::branding::font_css(),
-                include_str!("../ui/style.css"),
-                include_str!("../ui/history.css"),
-                include_str!("../ui/compact.css"),
-                include_str!("../ui/themes.css"),
-                include_str!("../ui/dropdown.css"),
-                include_str!("../ui/sport.css")
-            ),
-        )
-        .replace(
-            "/*__SCRIPT__*/",
-            &format!(
-                "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
-                include_str!("../ui/i18n.js"),
-                include_str!("../ui/themes.js"),
-                include_str!("../ui/dropdown.js"),
-                include_str!("../ui/history.js"),
-                include_str!("../ui/keyboard.js"),
-                include_str!("../ui/sport.js"),
-                include_str!("../ui/app.js"),
-                include_str!("../ui/presentation.js")
-            ),
-        );
-    #[cfg(target_os = "windows")]
-    let mut web_context =
-        wry::WebContext::new(Some(clickpulse::platform::data_dir()?.join("webview")));
-    #[cfg(target_os = "windows")]
-    let builder = WebViewBuilder::new_with_web_context(&mut web_context);
-    #[cfg(not(target_os = "windows"))]
-    let builder = WebViewBuilder::new();
-    let builder = builder
-        .with_custom_protocol("clickpulse".into(), move |_, request| {
-            use std::borrow::Cow;
-            let (content_type, body, status): (&str, Cow<'static, [u8]>, u16) =
-                match request.uri().path() {
-                    "/index.html" => (
-                        "text/html; charset=utf-8",
-                        Cow::Owned(html.as_bytes().to_vec()),
-                        200,
-                    ),
-                    "/images/brand-mark.png" => (
-                        "image/png",
-                        Cow::Borrowed(clickpulse::branding::ui_mark_png()),
-                        200,
-                    ),
-                    "/fonts/Inter.woff2" => (
-                        "font/woff2",
-                        Cow::Borrowed(include_bytes!("../assets/fonts/Inter.woff2")),
-                        200,
-                    ),
-                    "/fonts/NotoSansMono.woff2" => (
-                        "font/woff2",
-                        Cow::Borrowed(include_bytes!("../assets/fonts/NotoSansMono.woff2")),
-                        200,
-                    ),
-                    _ => ("text/plain", Cow::Borrowed(b"Not found"), 404),
-                };
-            wry::http::Response::builder()
-                .status(status)
-                .header("Content-Type", content_type)
-                .body(body)
-                .expect("static resource response")
-        })
-        .with_url("clickpulse://localhost/index.html");
-    let builder = builder
-        .with_transparent(cfg!(any(target_os = "macos", target_os = "linux")))
-        .with_navigation_handler(|url| {
-            url == "about:blank"
-                || url.starts_with("about:blank#")
-                || matches!(
-                    url.as_str(),
-                    "clickpulse://localhost/index.html"
-                        | "http://clickpulse.localhost/index.html"
-                        | "https://clickpulse.localhost/index.html"
-                )
-        })
-        .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
-        .with_ipc_handler(move |req| {
-            let _ = proxy.send_event(UiEvent::Ipc(req.body().clone()));
-        });
-    #[cfg(not(target_os = "linux"))]
-    let webview = builder.build(window.as_ref())?;
-    #[cfg(target_os = "linux")]
-    let webview = {
-        use tao::platform::unix::WindowExtUnix;
-        use wry::WebViewBuilderExtUnix;
-        builder.build_gtk(window.default_vbox().expect("Tao GTK container"))?
-    };
-    let webview = VisibleWebView::new(webview, !options.background);
+    let mut webview = VisibleWebView::default();
+    if !options.background {
+        webview.ensure(&window, proxy, locale, &preferences)?;
+    }
     let menu = Menu::new();
     let show = MenuItem::new(locale.text("native.open"), true, None);
     let mini = MenuItem::new(locale.text("action.mini"), true, None);
@@ -377,6 +284,7 @@ pub fn run(
     }
     let mut next_refresh = Instant::now();
     let mut ready = false;
+    let mut session_state = session::SessionState::default();
     let mut demo_paused = false;
     let mut visible = !options.background;
     let snapshot_proxy = event_loop.create_proxy();
@@ -598,9 +506,17 @@ pub fn run(
                     *flow = ControlFlow::Exit;
                 }
             }
-            Event::UserEvent(UiEvent::Ipc(body)) => {
+            Event::UserEvent(UiEvent::Ipc { generation, body }) => {
+                if !webview.accepts(generation) {
+                    return;
+                }
                 if let Ok(request) = serde_json::from_str::<Request>(&body) {
                     match request {
+                        Request::SessionState { state } => {
+                            if state.valid() {
+                                session_state = state;
+                            }
+                        }
                         Request::Language { language } => {
                             preferences.language = language;
                             locale = language.resolve();
@@ -658,6 +574,12 @@ pub fn run(
                         }
                         Request::Ready {} => {
                             ready = true;
+                            webview.mark_ready();
+                            if let Ok(state) = serde_json::to_string(&session_state) {
+                                let _ = webview.evaluate_script(&format!(
+                                    "window.restoreSessionState?.({state});"
+                                ));
+                            }
                             updates.publish(&webview);
                             view_changed = true;
                             refresh = true;
@@ -975,8 +897,7 @@ pub fn run(
                 next_refresh =
                     Instant::now() + refresh::interval(webview.is_active(), preferences.compact);
                 let now = chrono::Utc::now().timestamp();
-                if ready
-                    && data_job.is_none()
+                if data_job.is_none()
                     && !quit_after_data
                     && updates.automatic_due(
                         preferences.auto_check_updates,
@@ -1009,21 +930,13 @@ pub fn run(
                 {
                     eprintln!("Update handoff failed: {error:#}");
                 }
-                #[cfg(target_os = "windows")]
-                {
-                    use wry::WebViewExtWindows;
-                    // Close the renderer after pending input has been saved.
-                    // The controller/environment then drop on normal return.
-                    unsafe {
-                        webview.inner.controller().Close().ok();
-                    }
-                }
+                webview.dispose();
+                return;
             }
             _ => {}
         }
         // Reopening restores the latest state once, including results received hidden.
-        if ready
-            && data_job.is_none()
+        if data_job.is_none()
             && !quit_after_data
             && !matches!(*flow, ControlFlow::ExitWithCode(_))
             && updates.download_if_available(snapshot_proxy.clone())
@@ -1035,7 +948,35 @@ pub fn run(
             view_changed = true;
             refresh = true;
         }
-        webview.set_active(active);
+        if active && !matches!(*flow, ControlFlow::ExitWithCode(_)) {
+            match webview.ensure(&window, snapshot_proxy.clone(), locale, &preferences) {
+                Ok(true) => {
+                    ready = false;
+                    snapshots.invalidate();
+                    sport_samples.invalidate();
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    // Leave the tray/recorder alive and allow another Open attempt.
+                    eprintln!("Unable to create interface: {error:#}");
+                    window.set_visible(false);
+                    visible = false;
+                    rfd::MessageDialog::new()
+                        .set_title("ClickPulse")
+                        .set_description(locale.text("error.stats"))
+                        .show();
+                }
+            }
+        }
+        webview.set_active(active && visible);
+        if webview.release_if_idle(
+            Instant::now(),
+            data_job.is_some() || updates.installing() || quit_after_data,
+        ) {
+            ready = false;
+            snapshots.invalidate();
+            sport_samples.invalidate();
+        }
         if preferences.compact != previous_compact {
             snapshots.invalidate();
             sport_samples.invalidate();
@@ -1063,6 +1004,9 @@ pub fn run(
                 }
                 DataNotice::Failed(error) => data_settings::show_error(&window, locale, &error),
             }
+        }
+        if ready && webview.is_active() && !preferences.compact {
+            updates.publish_notice(&webview);
         }
         // Do not spend the one-time reminder on a hidden, minimized, inactive
         // or Mini window. The pending version survives until a full view opens.
@@ -1118,7 +1062,7 @@ pub fn run(
                 }
             }
         }
-        if refresh && ready {
+        if refresh {
             // A history query must not delay acknowledgement of Pause/Resume.
             let paused = runtime.as_ref().map_or(demo_paused, Runtime::is_paused);
             let _ = webview.evaluate_script(&format!("window.receivePaused({paused});"));
@@ -1127,7 +1071,7 @@ pub fn run(
             {
                 update_status(&tray, &pause, locale, source_mode, rt.is_paused(), &capture);
             }
-            if webview.is_active() && data_job.is_none() {
+            if ready && webview.is_active() && data_job.is_none() {
                 if let Some(rt) = &runtime {
                     if let Some(id) = snapshots.begin() {
                         let proxy = snapshot_proxy.clone();

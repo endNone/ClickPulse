@@ -23,6 +23,9 @@ pub(super) enum Request {
     InstallUpdate {},
     UpdateRelease {},
     Ready {},
+    SessionState {
+        state: super::session::SessionState,
+    },
     Compact {},
     Expand {},
     Drag {},
