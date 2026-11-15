@@ -52,6 +52,11 @@ defers view destruction while they or native dialogs are active.
 - Wry 0.55.1's Windows `InnerWebView::drop` already calls `controller.Close()`. Release
   all WebView/controller/context clones and observe the associated process family;
   do not assume calling `Close` alone synchronously removes every browser process.
+- Linux: disconnect the owned GTK `script-message-received` callbacks before dropping
+  Wry 0.55's view; its callback otherwise retains a view/manager cycle. Native four-cycle
+  tests reproduced accumulating network processes before cleanup and none afterward.
+  Find then disconnect handlers individually for Ubuntu 22.04's older GLib. After a
+  GNU/Linux view drops, call `malloc_trim(0)` once to return freed heap pages.
 - macOS/Linux: releasing the view may still leave engine helper processes temporarily
   cached by the OS. Measure the application's process group, not only Rust RSS.
 - Create and dispose WebViews only on the event-loop thread. Retain platform activation,
@@ -77,3 +82,8 @@ defers view destruction while they or native dialogs are active.
 - [WebView2 memory target](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2_19)
 - [WebView2 controller lifetime](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2controller)
 - Wry 0.55.1 source: `src/webview2/mod.rs`, `InnerWebView::drop` and memory-usage methods.
+
+Linux cleanup references: [message-handler lifetime](https://webkitgtk.org/reference/webkit2gtk/stable/method.UserContentManager.unregister_script_message_handler.html),
+[handler lookup](https://docs.gtk.org/gobject/func.signal_handler_find.html),
+[GLib version boundary](https://docs.gtk.org/gobject/func.signal_handlers_disconnect_matched.html),
+[heap trimming](https://man7.org/linux/man-pages/man3/malloc_trim.3.html).

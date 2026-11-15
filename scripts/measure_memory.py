@@ -138,6 +138,8 @@ def memory(pid):
 
 
 def run(binary, output, label):
+    if sys.platform == 'darwin':
+        raise RuntimeError('Use measure_macos_memory.py to launch an isolated app coalition on macOS')
     output.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ, CLICKPULSE_MEMORY_PROBE=str(output.resolve()))
     log = (output/'app.log').open('w')

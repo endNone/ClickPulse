@@ -96,6 +96,8 @@ impl VisibleWebView {
         }
     }
     pub fn dispose(&mut self) {
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        let had_view = self.inner.is_some();
         self.active.set(false);
         self.hidden_since.set(None);
         self.ready.set(false);
@@ -103,9 +105,60 @@ impl VisibleWebView {
         if let Some(view) = &self.inner {
             view.desired.set(false);
         }
+        #[cfg(target_os = "linux")]
+        if let Some(view) = &self.inner {
+            disconnect_linux_ipc(&view.inner);
+        }
         self.inner.take();
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        if had_view {
+            // Return freed GTK/WebKit heap pages once on disposal, never on a
+            // refresh timer. glibc keeps live allocations and is thread-safe.
+            unsafe {
+                libc::malloc_trim(0);
+            }
+        }
     }
 }
+// Wry 0.55's GTK IPC signal captures a strong WebView clone. The view owns
+// its user-content manager, so destroying the widget alone leaves a cycle and
+// keeps its WebContext/network process alive. Disconnect only this owned IPC
+// signal before dropping the view; other applications/contexts are untouched.
+#[cfg(target_os = "linux")]
+fn disconnect_linux_ipc(view: &wry::WebView) {
+    use gtk::glib::{ObjectExt, gobject_ffi, object::ObjectType, translate::IntoGlib};
+    use wry::WebViewExtUnix;
+    let native = view.webview();
+    let manager: gtk::glib::Object = native.property("user-content-manager");
+    // Both objects stay strongly held on the GTK event-loop thread throughout
+    // disconnection. Find + disconnect works on Ubuntu 22.04's GLib too; the
+    // ID-only disconnect_matched shortcut requires GLib 2.78.
+    unsafe {
+        let signal = gobject_ffi::g_signal_lookup(
+            c"script-message-received".as_ptr(),
+            manager.type_().into_glib(),
+        );
+        if signal == 0 {
+            return;
+        }
+        loop {
+            let handler = gobject_ffi::g_signal_handler_find(
+                manager.as_ptr(),
+                gobject_ffi::G_SIGNAL_MATCH_ID,
+                signal,
+                0,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
+            if handler == 0 {
+                break;
+            }
+            gobject_ffi::g_signal_handler_disconnect(manager.as_ptr(), handler);
+        }
+    }
+}
+
 fn release_due(active: bool, hidden: Option<Instant>, now: Instant, protected: bool) -> bool {
     !active
         && !protected
