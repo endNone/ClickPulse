@@ -1,19 +1,26 @@
 # Changelog
 
-## 0.3.1 · 2026-11-14
+## 0.3.1 · Unreleased
+
+### New
+
+- Exclude recognized software-generated input with an optional setting on macOS and Windows.
 
 ### Improved
 
 - Download updates automatically; install and restart only when you confirm.
+- Use less memory in the background; reopen your previous page when needed.
+- Download smaller packages with lighter fonts and icons.
+- Reduce Linux background power use; install `fonts-noto-cjk` for Chinese, Japanese and Korean.
 - Keep WinGet installations current through `winget upgrade --id endNone.ClickPulse --exact`.
 
 ### Fixed
 
-- Keep Windows launch-at-login working through WinGet upgrades.
-- Repair missing startup paths when opening ClickPulse, without enabling disabled startup.
-- Explain when the current app location requires a manual update.
-- Keep data controls available while updates download in the background.
-- Refresh downloaded updates when their release files change.
+- Resume saving automatically after temporary failures, with a warning when recording must pause.
+- Keep Windows launch-at-login working through upgrades and repair missing startup paths.
+- Keep macOS idle CPU use low.
+- Open recreated windows after the interface is ready.
+- Keep data controls available during downloads and explain when updates require manual installation.
 
 ## 0.3.0 · 2026-11-12
 
