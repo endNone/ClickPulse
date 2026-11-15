@@ -218,10 +218,12 @@ pub fn run(
     if !options.background {
         window.set_visible(true);
     }
-    let proxy = event_loop.create_proxy();
+    // Tao's macOS proxy clone registers a source and wakes the run loop.
+    // Share one proxy so idle checks and snapshot replies cannot wake themselves.
+    let ui_proxy = Arc::new(event_loop.create_proxy());
     let mut webview = VisibleWebView::default();
     if !options.background {
-        webview.ensure(&window, proxy, locale, &preferences)?;
+        webview.ensure(&window, ui_proxy.clone(), locale, &preferences)?;
     }
     let menu = Menu::new();
     let show = MenuItem::new(locale.text("native.open"), true, None);
@@ -257,13 +259,13 @@ pub fn run(
         .with_menu_on_left_click(!cfg!(target_os = "windows"))
         .with_tooltip(locale.text("native.tooltip"))
         .build()?;
-    let proxy = event_loop.create_proxy();
+    let proxy = ui_proxy.clone();
     MenuEvent::set_event_handler(Some(move |event| {
         let _ = proxy.send_event(UiEvent::Menu(event));
     }));
     #[cfg(target_os = "windows")]
     {
-        let proxy = event_loop.create_proxy();
+        let proxy = ui_proxy.clone();
         tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
             if matches!(
                 event,
@@ -276,7 +278,7 @@ pub fn run(
             }
         }));
         if let Some(instance) = &mut activation {
-            let proxy = event_loop.create_proxy();
+            let proxy = ui_proxy.clone();
             instance.listen(move || {
                 let _ = proxy.send_event(UiEvent::Activate);
             })?;
@@ -284,10 +286,11 @@ pub fn run(
     }
     let mut next_refresh = Instant::now();
     let mut ready = false;
+    let mut restore_pending = false;
     let mut session_state = session::SessionState::default();
     let mut demo_paused = false;
     let mut visible = !options.background;
-    let snapshot_proxy = event_loop.create_proxy();
+    let snapshot_proxy = ui_proxy;
     let mut snapshots = SnapshotGate::default();
     let mut sport_samples = SnapshotGate::default();
     let mut last_sport_sample = Instant::now() - Duration::from_secs(1);
@@ -575,11 +578,7 @@ pub fn run(
                         Request::Ready {} => {
                             ready = true;
                             webview.mark_ready();
-                            if let Ok(state) = serde_json::to_string(&session_state) {
-                                let _ = webview.evaluate_script(&format!(
-                                    "window.restoreSessionState?.({state});"
-                                ));
-                            }
+                            restore_pending = true;
                             updates.publish(&webview);
                             view_changed = true;
                             refresh = true;
@@ -977,6 +976,17 @@ pub fn run(
             snapshots.invalidate();
             sport_samples.invalidate();
         }
+        // Ready may arrive after an immediate Hide. Keep restoration pending
+        // until the existing view is actually resumed, not only on cold creation.
+        if restore_pending
+            && webview.is_ready()
+            && let Ok(state) = serde_json::to_string(&session_state)
+            && webview
+                .evaluate_script(&format!("window.restoreSessionState?.({state});"))
+                .is_ok()
+        {
+            restore_pending = false;
+        }
         if preferences.compact != previous_compact {
             snapshots.invalidate();
             sport_samples.invalidate();
@@ -993,7 +1003,7 @@ pub fn run(
         // A sheet attached to a hidden or Mini window can be inaccessible.
         // Keep the result until the full window is visible again.
         if data_job.is_none()
-            && ready
+            && webview.is_ready()
             && visible
             && !preferences.compact
             && let Some(notice) = data_notice.take()
@@ -1044,7 +1054,7 @@ pub fn run(
             hide.set_text(locale.text("native.hide"));
             quit.set_text(locale.text("native.quit"));
             let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
-            if ready {
+            if webview.is_ready() {
                 let _ = webview.evaluate_script(&format!(
                     "window.receiveView({view});window.receiveDataBusy?.({});",
                     data_job.is_some()

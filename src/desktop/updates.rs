@@ -4,6 +4,7 @@ use std::{
     cell::Cell,
     path::PathBuf,
     process::Command,
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tao::event_loop::EventLoopProxy;
@@ -571,7 +572,7 @@ impl Controller {
     }
     pub fn check(
         &mut self,
-        proxy: EventLoopProxy<super::UiEvent>,
+        proxy: Arc<EventLoopProxy<super::UiEvent>>,
         now: i64,
         source: CheckSource,
     ) -> bool {
@@ -625,7 +626,7 @@ impl Controller {
             &format!("update source={source:?} operation={operation}: {error}"),
         );
     }
-    pub fn install(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> anyhow::Result<()> {
+    pub fn install(&mut self, proxy: Arc<EventLoopProxy<super::UiEvent>>) -> anyhow::Result<()> {
         let result = self.start_install(proxy);
         if let Err(error) = &result {
             self.log_failure(CheckSource::Manual, "install-start", &format!("{error:#}"));
@@ -640,7 +641,7 @@ impl Controller {
         );
         self.installation.clone().map_err(anyhow::Error::msg)
     }
-    fn start_install(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> anyhow::Result<()> {
+    fn start_install(&mut self, proxy: Arc<EventLoopProxy<super::UiEvent>>) -> anyhow::Result<()> {
         anyhow::ensure!(!self.busy(), "Update already in progress");
         // A request before the download is ready only downloads. Starting a
         // helper is a separate, explicit confirmation after verification.
@@ -673,7 +674,7 @@ impl Controller {
             && self.staged.is_none()
             && self.candidate.is_some()
     }
-    pub fn download_if_available(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> bool {
+    pub fn download_if_available(&mut self, proxy: Arc<EventLoopProxy<super::UiEvent>>) -> bool {
         if !self.download_available() {
             return false;
         }
@@ -683,7 +684,7 @@ impl Controller {
         }
         true
     }
-    fn start_download(&mut self, proxy: EventLoopProxy<super::UiEvent>) -> anyhow::Result<()> {
+    fn start_download(&mut self, proxy: Arc<EventLoopProxy<super::UiEvent>>) -> anyhow::Result<()> {
         anyhow::ensure!(!self.busy(), "Update already in progress");
         self.install_target()?;
         let candidate = self

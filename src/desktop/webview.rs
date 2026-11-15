@@ -4,6 +4,7 @@ use anyhow::Result;
 use clickpulse::{localization::Locale, presentation::Preferences};
 use std::{
     cell::Cell,
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tao::{event_loop::EventLoopProxy, window::Window};
@@ -32,7 +33,7 @@ impl VisibleWebView {
     pub fn ensure(
         &mut self,
         window: &Window,
-        proxy: EventLoopProxy<UiEvent>,
+        proxy: Arc<EventLoopProxy<UiEvent>>,
         locale: Locale,
         preferences: &Preferences,
     ) -> Result<bool> {
@@ -209,7 +210,7 @@ impl RenderedView {
 
 fn create(
     window: &Window,
-    proxy: EventLoopProxy<UiEvent>,
+    proxy: Arc<EventLoopProxy<UiEvent>>,
     locale: Locale,
     preferences: &Preferences,
     generation: u64,
