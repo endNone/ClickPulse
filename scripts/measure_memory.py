@@ -79,6 +79,33 @@ def prepare(source, output):
         view.write_text(body)
     else:
         text = text.replace('clickpulse::platform::data_dir()?.join("webview")', 'std::path::PathBuf::from(std::env::var("CLICKPULSE_MEMORY_PROBE").expect("probe directory")).join("webview")')
+    if lifecycle:
+        text = text.replace('    Update(updates::Event),', '    Update(updates::Event),\n    ProbeAssets(String),')
+        text = text.replace('        match event {', '''        match event {
+            Event::UserEvent(UiEvent::ProbeAssets(body)) => {
+                if let Ok(directory) = std::env::var("CLICKPULSE_MEMORY_PROBE") {
+                    std::fs::write(std::path::Path::new(&directory).join("assets.json"), body).unwrap();
+                }
+            }''', 1)
+        view = output/'src/desktop/webview.rs'
+        body = view.read_text().replace('.with_ipc_handler(move |req| {', '''.with_ipc_handler(move |req| {
+            if let Some(body) = req.body().strip_prefix("probe-assets:") {
+                let _ = proxy.send_event(UiEvent::ProbeAssets(body.into()));
+                return;
+            }''')
+        view.write_text(body)
+        app = output/'ui/app.js'
+        app.write_text(app.read_text()+'''\nwindow.addEventListener('load', async()=>{
+          const images = await Promise.all(Array.from(document.images).map(async image=>{
+            try { await image.decode(); return {src:image.getAttribute('src'),width:image.naturalWidth}; }
+            catch(error) { return {src:image.getAttribute('src'),width:0,error:String(error)}; }
+          }));
+          const fonts = await Promise.all(['ClickPulse UI','ClickPulse Mono'].map(async family=>{
+            try { const faces=await document.fonts.load('14px "'+family+'"');return {family,loaded:faces.length>0}; }
+            catch(error) { return {family,loaded:false,error:String(error)}; }
+          }));
+          window.ipc.postMessage('probe-assets:'+JSON.stringify({images,fonts}));
+        });\n''')
     path.write_text(text)
     path = output/'src/desktop/window.rs'
     text = path.read_text().replace('        _target.show_application();', '        if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { _target.show_application(); }').replace('    window.set_focus();', '    if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { window.set_focus(); }')
@@ -133,6 +160,10 @@ def run(binary, output, label):
                 raise RuntimeError('Hidden renderer was not disposed')
             if lifecycle and stage == 'reopened' and int((output/'generation').read_text()) < 2:
                 raise RuntimeError('Renderer did not recreate and acknowledge Ready')
+            if lifecycle and stage in ['full_en','mini','reopened']:
+                assets = json.loads((output/'assets.json').read_text())
+                if any(image['width'] != 128 for image in assets['images']) or not all(font['loaded'] for font in assets['fonts']):
+                    raise RuntimeError('Native resources failed to load: '+json.dumps(assets))
             samples = []
             for _ in range(5):
                 table = processes()

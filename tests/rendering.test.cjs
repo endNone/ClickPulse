@@ -974,3 +974,12 @@ test('recreation restores history, trend and keyboard choices and clamps removed
     assert.equal(sent.length,count,'Hidden layout changes must not overwrite scroll state');
   }
 });
+
+test('local brand images are permitted without allowing remote image sources',()=>{
+  const html=readFileSync('ui/index.html','utf8');
+  const policy=html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
+  const imageSources=policy.split(';').map(part=>part.trim().split(/\s+/)).find(parts=>parts[0]==='img-src').slice(1);
+  assert.ok(imageSources.includes("'self'"),'protocol-served brand images must be allowed');
+  assert.ok(imageSources.includes('data:'),'offline documentation previews still embed images');
+  assert.ok(!imageSources.some(source=>['*','http:','https:'].includes(source)),'remote images stay blocked');
+});
