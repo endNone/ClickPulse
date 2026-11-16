@@ -221,8 +221,7 @@ class ReleaseTests(unittest.TestCase):
         for image, artwork in zip(images, ['platform-windows', 'platform-apple', 'platform-ubuntu']):
             self.assertEqual(image, f'https://github.com/fixture/RenamedApp/blob/v1.2.3/assets/downloads/{artwork}.svg?raw=true')
             self.assertTrue((ROOT/'assets/downloads'/f'{artwork}.svg').is_file())
-        self.assertLess(notes.index("## What's new"), notes.index('Full release notes & downloads'))
-        self.assertLess(notes.index('Full release notes & downloads'), notes.index('## Downloads'))
+        self.assertLess(notes.index("## What's new"), notes.index('## Downloads'))
         self.assertNotIn('Ubuntu', release.release_downloads('0.2.1', 'fixture/RenamedApp'))
         self.assertNotIn('/main/', notes)
         self.assertNotIn('/latest/', notes)

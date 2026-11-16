@@ -4,7 +4,7 @@ GitHub Actions checks and packages ClickPulse on hosted Mac, Windows and Ubuntu 
 
 ## Release download layout
 
-Start with two short release highlights, followed by an underlined **Full release notes & downloads** link to that version's page. Keep this introduction concise so the download entry appears early in the Feed summary. Detailed changes follow the download table.
+Start with two short release highlights, followed directly by the download table. Do not add a redundant link back to the same release page. Detailed changes follow the download table.
 
 | Platform | Download |
 | --- | --- |

@@ -164,7 +164,6 @@ def release_notes(version, repository, revision, private=False, *, artwork_revis
     return f'''## What's new
 
 {highlights}
-[<ins>Full release notes & downloads</ins>](https://github.com/{repository}/releases/tag/v{version})
 {access}
 ## Downloads
 
