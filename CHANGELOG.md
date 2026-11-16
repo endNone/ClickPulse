@@ -8,7 +8,8 @@
 
 ### Improved
 
-- Adjust Settings more easily with compact controls and consistent On/Off options.
+- Set preferences in a cleaner layout with compact controls and clear switches.
+- See a full year of activity, with empty days shown as pale squares.
 - Read a cleaner overview with fewer labels and a consistent brand subtitle.
 
 ### Fixed

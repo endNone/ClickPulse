@@ -14,6 +14,7 @@ const ClickPulseHistory = (() => {
   const difference = (a, b) => Math.round((date(b) - date(a)) / 86400000);
 
   function bounds(records, today, range) {
+    if (range === '365') return { start: addDays(today, -364), end: today };
     if (range === '90') return { start: addDays(today, -89), end: today };
     if (range !== 'all') {
       return { start: range + '-01-01', end: range === today.slice(0, 4) ? today : range + '-12-31' };

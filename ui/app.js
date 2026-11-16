@@ -49,7 +49,7 @@ function renderUpdateState(){
   // the installed app's preference, so show why this setting is unavailable.
   const scheduled=state.automatic!==false;
   const automatic=$('automatic-updates'),last=$('update-last-checked');
-  if(automatic){automatic.value=String(scheduled&&window.presentationView?.auto_check_updates!==false);automatic.disabled=!scheduled||updateInstalling();Dropdowns.sync('automatic-updates');}
+  if(automatic){automatic.checked=scheduled&&window.presentationView?.auto_check_updates!==false;automatic.disabled=!scheduled||updateInstalling();}
   const unavailable=$('update-automatic-unavailable');
   if(unavailable)unavailable.hidden=scheduled;
   const checked=window.presentationView?.last_update_check;
@@ -75,10 +75,10 @@ $('check-updates')?.addEventListener('click',()=>{
   send(['available','ready'].includes(updateState.status)&&!updateState.update_command?(updateState.can_install?'install_update':'update_release'):'check_updates');
 });
 $('update-details')?.addEventListener('click',event=>{event.preventDefault();send('update_release');});
-$('ignore-software-input')?.addEventListener('change',event=>send('ignore_software_input',{enabled:event.target.value==='true'}));
+$('ignore-software-input')?.addEventListener('change',event=>send('ignore_software_input',{enabled:event.target.checked}));
 $('automatic-updates')?.addEventListener('change',event=>{
   if(updateInstalling()||updateState.automatic===false)return;
-  send('automatic_updates',{enabled:event.target.value==='true'});
+  send('automatic_updates',{enabled:event.target.checked});
 });
 
 function renderDataOperation(){
@@ -92,7 +92,7 @@ window.receiveDataBusy=busy=>{
   dataOperationBusy=!!busy;
   renderDataOperation();
 };
-let calendarRange='all',historyRange='all',historyPage=0,calendarLayout='',historySignature='';
+let calendarRange='365',historyRange='all',historyPage=0,calendarLayout='',historySignature='';
 let calendarCells=new Map();
 const H=ClickPulseHistory;
 const titles={overview:'page.overview',history:'page.history',keys:'page.keys',settings:'page.settings'};
@@ -110,8 +110,9 @@ window.receivePaused=paused=>{
   }
   if(changed)sportView?.setPaused(paused);
 };
-window.updateSportActivity=()=>{sportView?.sync(window.presentationView);Dropdowns.sync('sport-visible');};
+window.updateSportActivity=()=>sportView?.sync(window.presentationView);
 function updateHeading(){
+  document.body.dataset.page=page;
   $('page-title').textContent=t(titles[page]);
   $('page-description').hidden=page==='settings';
   $('page-description').textContent=page==='settings'?'':t(titles[page]+'.description');
@@ -323,7 +324,7 @@ function applySessionState(state){
   document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('selected',Number(b.dataset.range)===range));
   for(const [id,value,recent] of [['calendar-range-select',state.calendar_range,true],['history-range-select',state.history_range,false]]){
     const select=$(id);updateRangeOptions(select,recent);
-    select.value=Array.from(select.options).some(option=>option.value===value)?value:'all';Dropdowns.sync(select);
+    select.value=Array.from(select.options).some(option=>option.value===value)?value:recent?'365':'all';Dropdowns.sync(select);
   }
   calendarRange=$('calendar-range-select').value;historyRange=$('history-range-select').value;
   updateHeading();syncSettingsNavigation();updateKeyboardView();
@@ -394,12 +395,12 @@ function renderSettings(){
   $('permission-reset-settings').hidden=onLinux || $('permission-row').hidden || data.capture.listening;
   $('capture-settings').hidden=!!data.source_mode && !data.setup_pending;
   $('ignore-software-row').hidden=onLinux || !!data.source_mode;
-  $('ignore-software-input').value=String(!!window.presentationView?.ignore_software_input);Dropdowns.sync('ignore-software-input');
+  $('ignore-software-input').checked=!!window.presentationView?.ignore_software_input;
   $('handoff-settings').hidden=!data.setup_pending;
   $('takeover').disabled=dataOperationBusy || !data.capture.listening || data.capture.permission_needed;
   $('handoff-description').textContent=t(data.capture.listening?'settings.takeover_ready':'settings.takeover_wait');
   $('autostart-row').hidden=data.auto_start_available!==true;
-  $('autostart').value=String(!!data.auto_start);Dropdowns.sync('autostart');
+  $('autostart').checked=!!data.auto_start;
   setSelectableText($('db-path'),data.demo?t('demo.storage'):data.database_path);
   const storageMode=data.demo?'demo':data.database_mode||'custom';
   const storageDescriptions={default:'settings.storage_default',custom:'settings.storage_custom',source:'settings.storage_source',demo:'settings.storage_demo'};
@@ -506,18 +507,20 @@ function renderDonut(counts){
 }
 function updateRangeOptions(select,includeRecent){
   const options=[['all',t('common.all_history')],...H.years(data.history_days).map(year=>[year,t('common.year',{year})])];
-  if(includeRecent)options.push(['90',t('common.recent90')]);
+  if(includeRecent){options.unshift(['365',t('common.past_year')]);options.push(['90',t('common.recent90')]);}
   const signature=I.locale+':'+options.map(option=>option[0]).join(',');
   if(select.dataset.options===signature)return;
   const selected=select.value;
   select.replaceChildren(...options.map(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;return option}));
-  select.value=options.some(option=>option[0]===selected)?selected:'all';select.dataset.options=signature;
+  select.value=options.some(option=>option[0]===selected)?selected:includeRecent?'365':'all';select.dataset.options=signature;
   Dropdowns.sync(select);
 }
 function renderCalendar(){
   const today=data.now.split('T')[0],bounds=H.bounds(data.history_days,today,calendarRange);
   const days=H.calendarDays(data.history_days,bounds.start,bounds.end);
-  const sections=H.sections(days),layout=I.locale+':'+calendarRange+':'+bounds.start+':'+bounds.end;
+  const firstYear=bounds.start.slice(0,4),lastYear=bounds.end.slice(0,4);
+  const sections=calendarRange==='365'?[{year:firstYear===lastYear?firstYear:firstYear+'–'+lastYear,days}]:H.sections(days);
+  const layout=I.locale+':'+calendarRange+':'+bounds.start+':'+bounds.end;
   if(calendarLayout!==layout){
     calendarCells=new Map();
     $('heatmap').replaceChildren(...sections.map(section=>{
@@ -541,6 +544,7 @@ function renderCalendar(){
       body.append(weekdays,grid);block.append(label,months,body);return block;
     }));
     calendarLayout=layout;
+    if(calendarRange==='365')$('heatmap').scrollLeft=$('heatmap').scrollWidth;
   }
   const max=Math.max(1,...days.map(d=>total(d.counts)));
   for(const d of days){const cell=calendarCells.get(d.day),value=total(d.counts),level=value?Math.max(1,Math.ceil(value/max*4)):0;cell.className='heat-cell level-'+level+(d.day===today?' today':'');cell.title=t('calendar.tooltip',{day:d.day,count:n(value),keyboard:n(d.counts.keyboard),mouse:n(d.counts.mouse)});}
@@ -653,4 +657,4 @@ function renderKeyboardTreemap(view){
 send('ready');
 
 $('takeover').addEventListener('click',()=>send('takeover'));
-$('autostart').addEventListener('change',event=>{if(data?.auto_start_available&&(event.target.value==='true')!==!!data.auto_start)send('autostart');});
+$('autostart').addEventListener('change',event=>{if(data?.auto_start_available&&event.target.checked!==!!data.auto_start)send('autostart');});

@@ -34,6 +34,20 @@ test('recent range is optional and labeled separately from full history',()=>{
   assert.equal(H.bounds(records,'2026-10-07','90').start,'2026-07-10');
 });
 
+test('past year always contains 365 calendar dates and pads time before recording with zeroes',()=>{
+  for(const today of ['2026-11-16','2026-01-01','2024-02-29','2024-03-01']){
+    const bounds=H.bounds([],today,'365');
+    const records=[{day:H.addDays(bounds.start,-1),counts:{keyboard:900,mouse:900}},
+      {day:today,counts:{keyboard:20,mouse:10}},
+      {day:H.addDays(today,1),counts:{keyboard:800,mouse:800}}];
+    const days=H.calendarDays(records,bounds.start,bounds.end);
+    assert.equal(days.length,365);assert.equal(days.at(-1).day,today);
+    assert.ok(days.slice(0,-1).every(day=>count([day])===0));assert.equal(count(days),30);
+    assert.equal(H.calendarDays([],bounds.start,bounds.end).length,365);
+    if(today==='2024-03-01')assert.ok(days.some(day=>day.day==='2024-02-29'));
+  }
+});
+
 test('year partitions, leap dates, and zero-activity gaps are retained',()=>{
   const days=H.calendarDays([], '2024-02-28','2024-03-02');
   assert.deepEqual(days.map(d=>d.day),['2024-02-28','2024-02-29','2024-03-01','2024-03-02']);

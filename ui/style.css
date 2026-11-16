@@ -112,10 +112,17 @@ td:first-child,th:first-child {text-align:left}tbody tr:hover {background:#f6f9f
 .empty-state {text-align:center;padding:45px 20px;color:#7186a3;font-size:12px}
 .empty-state strong {font-weight:600;display:block;margin-bottom:10px;color:#3d5f91}.empty-state p {font-size:11px;line-height:1.8}
 .footnote {font-size:10px;color:#7085a3;line-height:1.8;border-top:1px solid var(--line);margin:22px 0 0;padding-top:15px}
-.settings-card {--settings-control-width:192px;--settings-control-height:36px;text-align:left}
-.settings-card h2 {font-size:var(--ui-section-size);line-height:1.5;margin-bottom:9px}.setting-row {display:flex;justify-content:space-between;align-items:center;gap:18px;padding:19px 0}
-.setting-row + .setting-row {border-top:1px solid var(--line)}.setting-row:last-child {padding-bottom:2px}.setting-row strong {font-size:var(--ui-label-size);line-height:1.5;font-weight:600;color:#365479}
-.setting-row p {font-size:var(--ui-detail-size);line-height:1.7;color:#7186a3;margin:6px 0 0}.path {font:11px var(--mono)!important;overflow-wrap:anywhere}.setting-row>div {min-width:0}
+body[data-page="settings"] main {background:var(--surface)}
+body[data-page="settings"] .content {max-width:1060px;padding:32px 40px 40px}
+body[data-page="settings"] .page-heading {margin-bottom:30px}
+.card.settings-card {--settings-control-height:34px;text-align:left;border:0;border-radius:0;background:transparent;box-shadow:none;padding:0;margin-bottom:34px}
+.settings-card h2 {font-size:13px;line-height:1.5;font-weight:600;color:var(--text);margin-bottom:4px}
+.setting-row {display:flex;justify-content:space-between;align-items:center;gap:24px;min-height:72px;padding:18px 0}
+.setting-row + .setting-row {border-top:1px solid var(--line)}
+.setting-row strong {font-size:var(--ui-label-size);line-height:1.5;font-weight:500;color:#365479}
+.setting-row p {font-size:var(--ui-detail-size);line-height:1.6;color:#7186a3;margin:5px 0 0}
+.setting-row p:empty {display:none}
+.path {font:11px var(--mono)!important;overflow-wrap:anywhere}.setting-row>div {min-width:0}
 .setting-row a {font-size:var(--ui-detail-size);line-height:1.7;color:var(--blue)}
 .setting-row.setting-child {padding-left:20px;border-top:1px solid var(--line)}
 .setting-label {position:relative;display:flex;align-items:center;gap:8px}
@@ -125,7 +132,20 @@ td:first-child,th:first-child {text-align:left}tbody tr:hover {background:#f6f9f
 .setting-help-button svg {width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .setting-help-text {position:absolute;z-index:40;top:100%;left:0;width:340px;max-width:calc(100vw - 72px);padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface);box-shadow:0 6px 20px #172b4a18;color:var(--text);font:400 var(--ui-label-size)/1.6 var(--sans);white-space:normal;visibility:hidden;opacity:0;pointer-events:none}
 .setting-help:hover .setting-help-text,.setting-help:focus-within .setting-help-text {visibility:visible;opacity:1;pointer-events:auto}
-.settings-card .button,.settings-card select {font:500 13px/1.4 var(--sans);text-align:center}
+.settings-card .button,.settings-card select {min-height:var(--settings-control-height);padding:7px 13px;border-radius:10px;border:1px solid var(--control-border);background:var(--surface);box-shadow:none;color:var(--control-text);font:400 13px/1.4 var(--sans);text-align:center}
+.settings-card .button:not(:disabled):hover {background:var(--control-hover);border-color:var(--control-hover-border);box-shadow:none}
+.settings-card .button:disabled:hover {background:var(--surface);border-color:var(--control-border)}
+.settings-card .button.primary {background:var(--blue);border-color:var(--blue);color:white}
+.settings-card .button.primary:not(:disabled):hover {background:var(--accent-hover);border-color:var(--accent-hover)}
+.preference-switch {appearance:none;-webkit-appearance:none;position:relative;flex:0 0 38px;width:38px;height:22px;margin:0;border:0;border-radius:20px;background:#c5d0df;cursor:pointer;transition:background-color .16s}
+.preference-switch::before {content:'';position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:white;box-shadow:0 1px 3px #10254326;transition:transform .16s}
+.preference-switch:checked {background:var(--blue)}
+.preference-switch:checked::before {transform:translateX(16px)}
+.preference-switch:focus-visible {outline:2px solid var(--blue);outline-offset:4px}
+.preference-switch:disabled {opacity:.4;cursor:default}
+@media(max-width:800px) {body[data-page="settings"] .content {padding-inline:24px}.setting-row {gap:16px}}
+@media(prefers-reduced-motion:reduce) {.preference-switch,.preference-switch::before {transition:none}}
+@media(forced-colors:active) {.preference-switch {appearance:auto;-webkit-appearance:auto}.preference-switch::before {display:none}}
 #demo-badge {font-size:10px;color:#497bc1;border:1px solid #bcd2ef;border-radius:4px;padding:4px 7px}
 #toast {position:fixed;bottom:25px;left:50%;transform:translateX(-50%);background:#173b6b;color:#fff;padding:12px 20px;border-radius:7px;font-size:12px;box-shadow:0 5px 24px #17376325;max-width:80%;z-index:10}
 .keyboard-card {font-family:var(--sans)}
@@ -198,8 +218,8 @@ body.compact .close-dialog-actions {margin-top:12px}
 .content,.mini-total,.mini-counts {user-select:text;-webkit-user-select:text}
 button,select {user-select:none;-webkit-user-select:none}
 .setting-actions {display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:100%}
-.settings-card .setting-actions {flex-direction:column;align-items:flex-end}
-.settings-card .setting-row>.button,.settings-card .setting-actions>.button {width:var(--settings-control-width);height:var(--settings-control-height);flex:none}
+.settings-card .setting-actions {flex-direction:row;align-items:center}
+.settings-card .setting-row>.button,.settings-card .setting-actions>.button {min-height:var(--settings-control-height);flex:none;white-space:normal}
 
 .hourly-card .card-heading {align-items:center;margin-bottom:14px}
 .hourly-total {font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}

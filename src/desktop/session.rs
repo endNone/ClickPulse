@@ -19,7 +19,7 @@ impl Default for SessionState {
             page: "overview".into(),
             settings_section: "personalization-settings".into(),
             trend_days: 14,
-            calendar_range: "all".into(),
+            calendar_range: "365".into(),
             history_range: "all".into(),
             history_page: 0,
             keyboard_view: "layout".into(),
@@ -49,7 +49,7 @@ impl SessionState {
 }
 fn valid_range(value: &str, recent: bool) -> bool {
     value == "all"
-        || (recent && value == "90")
+        || (recent && matches!(value, "90" | "365"))
         || (value.len() == 4 && value.bytes().all(|b| b.is_ascii_digit()))
 }
 #[cfg(test)]
@@ -58,7 +58,11 @@ mod tests {
     #[test]
     fn session_state_accepts_navigation_but_rejects_arbitrary_content() {
         let mut state = SessionState::default();
+        assert_eq!(state.calendar_range, "365");
         assert!(state.valid());
+        state.history_range = "365".into();
+        assert!(!state.valid());
+        state.history_range = "all".into();
         state.page = "settings".into();
         state.settings_section = "app-settings".into();
         state.calendar_range = "90".into();

@@ -34,6 +34,10 @@ Sport uses **Warp**, a projected runway that accelerates through light gates. Re
 
 Sport stops sampling and animating when disabled, hidden, expanded into the full window, or not visible. System reduced-motion preferences suppress its animation while keeping the rank and speed readable. The lightweight counter feed updates around every 250 ms; ordinary statistics refresh every 0.5 seconds.
 
+## Activity calendar
+
+The calendar opens on **Past year**: the latest 365 days, ending today. Days without records appear as pale squares, including dates before your first recording. The grid continues across January without splitting into separate years. Choose **All history** or a year to see older records.
+
 ## Themes and language
 
 Choose **Blue**, **Teal**, **Violet** or **Graphite** in Settings. The preference is saved and shared by charts, keyboard views and mini mode.

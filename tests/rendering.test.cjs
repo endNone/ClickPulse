@@ -39,6 +39,7 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   const settingsLinks=['personalization-settings','handoff-settings','capture-settings','storage-settings','app-settings'].map(id=>{const b=new Element();b.dataset.settingsSection=id;return b;});
   for(const id of ['handoff-settings','capture-settings'])get(id).hidden=true;
   const ranges=[14,30,90].map(days=>{const button=new Element();button.dataset.range=String(days);return button;});
+  get('calendar-range-select').value='365';
   get('status').append(new Element());
   get('keyboard-layout').parentElement=new Element();
   get('keyboard-treemap').clientWidth=640;get('keyboard-treemap').clientHeight=279;
@@ -166,7 +167,7 @@ test('Mini Sport controls retain Warp for old preferences and clear energy on pa
   a.window.receiveSport({keyboard:0,mouse:4,available:true,paused:true});assert.equal(a.get('mini-sport-cps').textContent,'0.0');
   a.window.receiveView({locale:'zh-CN',language_preference:'zh-CN'});
   assert.equal(a.get('mini-sport').attributes['aria-label'],messages['zh-CN']['sport.disable']);
-  a.get('sport-visible').value='false';a.get('sport-visible').fire('change');
+  a.get('sport-visible').checked=false;a.get('sport-visible').fire('change');
   assert.deepEqual(sent.pop(),{action:'sport_visible',visible:false});
   a.window.receiveView({sport_visible:false,sport_enabled:false});assert.equal(a.get('mini-sport-readout').hidden,true);
   assert.equal(a.get('mini-widget').dataset.sportSkin,'warp');
@@ -226,6 +227,7 @@ test('Pause acknowledges immediately while statistics are pending and stale repl
 test('the app starts and renders history without Safari 15.4 built-ins',()=>{
   const a=app('macos',true),s=snapshot();
   s.history_days=[{day:'2025-12-31',counts:{keyboard:3,mouse:1}},...s.history_days];
+  a.get('calendar-range-select').value='all';
   a.window.receive(s);
   assert.equal(a.get('heatmap').children.length,2);
   assert.equal(a.get('heatmap').children[1].children[0].children[1].textContent,'Jan 1 — Oct 7');
@@ -296,7 +298,7 @@ for(const platform of ['windows','linux'])test(`${platform} close prompt traps k
 test('calendar literary aside uses only selected keyboard history and follows range, live counts and language',()=>{
   const a=app(),s=snapshot();
   s.history_days=[{day:'2025-06-01',counts:{keyboard:700000,mouse:5000000}},{day:'2026-10-07',counts:{keyboard:1400000,mouse:9000000}}];
-  a.window.receive(s);
+  a.get('calendar-range-select').value='all';a.window.receive(s);
   const aside=a.get('calendar-aside');
   assert.equal(aside.hidden,false);assert.match(aside.textContent,/About 3 copies of Pride and Prejudice/);
   assert.equal(aside.title,messages.en['calendar.literary_basis']);
@@ -392,25 +394,25 @@ test('software-input filtering defaults off and is available only for supported 
     const a=app(platform),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
     a.window.receive(snapshot());a.navigate('settings');
     assert.equal(a.get('ignore-software-row').hidden,platform==='linux');
-    assert.equal(a.get('ignore-software-input').value,'false');
+    assert.equal(a.get('ignore-software-input').checked,false);
     a.window.receiveView({ignore_software_input:true});
-    assert.equal(a.get('ignore-software-input').value,'true');
-    a.get('ignore-software-input').value='false';a.get('ignore-software-input').fire('change');
+    assert.equal(a.get('ignore-software-input').checked,true);
+    a.get('ignore-software-input').checked=false;a.get('ignore-software-input').fire('change');
     assert.deepEqual(sent.at(-1),{action:'ignore_software_input',enabled:false});
   }
 });
 
-test('startup dropdown shows current state and toggles only when a different state is chosen',()=>{
+test('startup switch shows current state and toggles only when a different state is chosen',()=>{
   const a=app('windows'),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
   a.window.receive(snapshot());a.navigate('settings');
   const control=a.get('autostart');sent.length=0;
-  assert.equal(control.value,'true');control.fire('change');assert.equal(sent.length,0);
-  control.value='false';control.fire('change');assert.deepEqual(sent.pop(),{action:'autostart'});
-  a.window.receive({...snapshot(),auto_start:false});assert.equal(control.value,'false');
+  assert.equal(control.checked,true);control.fire('change');assert.equal(sent.length,0);
+  control.checked=false;control.fire('change');assert.deepEqual(sent.pop(),{action:'autostart'});
+  a.window.receive({...snapshot(),auto_start:false});assert.equal(control.checked,false);
   control.fire('change');assert.equal(sent.length,0);
-  control.value='true';control.fire('change');assert.deepEqual(sent.pop(),{action:'autostart'});
+  control.checked=true;control.fire('change');assert.deepEqual(sent.pop(),{action:'autostart'});
   a.window.receive({...snapshot(),auto_start:false,auto_start_available:false});
-  control.value='true';control.fire('change');assert.equal(sent.length,0);
+  control.checked=true;control.fire('change');assert.equal(sent.length,0);
 });
 
 test('macOS access guidance explains stale grants and names a completed update',()=>{
@@ -601,6 +603,25 @@ test('language changes invalidate visible and deferred chart labels',()=>{
   a.window.receiveView({locale:'en',language_preference:'system'});
   assert.equal(a.get('trend-chart').replacements,3);
 });
+test('past-year calendar pads missing dates in one cross-year grid and retains access to older history',()=>{
+  const a=app(),s=snapshot(),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+  s.history_days=[{day:'2023-03-01',counts:{keyboard:700000,mouse:9000}},...s.history_days];
+  a.window.receive(s);
+  const cells=()=>a.get('heatmap').children.flatMap(section=>section.children[2].children[1].children).filter(cell=>cell.dataset.day);
+  assert.equal(a.get('calendar-range-select').value,'365');assert.equal(a.get('heatmap').children.length,1);
+  assert.equal(cells().length,365);assert.equal(cells()[0].dataset.day,'2025-10-08');
+  assert.equal(cells().at(-1).dataset.day,'2026-10-07');
+  assert.ok(cells().slice(0,-1).every(cell=>cell.className==='heat-cell level-0'));
+  assert.match(cells().at(-1).className,/today/);assert.equal(a.get('active-days').textContent,'1 active days');
+  assert.match(a.get('calendar-range').textContent,/120 events/);
+  a.window.captureSessionState();const saved=sent.at(-1).state;
+  const b=app();b.window.restoreSessionState(saved);b.window.receive(s);
+  assert.equal(b.get('calendar-range-select').value,'365');assert.equal(b.get('heatmap').children.length,1);
+  const select=a.get('calendar-range-select');select.value='2023';select.fire('change');
+  assert.match(a.get('calendar-range').textContent,/709,000 events/);
+  select.value='all';select.fire('change');
+  assert.match(a.get('calendar-range').textContent,/709,120 events/);
+});
 test('the calendar advances at local midnight even when counters are unchanged',()=>{
   const a=app(),s=snapshot();a.window.receive(s);
   assert.equal(a.get('heatmap').replacements,1);
@@ -772,7 +793,7 @@ test('Sport is hidden and inactive by default until its control is explicitly en
   const a=app();a.window.receiveView({});a.window.receive(snapshot());
   assert.equal(a.window.presentationView.sport_enabled,false);
   assert.equal(a.window.presentationView.sport_visible,false);
-  assert.equal(a.get('sport-visible').value,'false');
+  assert.equal(a.get('sport-visible').checked,false);
   a.window.receiveView({compact:true});assert.equal(a.get('mini-sport').hidden,true);assert.equal(a.intervals.size,0);
   a.window.receiveView({sport_visible:true});assert.equal(a.get('mini-sport').hidden,false);assert.equal(a.intervals.size,0);
   a.window.receiveView({sport_enabled:true});assert.equal(a.intervals.size,1);
@@ -932,16 +953,16 @@ test('daily update preference and last attempt survive UI refresh and language c
   for(const platform of ['macos','windows'])for(const locale of Object.keys(messages)){
     const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
     a.window.receiveView({locale,auto_check_updates:false,last_update_check:1794310000});
-    assert.equal(a.get('automatic-updates').value,'false');
+    assert.equal(a.get('automatic-updates').checked,false);
     assert.equal(a.get('update-last-checked').hidden,false);
     assert.ok(a.get('update-last-checked').textContent.startsWith(messages[locale]['update.last_checked'].split('{time}')[0]));
-    a.get('automatic-updates').value='true';a.get('automatic-updates').fire('change');
+    a.get('automatic-updates').checked=true;a.get('automatic-updates').fire('change');
     assert.deepEqual(sent.pop(),{action:'automatic_updates',enabled:true});
     a.window.receiveView({auto_check_updates:true});a.window.receive(snapshot());
-    assert.equal(a.get('automatic-updates').value,'true');assert.equal(sent.length,0);
+    assert.equal(a.get('automatic-updates').checked,true);assert.equal(sent.length,0);
     a.window.receiveUpdateState({status:'checking'});assert.equal(a.get('automatic-updates').disabled,false);
     a.window.receiveUpdateState({status:'downloading'});assert.equal(a.get('automatic-updates').disabled,false);
-    a.get('automatic-updates').value='false';a.get('automatic-updates').fire('change');
+    a.get('automatic-updates').checked=false;a.get('automatic-updates').fire('change');
     assert.deepEqual(sent.pop(),{action:'automatic_updates',enabled:false});
     for(const last_update_check of [null,undefined,'invalid',Number.MAX_VALUE]){
       a.window.receiveView({last_update_check});assert.equal(a.get('update-last-checked').hidden,true);
@@ -955,10 +976,10 @@ test('demo, read-only and independent sessions cannot change the installed app d
     assert.equal(a.get('update-automatic-unavailable').hidden,true);
     a.window.receiveUpdateState({status:'current',current:'0.2.0',automatic:false});
     const toggle=a.get('automatic-updates');
-    assert.equal(toggle.value,'false');assert.equal(toggle.disabled,true);
+    assert.equal(toggle.checked,false);assert.equal(toggle.disabled,true);
     assert.equal(a.get('update-automatic-unavailable').hidden,false);
     assert.equal(a.get('update-last-checked').hidden,true);
-    toggle.value='true';toggle.fire('change');assert.equal(sent.length,0);
+    toggle.checked=true;toggle.fire('change');assert.equal(sent.length,0);
     // Manual checks stay available in these sessions.
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
     assert.ok(messages[locale]['update.automatic_unavailable']);
