@@ -8,14 +8,14 @@ Native Rust capture, local SQLite summaries, full history, activity calendar, ke
 
 The 0.1.0 preview adds transactional schema versions, explicit legacy encoding metadata, preserved damaged preferences with a localized recovery notice, asynchronous snapshot delivery, strict typed IPC validation and compatibility fixes for earlier macOS 12 WebKit versions.
 
-Release 0.2.0 adds Mini Sport, hourly activity, selectable time zones, eight languages and SQLite import/folder controls, with complete packages, corresponding source and checksums. Automated checks and packaging pass on hosted Apple Silicon, Intel Mac and Windows x64 runners, with release tooling checked on Linux. Private security reports use GitHub's vulnerability-reporting form. Desktop interaction and physical-input coverage are recorded separately below.
+Release 0.2.0 adds Mini Sport, hourly activity, selectable time zones, eight languages and SQLite import/folder controls, with complete packages, corresponding source and checksums. Private security reports use GitHub's vulnerability-reporting form.
 
 Release 0.2.1 adds daily and manual update checks, verified installation with explicit confirmation, persistent one-time reminders, bounded failure logs and clearer Settings controls. It also caches calendar history for read-only sources. Existing 0.2.0 installations need a manual upgrade once to obtain the updater.
 
 ## Release follow-up
 
 1. Extend Windows hardware coverage for physical special keys, sign-out/sign-in, multi-display DPI, upgrades and removal. Record publisher-trust behavior with Smart App Control separately from capture results.
-   Intel Mac packages pass native hosted checks; extend desktop, Input Monitoring, physical-input and upgrade coverage on Intel hardware.
+   Extend desktop, Input Monitoring, physical-input and upgrade coverage on Intel Mac hardware.
 2. For each new version, repeat Checks, Packages and Release candidate verification against its exact tagged source. Keep platform assets, corresponding source and checksums together; published release tags remain immutable.
 3. Evaluate signing and notarization when distribution arrangements change. The current preview uses Mac ad-hoc signing and unsigned Windows portable ZIPs.
 4. Keep English screenshots current after interface changes; the overview now reads the project version automatically. Maintain the first-party Homebrew/Scoop sources and validate installation/removal on both Mac architectures and Windows. Developer ID signing/notarization and Windows trusted signing are still needed to reduce first-launch security friction.
