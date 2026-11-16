@@ -66,6 +66,16 @@ pub(crate) fn spawn(
     stop: Arc<AtomicBool>,
     status: Arc<Mutex<CaptureStatus>>,
 ) -> Result<JoinHandle<()>> {
+    let storage_blocked = status
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Capture status is unavailable"))?
+        .storage_blocked
+        .clone();
+    let ignore_software_input = status
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Capture status is unavailable"))?
+        .ignore_software_input
+        .clone();
     Ok(thread::Builder::new()
         .name("clickpulse-input".into())
         .spawn(move || {
@@ -84,7 +94,9 @@ pub(crate) fn spawn(
                     thread::sleep(Duration::from_millis(300));
                     continue;
                 }
-                let keys = RefCell::new(KeyTracker::default());
+                // Independent state prevents a generated release from clearing
+                // a physically held key, including when the setting changes.
+                let keys = RefCell::new([KeyTracker::default(), KeyTracker::default()]);
                 let _caps_lock = match caps_lock::CapsLockCapture::start(
                     tx.clone(), paused.clone(), stop.clone(), status.clone(),
                 ) {
@@ -107,6 +119,8 @@ pub(crate) fn spawn(
                 let cb_status = status.clone();
                 let cb_tx = tx.clone();
                 let cb_paused = paused.clone();
+                let cb_storage_blocked = storage_blocked.clone();
+                let cb_ignore = ignore_software_input.clone();
                 let cb_stop = stop.clone();
                 let tap = CGEventTap::new(
                     CGEventTapLocation::Session,
@@ -121,7 +135,12 @@ pub(crate) fn spawn(
                         CGEventType::OtherMouseDown,
                     ],
                     move |_, kind, event| {
-                        let mut keys = keys.borrow_mut();
+                        let generated = event.get_integer_value_field(EventField::EVENT_SOURCE_UNIX_PROCESS_ID) != 0;
+                        let mut trackers = keys.borrow_mut();
+                        if matches!(kind, CGEventType::TapDisabledByTimeout | CGEventType::TapDisabledByUserInput) {
+                            for keys in trackers.iter_mut() { keys.reset(); }
+                        }
+                        let keys = &mut trackers[usize::from(generated)];
                         let input = match kind {
                             CGEventType::TapDisabledByTimeout
                             | CGEventType::TapDisabledByUserInput => {
@@ -176,7 +195,9 @@ pub(crate) fn spawn(
                             )),
                             _ => None,
                         };
-                        if !cb_paused.load(Ordering::Relaxed)
+                        if !cb_storage_blocked.load(Ordering::Relaxed)
+                            && !(generated && cb_ignore.load(Ordering::Relaxed))
+                            && !cb_paused.load(Ordering::Relaxed)
                             && !cb_stop.load(Ordering::Relaxed)
                             && let Some((device, code)) = input
                         {

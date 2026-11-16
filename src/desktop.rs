@@ -16,6 +16,8 @@ mod data_settings;
 mod edit_menu;
 mod ipc;
 mod refresh;
+mod session;
+mod storage_status;
 mod updates;
 mod webview;
 mod window;
@@ -37,12 +39,14 @@ use window::update_windows_region;
 use window::{
     COMPACT_SIZE, WindowLayout, fix_compact_size, present_window, saved_full_position, set_compact,
 };
-use wry::WebViewBuilder;
 
 #[derive(Debug)]
 enum UiEvent {
     Update(updates::Event),
-    Ipc(String),
+    Ipc {
+        generation: u64,
+        body: String,
+    },
     Menu(MenuEvent),
     Snapshot {
         id: u64,
@@ -166,12 +170,16 @@ pub fn run(
         Some(Runtime::start(path, legacy, paused)?)
     };
 
+    if let Some(runtime) = &runtime {
+        runtime.set_ignore_software_input(preferences.ignore_software_input);
+    }
+
     let builder = WindowBuilder::new()
         .with_title(locale.text("native.full_title"))
         .with_transparent(cfg!(any(target_os = "macos", target_os = "linux")))
         .with_inner_size(LogicalSize::new(1160.0, 840.0))
         .with_min_inner_size(LogicalSize::new(900.0, 680.0))
-        .with_visible(!options.background && !preferences.compact);
+        .with_visible(false);
     #[cfg(target_os = "macos")]
     let builder = {
         use tao::platform::macos::WindowBuilderExtMacOS;
@@ -212,109 +220,13 @@ pub fn run(
     } else {
         "native.full_title"
     }));
+    // Tao's macOS proxy clone registers a source and wakes the run loop.
+    // Share one proxy so idle checks and snapshot replies cannot wake themselves.
+    let ui_proxy = Arc::new(event_loop.create_proxy());
+    let mut webview = VisibleWebView::default();
     if !options.background {
-        window.set_visible(true);
+        webview.ensure(&window, ui_proxy.clone(), locale, &preferences)?;
     }
-    let proxy = event_loop.create_proxy();
-    let html = include_str!("../ui/index.html")
-        .replace("__VERSION__", clickpulse::version::PUBLIC)
-        .replace("__BRAND_MARK__", &clickpulse::branding::mark_data_url())
-        .replace("__LOCALE__", locale.code())
-        .replace("__THEME__", preferences.theme.code())
-        .replace("__PLATFORM__", clickpulse::platform::name())
-        .replace("/*__MESSAGES__*/", include_str!("../ui/locales.json"))
-        .replace(
-            "/*__STYLE__*/",
-            &format!(
-                "{}\n{}\n{}\n{}\n{}\n{}\n{}",
-                clickpulse::branding::font_css(),
-                include_str!("../ui/style.css"),
-                include_str!("../ui/history.css"),
-                include_str!("../ui/compact.css"),
-                include_str!("../ui/themes.css"),
-                include_str!("../ui/dropdown.css"),
-                include_str!("../ui/sport.css")
-            ),
-        )
-        .replace(
-            "/*__SCRIPT__*/",
-            &format!(
-                "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
-                include_str!("../ui/i18n.js"),
-                include_str!("../ui/themes.js"),
-                include_str!("../ui/dropdown.js"),
-                include_str!("../ui/history.js"),
-                include_str!("../ui/keyboard.js"),
-                include_str!("../ui/sport.js"),
-                include_str!("../ui/app.js"),
-                include_str!("../ui/presentation.js")
-            ),
-        );
-    #[cfg(target_os = "windows")]
-    let mut web_context =
-        wry::WebContext::new(Some(clickpulse::platform::data_dir()?.join("webview")));
-    #[cfg(target_os = "windows")]
-    let builder = WebViewBuilder::new_with_web_context(&mut web_context)
-        .with_custom_protocol("clickpulse".into(), move |_, request| {
-            use std::borrow::Cow;
-            let (content_type, body, status): (&str, Cow<'static, [u8]>, u16) =
-                match request.uri().path() {
-                    "/index.html" => (
-                        "text/html; charset=utf-8",
-                        Cow::Owned(html.as_bytes().to_vec()),
-                        200,
-                    ),
-                    "/fonts/NotoSansSC.ttf" => (
-                        "font/ttf",
-                        Cow::Borrowed(include_bytes!("../assets/fonts/NotoSansSC.ttf")),
-                        200,
-                    ),
-                    "/fonts/NotoSansMono.ttf" => (
-                        "font/ttf",
-                        Cow::Borrowed(include_bytes!("../assets/fonts/NotoSansMono.ttf")),
-                        200,
-                    ),
-                    "/fonts/Inter.ttf" => (
-                        "font/ttf",
-                        Cow::Borrowed(include_bytes!("../assets/fonts/Inter.ttf")),
-                        200,
-                    ),
-                    _ => ("text/plain", Cow::Borrowed(b"Not found"), 404),
-                };
-            wry::http::Response::builder()
-                .status(status)
-                .header("Content-Type", content_type)
-                .body(body)
-                .expect("static resource response")
-        })
-        .with_url("clickpulse://localhost/index.html");
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let builder = WebViewBuilder::new().with_html(html);
-    let builder = builder
-        .with_transparent(cfg!(any(target_os = "macos", target_os = "linux")))
-        .with_navigation_handler(|url| {
-            url == "about:blank"
-                || url.starts_with("about:blank#")
-                || matches!(
-                    url.as_str(),
-                    "clickpulse://localhost/index.html"
-                        | "http://clickpulse.localhost/index.html"
-                        | "https://clickpulse.localhost/index.html"
-                )
-        })
-        .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
-        .with_ipc_handler(move |req| {
-            let _ = proxy.send_event(UiEvent::Ipc(req.body().clone()));
-        });
-    #[cfg(not(target_os = "linux"))]
-    let webview = builder.build(window.as_ref())?;
-    #[cfg(target_os = "linux")]
-    let webview = {
-        use tao::platform::unix::WindowExtUnix;
-        use wry::WebViewBuilderExtUnix;
-        builder.build_gtk(window.default_vbox().expect("Tao GTK container"))?
-    };
-    let webview = VisibleWebView::new(webview, !options.background);
     let menu = Menu::new();
     let show = MenuItem::new(locale.text("native.open"), true, None);
     let mini = MenuItem::new(locale.text("action.mini"), true, None);
@@ -342,6 +254,7 @@ pub fn run(
         &PredefinedMenuItem::separator(),
         &quit,
     ])?;
+    let mut storage_alert = storage_status::StorageAlert::default();
     let tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_icon(tray_icon()?)
@@ -349,13 +262,13 @@ pub fn run(
         .with_menu_on_left_click(!cfg!(target_os = "windows"))
         .with_tooltip(locale.text("native.tooltip"))
         .build()?;
-    let proxy = event_loop.create_proxy();
+    let proxy = ui_proxy.clone();
     MenuEvent::set_event_handler(Some(move |event| {
         let _ = proxy.send_event(UiEvent::Menu(event));
     }));
     #[cfg(target_os = "windows")]
     {
-        let proxy = event_loop.create_proxy();
+        let proxy = ui_proxy.clone();
         tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
             if matches!(
                 event,
@@ -368,7 +281,7 @@ pub fn run(
             }
         }));
         if let Some(instance) = &mut activation {
-            let proxy = event_loop.create_proxy();
+            let proxy = ui_proxy.clone();
             instance.listen(move || {
                 let _ = proxy.send_event(UiEvent::Activate);
             })?;
@@ -376,9 +289,12 @@ pub fn run(
     }
     let mut next_refresh = Instant::now();
     let mut ready = false;
+    let mut restore_pending = false;
+    let mut session_state = session::SessionState::default();
     let mut demo_paused = false;
     let mut visible = !options.background;
-    let snapshot_proxy = event_loop.create_proxy();
+    let mut pending_presentation = visible.then(|| Instant::now() + Duration::from_millis(1500));
+    let snapshot_proxy = ui_proxy;
     let mut snapshots = SnapshotGate::default();
     let mut sport_samples = SnapshotGate::default();
     let mut last_sport_sample = Instant::now() - Duration::from_secs(1);
@@ -401,7 +317,7 @@ pub fn run(
         );
     }
     let handle_event = move |event: Event<'_, UiEvent>,
-                             target: &EventLoopWindowTarget<UiEvent>,
+                             _target: &EventLoopWindowTarget<UiEvent>,
                              flow: &mut ControlFlow| {
         let _ = &profile_lock;
         if !matches!(*flow, ControlFlow::ExitWithCode(_)) {
@@ -409,7 +325,11 @@ pub fn run(
         }
         let previous_compact = preferences.compact;
         let previously_active = webview.is_active();
-        webview.set_active(visible && window.is_visible() && !window.is_minimized());
+        webview.set_active(
+            visible
+                && (window.is_visible() || pending_presentation.is_some())
+                && !window.is_minimized(),
+        );
         let mut refresh = !previously_active && webview.is_active();
         let mut view_changed = refresh;
         match event {
@@ -488,6 +408,11 @@ pub fn run(
                                     if compact { "receiveMini" } else { "receive" }
                                 ));
                             }
+                            Err(_)
+                                if runtime
+                                    .as_ref()
+                                    .and_then(|rt| rt.capture_status().ok())
+                                    .is_some_and(|capture| capture.storage_error.is_some()) => {}
                             Err(error) => {
                                 eprintln!("error.stats: {error}");
                                 toast(&webview, &locale.text("error.stats"));
@@ -560,26 +485,50 @@ pub fn run(
                 }
             }
             Event::Reopen { .. } => {
-                present_window(target, &window, &mut layout, &mut preferences, false);
+                present_window(
+                    &window,
+                    &mut layout,
+                    &mut preferences,
+                    false,
+                    &mut pending_presentation,
+                );
                 visible = true;
                 view_changed = true;
                 refresh = true;
             }
             #[cfg(target_os = "windows")]
             Event::UserEvent(UiEvent::Activate) => {
-                present_window(target, &window, &mut layout, &mut preferences, false);
+                present_window(
+                    &window,
+                    &mut layout,
+                    &mut preferences,
+                    false,
+                    &mut pending_presentation,
+                );
                 visible = true;
                 view_changed = true;
                 refresh = true;
             }
             Event::UserEvent(UiEvent::Menu(event)) => {
                 if event.id == show.id() {
-                    present_window(target, &window, &mut layout, &mut preferences, false);
+                    present_window(
+                        &window,
+                        &mut layout,
+                        &mut preferences,
+                        false,
+                        &mut pending_presentation,
+                    );
                     visible = true;
                     view_changed = true;
                     refresh = true;
                 } else if event.id == mini.id() {
-                    present_window(target, &window, &mut layout, &mut preferences, true);
+                    present_window(
+                        &window,
+                        &mut layout,
+                        &mut preferences,
+                        true,
+                        &mut pending_presentation,
+                    );
                     visible = true;
                     view_changed = true;
                     refresh = true;
@@ -597,9 +546,17 @@ pub fn run(
                     *flow = ControlFlow::Exit;
                 }
             }
-            Event::UserEvent(UiEvent::Ipc(body)) => {
+            Event::UserEvent(UiEvent::Ipc { generation, body }) => {
+                if !webview.accepts(generation) {
+                    return;
+                }
                 if let Ok(request) = serde_json::from_str::<Request>(&body) {
                     match request {
+                        Request::SessionState { state } => {
+                            if state.valid() {
+                                session_state = state;
+                            }
+                        }
                         Request::Language { language } => {
                             preferences.language = language;
                             locale = language.resolve();
@@ -657,17 +614,19 @@ pub fn run(
                         }
                         Request::Ready {} => {
                             ready = true;
+                            webview.mark_ready();
+                            restore_pending = true;
                             updates.publish(&webview);
                             view_changed = true;
                             refresh = true;
                         }
                         mode @ (Request::Compact {} | Request::Expand {}) => {
                             present_window(
-                                target,
                                 &window,
                                 &mut layout,
                                 &mut preferences,
                                 matches!(mode, Request::Compact {}),
+                                &mut pending_presentation,
                             );
                             visible = true;
                             view_changed = true;
@@ -734,6 +693,13 @@ pub fn run(
                             view_changed = true;
                         }
                         Request::Refresh {} => refresh = true,
+                        Request::IgnoreSoftwareInput { enabled } => {
+                            preferences.ignore_software_input = enabled;
+                            if let Some(runtime) = &runtime {
+                                runtime.set_ignore_software_input(enabled);
+                            }
+                            view_changed = true;
+                        }
                         Request::Sport { enabled } => {
                             preferences.sport_enabled = enabled && preferences.sport_visible;
                             view_changed = true;
@@ -821,6 +787,9 @@ pub fn run(
                                         Ok(new_path) => {
                                             match Runtime::start_owned(&new_path, false) {
                                                 Ok(rt) => {
+                                                    rt.set_ignore_software_input(
+                                                        preferences.ignore_software_input,
+                                                    );
                                                     runtime = Some(rt);
                                                     source_mode = false;
                                                     setup_pending = false;
@@ -974,8 +943,7 @@ pub fn run(
                 next_refresh =
                     Instant::now() + refresh::interval(webview.is_active(), preferences.compact);
                 let now = chrono::Utc::now().timestamp();
-                if ready
-                    && data_job.is_none()
+                if data_job.is_none()
                     && !quit_after_data
                     && updates.automatic_due(
                         preferences.auto_check_updates,
@@ -1008,33 +976,66 @@ pub fn run(
                 {
                     eprintln!("Update handoff failed: {error:#}");
                 }
-                #[cfg(target_os = "windows")]
-                {
-                    use wry::WebViewExtWindows;
-                    // Close the renderer after pending input has been saved.
-                    // The controller/environment then drop on normal return.
-                    unsafe {
-                        webview.inner.controller().Close().ok();
-                    }
-                }
+                webview.dispose();
+                return;
             }
             _ => {}
         }
         // Reopening restores the latest state once, including results received hidden.
-        if ready
-            && data_job.is_none()
+        if data_job.is_none()
             && !quit_after_data
             && !matches!(*flow, ControlFlow::ExitWithCode(_))
             && updates.download_if_available(snapshot_proxy.clone())
         {
             updates.publish(&webview);
         }
-        let active = visible && window.is_visible() && !window.is_minimized();
+        let active = visible
+            && (window.is_visible() || pending_presentation.is_some())
+            && !window.is_minimized();
         if active && !webview.is_active() {
             view_changed = true;
             refresh = true;
         }
-        webview.set_active(active);
+        if active && !matches!(*flow, ControlFlow::ExitWithCode(_)) {
+            match webview.ensure(&window, snapshot_proxy.clone(), locale, &preferences) {
+                Ok(true) => {
+                    ready = false;
+                    snapshots.invalidate();
+                    sport_samples.invalidate();
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    // Leave the tray/recorder alive and allow another Open attempt.
+                    eprintln!("Unable to create interface: {error:#}");
+                    window.set_visible(false);
+                    visible = false;
+                    rfd::MessageDialog::new()
+                        .set_title("ClickPulse")
+                        .set_description(locale.text("error.stats"))
+                        .show();
+                }
+            }
+        }
+        webview.set_active(active && visible);
+        if webview.release_if_idle(
+            Instant::now(),
+            data_job.is_some() || updates.installing() || quit_after_data,
+        ) {
+            ready = false;
+            snapshots.invalidate();
+            sport_samples.invalidate();
+        }
+        // Ready may arrive after an immediate Hide. Keep restoration pending
+        // until the existing view is actually resumed, not only on cold creation.
+        if restore_pending
+            && webview.is_ready()
+            && let Ok(state) = serde_json::to_string(&session_state)
+            && webview
+                .evaluate_script(&format!("window.restoreSessionState?.({state});"))
+                .is_ok()
+        {
+            restore_pending = false;
+        }
         if preferences.compact != previous_compact {
             snapshots.invalidate();
             sport_samples.invalidate();
@@ -1051,7 +1052,7 @@ pub fn run(
         // A sheet attached to a hidden or Mini window can be inaccessible.
         // Keep the result until the full window is visible again.
         if data_job.is_none()
-            && ready
+            && webview.is_ready()
             && visible
             && !preferences.compact
             && let Some(notice) = data_notice.take()
@@ -1062,6 +1063,9 @@ pub fn run(
                 }
                 DataNotice::Failed(error) => data_settings::show_error(&window, locale, &error),
             }
+        }
+        if ready && webview.is_active() && !preferences.compact {
+            updates.publish_notice(&webview);
         }
         // Do not spend the one-time reminder on a hidden, minimized, inactive
         // or Mini window. The pending version survives until a full view opens.
@@ -1098,8 +1102,8 @@ pub fn run(
             mini.set_text(locale.text("action.mini"));
             hide.set_text(locale.text("native.hide"));
             quit.set_text(locale.text("native.quit"));
-            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
-            if ready {
+            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"ignore_software_input":preferences.ignore_software_input,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
+            if webview.is_ready() {
                 let _ = webview.evaluate_script(&format!(
                     "window.receiveView({view});window.receiveDataBusy?.({});",
                     data_job.is_some()
@@ -1117,7 +1121,7 @@ pub fn run(
                 }
             }
         }
-        if refresh && ready {
+        if refresh {
             // A history query must not delay acknowledgement of Pause/Resume.
             let paused = runtime.as_ref().map_or(demo_paused, Runtime::is_paused);
             let _ = webview.evaluate_script(&format!("window.receivePaused({paused});"));
@@ -1125,8 +1129,9 @@ pub fn run(
                 && let Ok(capture) = rt.capture_status()
             {
                 update_status(&tray, &pause, locale, source_mode, rt.is_paused(), &capture);
+                storage_alert.update(&tray, &webview, locale, &capture);
             }
-            if webview.is_active() && data_job.is_none() {
+            if ready && webview.is_active() && data_job.is_none() {
                 if let Some(rt) = &runtime {
                     if let Some(id) = snapshots.begin() {
                         let proxy = snapshot_proxy.clone();
@@ -1167,8 +1172,27 @@ pub fn run(
                 }
             }
         }
+        if !visible || window.is_minimized() {
+            pending_presentation = None;
+        }
         if !matches!(*flow, ControlFlow::ExitWithCode(_)) {
-            *flow = ControlFlow::WaitUntil(next_refresh);
+            if pending_presentation
+                .is_some_and(|deadline| webview.is_ready() || Instant::now() >= deadline)
+            {
+                // Apply language, theme and restored navigation before exposing
+                // the new renderer. A failed Ready cannot hide the app forever.
+                #[cfg(target_os = "macos")]
+                {
+                    use tao::platform::macos::EventLoopWindowTargetExtMacOS;
+                    _target.show_application();
+                }
+                window.set_visible(true);
+                window.set_focus();
+                pending_presentation = None;
+            }
+            *flow = ControlFlow::WaitUntil(
+                pending_presentation.map_or(next_refresh, |deadline| deadline.min(next_refresh)),
+            );
         }
     };
     #[cfg(target_os = "windows")]
@@ -1388,9 +1412,7 @@ fn demo_snapshot_in_timezone(
         },
         capture: CaptureStatus {
             listening: true,
-            permission_needed: false,
-            error: None,
-            error_code: None,
+            ..Default::default()
         },
         paused,
         database_path: "Demo data · no database".into(),

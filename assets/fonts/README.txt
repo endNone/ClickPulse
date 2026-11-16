@@ -1,11 +1,16 @@
-Bundled fonts (unaltered upstream files)
+Bundled fonts: local WOFF2 subsets
 
 Inter: https://github.com/rsms/inter
-Noto Sans SC: https://github.com/google/fonts/tree/main/ofl/notosanssc
 Noto Sans Mono: https://github.com/google/fonts/tree/main/ofl/notosansmono
 
+The bundled files are modified subsets, renamed internally with a ClickPulse prefix.
+They retain Latin and Latin Extended characters, punctuation, currencies, arrows,
+and math symbols. Variable weights remain available. Reproduce them with
+scripts/subset_fonts.py and fonttools[woff], using the original TTF files from
+v0.3.0/assets/fonts. The script checks the original file hashes.
+
 Each font is distributed under SIL Open Font License 1.1.
-The corresponding copyright notice and complete license are in the *-OFL.txt files.
-Font files are embedded in the app for offline rendering, without installing system fonts.
-Noto font files were downloaded from the official google/fonts repository on 2026-10-07.
-The Inter copyright and license are retained in Inter-OFL.txt.
+Copyright notices and complete licenses remain in the *-OFL.txt files.
+Fonts load locally on demand; no font is downloaded or installed at runtime.
+Chinese, Japanese and Korean use regional system fonts. Ubuntu installations
+need fonts-noto-cjk; see docs/install-linux.md.

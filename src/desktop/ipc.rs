@@ -23,6 +23,9 @@ pub(super) enum Request {
     InstallUpdate {},
     UpdateRelease {},
     Ready {},
+    SessionState {
+        state: super::session::SessionState,
+    },
     Compact {},
     Expand {},
     Drag {},
@@ -37,6 +40,9 @@ pub(super) enum Request {
         visible: bool,
     },
     Pause {},
+    IgnoreSoftwareInput {
+        enabled: bool,
+    },
     Permission {},
     Autostart {},
     Reveal {},
@@ -85,6 +91,8 @@ mod tests {
             r#"{"action":"language","language":"it"}"#,
             r#"{"action":"quit","theme":"blue"}"#,
             r#"{"action":"sport","enabled":"true"}"#,
+            r#"{"action":"ignore_software_input","enabled":"true"}"#,
+            r#"{"action":"ignore_software_input"}"#,
             r#"{"action":"sport_skin","skin":"unknown"}"#,
             // Warp is the only Sport effect; there is no skin choice to send.
             r#"{"action":"sport_skin","skin":"warp"}"#,

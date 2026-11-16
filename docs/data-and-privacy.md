@@ -8,6 +8,8 @@ A held key counts once until released. Shift does not change a physical key’s 
 
 Statistics work offline, with no telemetry, account, cloud sync or upload service. Starting with 0.2.1, normal desktop sessions contact this project's GitHub release API once per 24-hour window by default, including after startup if the saved check is due. Failed checks can retry a few times while the app remains open. Turn off **Check automatically every day** in Settings to stop automatic checks and retries. **Check for updates** makes a manual request. Starting with 0.3.1, available updates download automatically from GitHub for ordinary installations; **Update & restart** confirms installation. Scoop and WinGet installations use their package manager instead. Activity data and preferences are never uploaded. Downloading build dependencies and installing WebView2 are separate steps that can require network access.
 
+**Ignore software-generated input** is off by default. On macOS it excludes recognized software-generated events; on Windows it excludes recognized software-generated keystrokes while preserving touchpad clicks. Virtual devices and some automation tools may be indistinguishable from physical devices.
+
 ## Time and retention
 
 Today and the last seven days follow local calendar days. Rolling windows cover `(now − window, now]` and exclude future timestamps. Older minute-only records show `≈` until precise records cover the entire window.
@@ -43,7 +45,9 @@ The reference is [Project Gutenberg’s English edition, number 1342](https://ww
 
 ## Saving, updates and migration
 
-SQLite uses WAL. A persistence or queue failure stops capture and shows an error. Auxiliary log failures retry without blocking the database. Normal exit stops input and drains pending records first.
+Temporary save failures are retried while pending activity stays in memory. After a prolonged failure, recording pauses with a tray warning and a notification attempt. Check the data folder and free space; saving and recording resume automatically when possible. Keep ClickPulse running until saving recovers: unsaved activity cannot survive quitting or a power loss.
+
+SQLite uses WAL. Save failures retry automatically as described above. A full or disconnected input queue still stops capture and shows an error. Auxiliary log failures retry without blocking the database. Normal exit stops input and drains pending records first.
 
 First launch creates the standard user-data directory. Program updates and uninstalling retain its history and preferences; startup does not automatically import a developer folder or backup.
 

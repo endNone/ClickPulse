@@ -165,7 +165,13 @@ fn archive(
 }
 #[test]
 fn stable_release_selection_is_semantic_and_platform_specific() {
-    for target in [Target::MacArm64, Target::MacX64, Target::WindowsX64] {
+    for target in [
+        Target::MacArm64,
+        Target::MacX64,
+        Target::WindowsX64,
+        Target::LinuxArm64,
+        Target::LinuxX64,
+    ] {
         let c = Candidate::from_release(release("0.2.10", target), "0.2.9", target)
             .unwrap()
             .unwrap();
@@ -372,7 +378,13 @@ fn oversized_expansion_is_rejected_before_writing_a_large_file() {
 #[test]
 #[ignore = "Downloads and validates a public package in a disposable staging directory"]
 fn published_release_downloads_and_verifies_without_installing() {
-    for target in [Target::MacArm64, Target::MacX64, Target::WindowsX64] {
+    for target in [
+        Target::MacArm64,
+        Target::MacX64,
+        Target::WindowsX64,
+        Target::LinuxArm64,
+        Target::LinuxX64,
+    ] {
         let candidate = check("0.0.0", target).unwrap().unwrap();
         let staged = stage(&candidate, |_, _| {}).unwrap();
         assert_eq!(staged.manifest.version, candidate.version);
@@ -383,6 +395,11 @@ fn published_release_downloads_and_verifies_without_installing() {
                 .join("payload")
                 .join(target.binary())
                 .is_file()
+        );
+        eprintln!(
+            "Validated public update {} for {}",
+            candidate.version,
+            target.triple()
         );
     }
 }

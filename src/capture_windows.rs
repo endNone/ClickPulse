@@ -28,6 +28,8 @@ struct Listener {
     keys: WindowsKeyboard,
     tx: Sender<Command>,
     paused: Arc<AtomicBool>,
+    storage_blocked: Arc<AtomicBool>,
+    ignore_software_input: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     status: Arc<Mutex<CaptureStatus>>,
 }
@@ -57,7 +59,8 @@ impl Listener {
         stop_with_error(&self.stop, &self.status, code, message);
     }
     fn enqueue(&self, device: Device, code: u32) {
-        if !self.paused.load(Ordering::Relaxed)
+        if !self.storage_blocked.load(Ordering::Relaxed)
+            && !self.paused.load(Ordering::Relaxed)
             && !self.stop.load(Ordering::Relaxed)
             && self
                 .tx
@@ -106,11 +109,12 @@ impl Listener {
                     return;
                 }
                 let key = unsafe { raw.data.keyboard };
-                if let Some(code) = self.keys.event(
+                if let Some(code) = self.keys.filtered_event(
                     raw.header.hDevice as usize,
                     key.MakeCode,
                     key.Flags,
                     key.VKey,
+                    self.ignore_software_input.load(Ordering::Relaxed),
                 ) {
                     self.enqueue(Device::Keyboard, code);
                 }
@@ -161,6 +165,16 @@ pub(crate) fn spawn(
     stop: Arc<AtomicBool>,
     status: Arc<Mutex<CaptureStatus>>,
 ) -> Result<JoinHandle<()>> {
+    let storage_blocked = status
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Capture status is unavailable"))?
+        .storage_blocked
+        .clone();
+    let ignore_software_input = status
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Capture status is unavailable"))?
+        .ignore_software_input
+        .clone();
     Ok(thread::Builder::new()
         .name("clickpulse-input".into())
         .spawn(move || {
@@ -169,6 +183,8 @@ pub(crate) fn spawn(
                     keys: WindowsKeyboard::default(),
                     tx,
                     paused,
+                    storage_blocked,
+                    ignore_software_input,
                     stop: stop.clone(),
                     status: status.clone(),
                 })

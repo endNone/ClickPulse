@@ -96,6 +96,7 @@ struct Context {
     presses: RefCell<Presses>,
     tx: Sender<Command>,
     paused: Arc<AtomicBool>,
+    storage_blocked: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     status: Arc<Mutex<CaptureStatus>>,
 }
@@ -149,7 +150,11 @@ unsafe extern "C" fn input(context: *mut c_void, result: i32, _: *mut c_void, va
         device as usize,
         unsafe { IOHIDValueGetIntegerValue(value) } != 0,
     );
-    if pressed && !context.paused.load(Ordering::Relaxed) && !context.stop.load(Ordering::Relaxed) {
+    if pressed
+        && !context.storage_blocked.load(Ordering::Relaxed)
+        && !context.paused.load(Ordering::Relaxed)
+        && !context.stop.load(Ordering::Relaxed)
+    {
         let event = InputEvent {
             ts_ms: chrono::Local::now().timestamp_millis(),
             device: Device::Keyboard,
@@ -174,6 +179,11 @@ impl CapsLockCapture {
         stop: Arc<AtomicBool>,
         status: Arc<Mutex<CaptureStatus>>,
     ) -> Result<Self> {
+        let storage_blocked = status
+            .lock()
+            .map_err(|_| anyhow!("Capture status is unavailable"))?
+            .storage_blocked
+            .clone();
         let manager = unsafe { IOHIDManagerCreate(ptr::null(), 0) };
         if manager.is_null() {
             return Err(anyhow!("Cannot create physical Caps Lock capture"));
@@ -182,6 +192,7 @@ impl CapsLockCapture {
             manager,
             runloop: CFRunLoop::get_current(),
             _context: Box::new(Context {
+                storage_blocked,
                 presses: RefCell::default(),
                 tx,
                 paused,

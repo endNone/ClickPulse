@@ -36,7 +36,9 @@ Dependencies:
 
 Use architecture `x64` and the published ZIP URL above. Set `ReleaseDate` to the
 actual publication date. Compare `InstallerSha256` with that release's
-`SHA256SUMS.txt`; never reuse the 0.3.0 value or a private test package's value.
+`SHA256SUMS.txt`; never reuse the 0.3.0 value, an earlier draft's value, or a
+private test package's value. Regenerate the manifests from the final published
+package if the unpublished 0.3.1 candidate is rebuilt.
 
 ## Validate and submit
 

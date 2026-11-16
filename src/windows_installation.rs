@@ -366,7 +366,20 @@ mod tests {
             #[cfg(unix)]
             std::os::unix::fs::symlink(&exe, &link).unwrap();
             #[cfg(windows)]
-            std::os::windows::fs::symlink_file(&exe, &link).unwrap();
+            if let Err(error) = std::os::windows::fs::symlink_file(&exe, &link) {
+                // Standard Windows accounts may lack symbolic-link permission.
+                // Keep other failures fatal, and require this coverage in CI.
+                if error.raw_os_error() == Some(1314)
+                    && std::env::var_os("CLICKPULSE_REQUIRE_SYMLINK_TEST").is_none()
+                {
+                    eprintln!(
+                        "SKIPPED: WinGet link test requires symbolic-link permission; \
+                         set CLICKPULSE_REQUIRE_SYMLINK_TEST=1 to require coverage"
+                    );
+                    return;
+                }
+                panic!("Cannot create the WinGet test link: {error}");
+            }
             assert_eq!(
                 registered_installation(&exe, &record).unwrap().link,
                 Some(link.clone())

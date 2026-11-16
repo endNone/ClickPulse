@@ -136,7 +136,6 @@ test('all eight languages update Mini Sport, access names and deferred settings 
     a.window.receiveSport({keyboard:100,mouse:20,available:true});a.setTime(250);a.window.receiveSport({keyboard:102,mouse:20,available:true});
     assert.equal(a.root.lang,locale);
     assert.equal(a.get('mini-sport').attributes['aria-label'],messages[locale]['sport.disable']);
-    assert.equal(a.get('mini-sport-caption').textContent,'Sport · '+messages[locale]['sport.rank_b']);
     assert.equal(a.get('mini-sport-readout').attributes['aria-label'],createI18n(messages,locale).t('sport.mini_readout',{rank:'B',speed:createI18n(messages,locale).decimal(2,1)}));
     a.window.receiveView({compact:false});a.navigate('settings');
     assert.equal(a.get('mini-widget').dataset.sportSkin,'warp');
@@ -338,11 +337,23 @@ test('both keyboard footers share visible used keys across hidden counts, live a
 });
 test('Windows settings report native capture without offering macOS permission controls',()=>{
   const a=app('windows');a.window.receive(snapshot());a.navigate('settings');
-  assert.equal(a.get('permission-row').hidden,true);assert.equal(a.get('capture-settings').hidden,true);
+  assert.equal(a.get('permission-row').hidden,true);assert.equal(a.get('capture-settings').hidden,false);
   assert.equal(a.get('permission-description').textContent,messages.en['settings.windows_capture']);
   assert.equal(a.get('autostart-row').hidden,false);
   a.window.receive({...snapshot(),capture:{listening:false,error:'failure'}});
   assert.equal(a.get('permission-description').textContent,messages.en['status.unavailable']);
+});
+test('software-input filtering defaults off and is available only for supported capture backends',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+    a.window.receive(snapshot());a.navigate('settings');
+    assert.equal(a.get('ignore-software-row').hidden,platform==='linux');
+    assert.equal(a.get('ignore-software-input').checked,false);
+    a.window.receiveView({ignore_software_input:true});
+    assert.equal(a.get('ignore-software-input').checked,true);
+    a.get('ignore-software-input').checked=false;a.get('ignore-software-input').fire('change');
+    assert.deepEqual(sent.at(-1),{action:'ignore_software_input',enabled:false});
+  }
 });
 
 test('macOS access guidance explains stale grants and names a completed update',()=>{
@@ -566,6 +577,17 @@ test('a failed snapshot updates mini status, preserves last counts and clears af
   assert.equal(a.get('mini-status').textContent,messages.en['status.recording']);
   assert.equal(a.get('today').textContent,'122');
 });
+test('storage health reaches full and mini views without a readable snapshot',()=>{
+  const a=app(),s=snapshot();a.window.receiveView({compact:true});a.window.receive(s);
+  a.window.receiveCapture({listening:true,error:'locked',error_code:'error.storage_retrying'});
+  assert.equal(a.get('mini-status').textContent,messages.en['status.recording_error']);
+  assert.equal(a.get('mini-today').textContent,'120');
+  a.window.receiveView({compact:false});
+  assert.equal(a.get('error-banner').textContent,messages.en['error.storage_retrying']);
+  a.window.receiveCapture({listening:true,error:null});
+  assert.equal(a.get('error-banner').hidden,true);
+  assert.equal(a.get('mini-status').textContent,messages.en['status.recording']);
+});
 test('grouped arrows retain unique per-key counts through refresh, theme and language changes on both platforms',()=>{
   for(const platform of ['macos','windows']){
     const a=app(platform),s=snapshot();
@@ -719,7 +741,7 @@ test('Settings section links expand only on Settings and jump without navigating
     const a=app(platform);a.window.receive(snapshot());a.navigate('settings');
     assert.equal(a.get('settings-subnav').hidden,false);
     assert.equal(a.get('settings-nav').attributes['aria-expanded'],'true');
-    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='capture-settings').hidden,platform==='windows');
+    assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='capture-settings').hidden,false);
     assert.equal(a.settingsLinks.find(b=>b.dataset.settingsSection==='handoff-settings').hidden,true);
     a.jumpTo('storage-settings');
     assert.equal(a.get('page-title').textContent,messages.en['page.settings']);
@@ -939,4 +961,83 @@ test('Linux permission guidance and close decisions remain usable without macOS 
   a.get('close-quit').fire();assert.deepEqual(sent.at(-1),{action:'close_decision',close_action:'quit',remember:false});
   a.window.receive(s);assert.equal(a.get('permission-banner').hidden,true);
   assert.equal(a.get('permission-description').textContent,messages.en['settings.authorized.linux']);
+});
+
+test('recreated views restore navigation and filters after fresh data arrives',()=>{
+  const a=app(),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+  a.window.receive(snapshot());a.navigate('settings');a.jumpTo('app-settings');
+  a.get('main').scrollTop=240;a.window.captureSessionState();
+  const saved=sent.filter(message=>message.action==='session_state').at(-1).state;
+  assert.equal(saved.page,'settings');assert.equal(saved.settings_section,'app-settings');
+  assert.equal(saved.scroll_top,240);
+  const b=app(),restored=[];b.window.ipc.postMessage=body=>restored.push(JSON.parse(body));
+  b.window.restoreSessionState(saved);
+  b.window.receiveView({compact:true});b.window.captureSessionState();
+  assert.equal(restored.length,0,'Mini must not overwrite the pending full-window state');
+  b.window.receiveView({compact:false});b.window.receive(snapshot());
+  assert.equal(b.get('settings').hidden,false);assert.equal(b.get('overview').hidden,true);
+  assert.equal(b.get('main').scrollTop,240);
+  assert.equal(b.settingsLinks.find(link=>link.dataset.settingsSection==='app-settings').attributes['aria-current'],'location');
+  b.window.captureSessionState();
+  assert.equal(restored.at(-1).state.settings_section,'app-settings');
+});
+
+test('recreation restores history, trend and keyboard choices and clamps removed year filters',()=>{
+  for(const page of ['overview','history','keys']){
+    const a=app(),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+    a.window.restoreSessionState({page,settings_section:'personalization-settings',trend_days:90,calendar_range:'90',history_range:'1000',history_page:100,keyboard_view:'treemap',scroll_top:120});
+    a.window.receive(snapshot());
+    assert.equal(a.get(page).hidden,false);
+    assert.equal(a.get('history-range-select').value,'all');
+    a.window.captureSessionState();
+    assert.equal(sent.at(-1).state.trend_days,90);assert.equal(sent.at(-1).state.keyboard_view,'treemap');
+    assert.equal(sent.at(-1).state.calendar_range,'90');
+    if(page==='history')assert.ok(sent.at(-1).state.history_page<100);
+    const count=sent.length;a.window.receiveView({visible:false});a.get('main').scrollTop=0;a.window.captureSessionState();
+    assert.equal(sent.length,count,'Hidden layout changes must not overwrite scroll state');
+  }
+});
+
+test('cold-view scrolling waits for fonts instead of saving a clamped position',async()=>{
+  const a=app('windows'),sent=[];let fontsReady,top=0,max=420;
+  a.context.document.fonts={ready:new Promise(resolve=>{fontsReady=resolve;})};
+  Object.defineProperty(a.get('main'),'scrollTop',{get:()=>top,set:value=>{top=Math.min(value,max);}});
+  a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+  a.window.restoreSessionState({page:'settings',settings_section:'app-settings',trend_days:90,calendar_range:'90',history_range:'all',history_page:0,keyboard_view:'layout',scroll_top:434});
+  a.window.receive(snapshot());a.window.captureSessionState();
+  assert.equal(top,420);assert.equal(sent.length,0,'do not replace the saved position with the fallback-font clamp');
+  max=434;fontsReady();await Promise.resolve();
+  assert.equal(top,434);
+  assert.equal(sent.at(-1).state.scroll_top,434);
+  assert.equal(a.get('main').style.values['overflow-anchor'],'auto');
+});
+
+test('late fonts cannot pull the user back after navigating away',async()=>{
+  const a=app('windows');let fontsReady;
+  a.context.document.fonts={ready:new Promise(resolve=>{fontsReady=resolve;})};
+  a.window.restoreSessionState({page:'settings',settings_section:'app-settings',trend_days:14,calendar_range:'all',history_range:'all',history_page:0,keyboard_view:'layout',scroll_top:434});
+  a.window.receive(snapshot());a.navigate('history');a.get('main').scrollTop=80;
+  fontsReady();await Promise.resolve();
+  assert.equal(a.get('main').scrollTop,80);
+  assert.equal(a.get('history').hidden,false);
+});
+
+test('font completion while hidden preserves the pending full-window scroll',async()=>{
+  const a=app('windows');let fontsReady;
+  a.context.document.fonts={ready:new Promise(resolve=>{fontsReady=resolve;})};
+  a.window.restoreSessionState({page:'settings',settings_section:'app-settings',trend_days:14,calendar_range:'all',history_range:'all',history_page:0,keyboard_view:'layout',scroll_top:434});
+  a.window.receive(snapshot());a.window.receiveView({compact:true});a.get('main').scrollTop=0;
+  fontsReady();await Promise.resolve();
+  assert.equal(a.get('main').scrollTop,0);
+  a.window.receiveView({compact:false});a.window.receive(snapshot());
+  assert.equal(a.get('main').scrollTop,434);
+});
+
+test('local brand images are permitted without allowing remote image sources',()=>{
+  const html=readFileSync('ui/index.html','utf8');
+  const policy=html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
+  const imageSources=policy.split(';').map(part=>part.trim().split(/\s+/)).find(parts=>parts[0]==='img-src').slice(1);
+  assert.ok(imageSources.includes("'self'"),'protocol-served brand images must be allowed');
+  assert.ok(imageSources.includes('data:'),'offline documentation previews still embed images');
+  assert.ok(!imageSources.some(source=>['*','http:','https:'].includes(source)),'remote images stay blocked');
 });

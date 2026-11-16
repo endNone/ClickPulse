@@ -243,7 +243,18 @@ fn installation_waits_for_parent_release_and_explicit_successful_save() {
     guard.finish_shutdown(true, true).unwrap();
     assert!(other.try_lock().is_err());
     drop(guard);
-    other.try_lock().unwrap();
+    // Concurrent process creation can briefly retain an inherited lock descriptor.
+    // The real helper also waits for release; do not require immediate visibility.
+    let until = Instant::now() + Duration::from_secs(5);
+    loop {
+        match other.try_lock() {
+            Ok(()) => break,
+            Err(std::fs::TryLockError::WouldBlock) if Instant::now() < until => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("Update lock was not released after shutdown: {error}"),
+        }
+    }
     let commit: Commit =
         serde_json::from_slice(&fs::read(temp.path().join("commit.ok")).unwrap()).unwrap();
     assert_eq!(commit.manifest_hash, "a".repeat(64));

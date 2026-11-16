@@ -4,10 +4,13 @@ GitHub Actions checks and packages ClickPulse on hosted Mac, Windows and Ubuntu 
 
 ## Release download layout
 
-- **macOS 12+, Apple Silicon:** <a href="install-macos.md"><img src="../assets/downloads/macos-apple-silicon.svg" alt="DMG Apple Silicon" height="28" align="middle"></a>
-- **macOS 12+, Intel:** <a href="install-macos.md"><img src="../assets/downloads/macos-intel-x64.svg" alt="DMG Intel x64" height="28" align="middle"></a>
-- **Windows 10/11, x64:** <a href="install-windows.md"><img src="../assets/downloads/windows-portable-x64.svg" alt="Windows Portable x64" height="28" align="middle"></a>
-- **Ubuntu 22.04 / 24.04:** <a href="install-linux.md"><img src="../assets/downloads/linux-x64.svg" alt="Linux ZIP x64" height="28" align="middle"></a> <a href="install-linux.md"><img src="../assets/downloads/linux-arm64.svg" alt="Linux ZIP ARM64" height="28" align="middle"></a>
+| Platform | Download |
+| --- | --- |
+| Windows 10/11 | <a href="install-windows.md"><img src="../assets/downloads/windows-portable-x64.svg" alt="Windows Portable x64" height="28" align="middle"></a> |
+| macOS 12+ | <a href="install-macos.md"><img src="../assets/downloads/macos-apple-silicon.svg" alt="DMG Apple Silicon" height="28" align="middle"></a> |
+| | <a href="install-macos.md"><img src="../assets/downloads/macos-intel-x64.svg" alt="DMG Intel x64" height="28" align="middle"></a> |
+| Ubuntu 22.04 / 24.04 | <a href="install-linux.md"><img src="../assets/downloads/linux-x64.svg" alt="Linux ZIP x64" height="28" align="middle"></a> |
+| | <a href="install-linux.md"><img src="../assets/downloads/linux-arm64.svg" alt="Linux ZIP ARM64" height="28" align="middle"></a> |
 
 This is the layout used by the release-note generator. Downloads are grouped by platform, with both Mac and Ubuntu architectures available. Mac App ZIPs remain available in the release attachments. Preview links open installation guides; a published Release links directly to that version’s attachments. Badge images use an immutable artwork revision, with no external badge service, and align vertically with their platform labels. A presentation-only correction can use a newer artwork revision without changing the tagged packages; record that revision with the reviewed release notes.
 

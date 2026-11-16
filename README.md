@@ -21,6 +21,8 @@
 
 <p align="center">Your key and click statistics stay on your device.<br>No account, no telemetry.</p>
 
+<p align="center">Update checks and downloads contact GitHub. Turn off automatic checks in Settings.</p>
+
 ## Overview
 
 [![Overview](docs/images/overview-en.jpg)](docs/images/overview-en.jpg)

@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix='.windows-package-', dir=dist) as tempor
     licenses.mkdir()
     for file in [*(root/'assets/fonts').glob('*-OFL.txt'), *(root/'assets/windows').glob('*LICENSE*.txt'), *(root/'assets/windows').glob('*NOTICE*.txt')]:
         shutil.copy2(file, licenses/file.name)
-    notices = ['ClickPulse third-party notices', '', 'Fonts: Inter, Noto Sans SC and Noto Sans Mono. Full SIL OFL licenses are in Licenses/.', 'WebView2Loader.dll: Microsoft WebView2 SDK 1.0.3650.58. SDK license/notice and webview2-rs MIT license are in Licenses/.', '', rust_notices(metadata, root)]
+    notices = ['ClickPulse third-party notices', '', 'Fonts: Inter and Noto Sans Mono (subsets). Full SIL OFL licenses are in Licenses/.', 'WebView2Loader.dll: Microsoft WebView2 SDK 1.0.3650.58. SDK license/notice and webview2-rs MIT license are in Licenses/.', '', rust_notices(metadata, root)]
     (bundle/'THIRD-PARTY-NOTICES.txt').write_text('\n'.join(notices), encoding='utf-8')
     (bundle/'README.txt').write_text(f'''ClickPulse {version} — Windows x64
 
