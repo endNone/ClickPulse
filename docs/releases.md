@@ -4,15 +4,19 @@ GitHub Actions checks and packages ClickPulse on hosted Mac, Windows and Ubuntu 
 
 ## Release download layout
 
+Start with two short release highlights, followed by an underlined **Full release notes & downloads** link to that version's page. Keep this introduction concise so the download entry appears early in the Feed summary. Detailed changes follow the download table.
+
 | Platform | Download |
 | --- | --- |
-| Windows 10/11 | <a href="install-windows.md"><img src="../assets/downloads/windows-portable-x64.svg" alt="Windows Portable x64" height="28" align="middle"></a> |
-| macOS 12+ | <a href="install-macos.md"><img src="../assets/downloads/macos-apple-silicon.svg" alt="DMG Apple Silicon" height="28" align="middle"></a> |
-| | <a href="install-macos.md"><img src="../assets/downloads/macos-intel-x64.svg" alt="DMG Intel x64" height="28" align="middle"></a> |
-| Ubuntu 22.04 / 24.04 | <a href="install-linux.md"><img src="../assets/downloads/linux-x64.svg" alt="Linux ZIP x64" height="28" align="middle"></a> |
-| | <a href="install-linux.md"><img src="../assets/downloads/linux-arm64.svg" alt="Linux ZIP ARM64" height="28" align="middle"></a> |
+| <img src="../assets/downloads/platform-windows.svg" width="18" height="18" align="absmiddle" alt=""> Windows 10/11 | [<ins>Portable x64</ins>](install-windows.md) |
+| <img src="../assets/downloads/platform-apple.svg" width="18" height="18" align="absmiddle" alt=""> macOS 12+ | [<ins>Apple Silicon DMG</ins>](install-macos.md) · [<ins>Intel DMG</ins>](install-macos.md) |
+| <img src="../assets/downloads/platform-ubuntu.svg" width="18" height="18" align="absmiddle" alt=""> Ubuntu 22.04 / 24.04 | [<ins>x64 ZIP</ins>](install-linux.md) · [<ins>ARM64 ZIP</ins>](install-linux.md) |
 
-This is the layout used by the release-note generator. Downloads are grouped by platform, with both Mac and Ubuntu architectures available. Mac App ZIPs remain available in the release attachments. Preview links open installation guides; a published Release links directly to that version’s attachments. Badge images use an immutable artwork revision, with no external badge service, and align vertically with their platform labels. A presentation-only correction can use a newer artwork revision without changing the tagged packages; record that revision with the reviewed release notes.
+[<ins>Source code</ins>](../README.md) · [<ins>Build from source</ins>](development.md)
+
+Each platform uses one row with an 18-pixel icon aligned vertically beside its name. Underlined text links keep package names and download targets available when GitHub Feed removes images. Preview links here open the guides; published Releases link directly to their own attachments. Mac App ZIPs remain available in the release attachments.
+
+Icons use the version tag, or an explicit immutable `artwork_revision` for a presentation-only correction. Record that revision with the reviewed release notes. Keep existing release assets and tags unchanged when updating the layout. The actual Feed determines how much of a release summary appears; a local Markdown preview does not verify that truncation.
 
 ## Workflows
 

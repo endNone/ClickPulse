@@ -112,7 +112,8 @@ def verify_archive(path, prefix, manifest_name, plan, license_path, license_byte
         return manifest
 
 
-def release_notes(version, repository, revision, private=False, *, artwork_revision=None):
+def release_downloads(version, repository, *, artwork_revision=None):
+    """Keep download links readable when release summaries omit platform icons."""
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
         raise ValueError('Repository must be a GitHub owner/name.')
     base = 'https://github.com/'+repository+'/blob/v'+version+'/docs/'
@@ -123,46 +124,52 @@ def release_notes(version, repository, revision, private=False, *, artwork_revis
     artwork_ref = artwork_revision or f'v{version}'
     artwork = f'https://github.com/{repository}/blob/{artwork_ref}/assets/downloads/'
 
-    def button(image, label, asset):
-        return (f'<a href="{downloads}{asset}">'
-                f'<img src="{artwork}{image}.svg?raw=true" alt="{label}" height="28" align="middle"></a>')
+    def icon(platform):
+        return (f'<img src="{artwork}platform-{platform}.svg?raw=true" '
+                'width="18" height="18" align="absmiddle" alt="">')
 
-    windows = button('windows-portable-x64', 'Windows Portable x64', name+'-windows-x64.zip')
-    mac_arm = button('macos-apple-silicon', 'DMG Apple Silicon', name+'-macos-arm64.dmg')
-    mac_intel = button('macos-intel-x64', 'DMG Intel x64', name+'-macos-x64.dmg')
-    access = '\nThis private preview requires a GitHub account with repository access.\n' if private else ''
-    linux = ''
-    linux_guide = ''
+    def link(label, suffix):
+        return f'[<ins>{label}</ins>]({downloads}{name}-{suffix})'
+
+    rows = [
+        f"| {icon('windows')} Windows 10/11 | {link('Portable x64', 'windows-x64.zip')} |",
+        f"| {icon('apple')} macOS 12+ | {link('Apple Silicon DMG', 'macos-arm64.dmg')} · {link('Intel DMG', 'macos-x64.dmg')} |",
+    ]
     if tuple(map(int, version.split('.'))) >= (0, 3, 0):
-        linux_x64 = button('linux-x64', 'Linux ZIP x64', name+'-linux-x64.zip')
-        linux_arm64 = button('linux-arm64', 'Linux ZIP ARM64', name+'-linux-arm64.zip')
-        linux = f"| Ubuntu 22.04 / 24.04 | {linux_x64} |\n| | {linux_arm64} |\n"
-        linux_guide = f" · [Ubuntu guide]({base}install-linux.md)"
+        rows.append(f"| {icon('ubuntu')} Ubuntu 22.04 / 24.04 | {link('x64 ZIP', 'linux-x64.zip')} · {link('ARM64 ZIP', 'linux-arm64.zip')} |")
+    table = '\n'.join(['| Platform | Download |', '| --- | --- |', *rows])
+    return (f'{table}\n\n{link("Source code", "source.zip")} · '
+            f'[<ins>Build from source</ins>]({base}development.md)\n')
+
+
+def release_notes(version, repository, revision, private=False, *, artwork_revision=None):
+    downloads = release_downloads(version, repository, artwork_revision=artwork_revision)
+    base = f'https://github.com/{repository}/blob/v{version}/docs/'
+    access = '\nThis private preview requires a GitHub account with repository access.\n' if private else ''
+    linux_guide = f' · [Ubuntu guide]({base}install-linux.md)' if tuple(map(int, version.split('.'))) >= (0, 3, 0) else ''
+    highlights = '- Local keyboard and mouse activity statistics. Fully offline.\n'
     changes = (f'- See the [changelog](https://github.com/{repository}/blob/v{version}/CHANGELOG.md) for this release.\n')
     if version == '0.3.0':
-        changes = ('- Track keyboard and mouse activity on Ubuntu 22.04 and 24.04.\n'
-                   '- Enjoy clearer controls and smoother Mini transitions across platforms.\n'
-                   '- Reduce background refreshes and disk activity.\n'
+        highlights = ('- Track keyboard and mouse activity on Ubuntu 22.04 and 24.04.\n'
+                      '- Enjoy clearer controls and smoother Mini transitions.\n')
+        changes = ('- Reduce background refreshes and disk activity.\n'
                    '- Count physical Caps Lock presses correctly on macOS.\n')
     elif version == '0.3.1':
+        highlights = ('- Lower background memory across macOS, Windows and Ubuntu.\n'
+                      '- Smaller packages and automatic update downloads.\n')
         changes = ('- Download updates automatically; install and restart when you confirm.\n'
-                   '- Use less background memory and download smaller packages.\n'
                    '- Recover recording automatically after temporary storage failures.\n'
                    '- Ignore recognized software-generated input with an optional setting.\n'
                    '- Keep Windows startup and package-manager upgrades working reliably.\n')
-    return f'''Local keyboard and mouse activity statistics. Fully offline.
+    return f'''## What's new
+
+{highlights}
+[<ins>Full release notes & downloads</ins>](https://github.com/{repository}/releases/tag/v{version})
 {access}
 ## Downloads
 
-| Platform | Download |
-| --- | --- |
-| Windows 10/11 | {windows} |
-| macOS 12+ | {mac_arm} |
-| | {mac_intel} |
-{linux}
-[Source code]({downloads}{name}-source.zip) · [Build from source]({base}development.md)
-
-## What's new
+{downloads}
+## More improvements
 
 {changes}
 ## Getting started

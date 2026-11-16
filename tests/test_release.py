@@ -203,22 +203,27 @@ class ReleaseTests(unittest.TestCase):
         for word in ['ad-hoc','runner','manifest','checksum','internal build']:
             self.assertNotIn(word,notes.lower())
 
-    def test_download_buttons_pin_images_and_assets_to_the_requested_release(self):
+    def test_download_links_pin_icons_and_assets_to_the_requested_release(self):
         notes = release.release_notes('1.2.3', 'fixture/RenamedApp', REVISION)
-        buttons = re.findall(r'<a href="([^"]+)"><img src="([^"]+)" alt="([^"]+)" height="28" align="middle"></a>', notes)
+        links = re.findall(r'\[<ins>([^<]+)</ins>\]\(([^)]+)\)', notes)
         expected = {
-            'Windows Portable x64': ('windows-portable-x64', 'windows-x64.zip'),
-            'DMG Apple Silicon': ('macos-apple-silicon', 'macos-arm64.dmg'),
-            'DMG Intel x64': ('macos-intel-x64', 'macos-x64.dmg'),
-            'Linux ZIP x64': ('linux-x64', 'linux-x64.zip'),
-            'Linux ZIP ARM64': ('linux-arm64', 'linux-arm64.zip'),
+            'Portable x64': 'windows-x64.zip',
+            'Apple Silicon DMG': 'macos-arm64.dmg',
+            'Intel DMG': 'macos-x64.dmg',
+            'x64 ZIP': 'linux-x64.zip',
+            'ARM64 ZIP': 'linux-arm64.zip',
         }
-        self.assertEqual(len(buttons), len(expected))
-        for target, image, label in buttons:
-            artwork, asset = expected[label]
+        self.assertEqual(set(dict(links)) & set(expected), set(expected))
+        for label, asset in expected.items():
+            self.assertEqual(dict(links)[label], f'https://github.com/fixture/RenamedApp/releases/download/v1.2.3/ClickPulse-1.2.3-{asset}')
+        images = re.findall(r'<img src="([^"]+)" width="18" height="18" align="absmiddle" alt="">', notes)
+        self.assertEqual(len(images), 3)
+        for image, artwork in zip(images, ['platform-windows', 'platform-apple', 'platform-ubuntu']):
             self.assertEqual(image, f'https://github.com/fixture/RenamedApp/blob/v1.2.3/assets/downloads/{artwork}.svg?raw=true')
-            self.assertEqual(target, f'https://github.com/fixture/RenamedApp/releases/download/v1.2.3/ClickPulse-1.2.3-{asset}')
             self.assertTrue((ROOT/'assets/downloads'/f'{artwork}.svg').is_file())
+        self.assertLess(notes.index("## What's new"), notes.index('Full release notes & downloads'))
+        self.assertLess(notes.index('Full release notes & downloads'), notes.index('## Downloads'))
+        self.assertNotIn('Ubuntu', release.release_downloads('0.2.1', 'fixture/RenamedApp'))
         self.assertNotIn('/main/', notes)
         self.assertNotIn('/latest/', notes)
         self.assertNotIn('ClickPulse-0.1.0-', notes)
