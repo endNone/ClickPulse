@@ -32,6 +32,9 @@ def main():
         options.name_IDs = ['*']
         options.name_legacy = True
         options.name_languages = ['*']
+        # Keep alternates reachable by CSS, especially tabular-nums (tnum).
+        # The default feature list drops them even when all digits are retained.
+        options.layout_features = ['*']
         worker = subset.Subsetter(options=options)
         # Latin/Latin Extended, punctuation, currencies, arrows and math symbols.
         worker.populate(unicodes=list(range(0x20, 0x250))+list(range(0x2000, 0x2300)))
@@ -44,6 +47,11 @@ def main():
         font.flavor = 'woff2'
         target = args.output/(name+'.woff2')
         font.save(target)
+        if name == 'Inter':
+            with TTFont(target) as saved:
+                features = {record.FeatureTag for record in saved['GSUB'].table.FeatureList.FeatureRecord}
+                if 'tnum' not in features:
+                    raise ValueError('Inter subset lost tabular numerals required by the interface')
         print(f'{target.name}: {target.stat().st_size} bytes')
 
 

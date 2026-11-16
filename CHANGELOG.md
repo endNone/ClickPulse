@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Restore tabular numeral shapes and spacing in the bundled fonts.
+- Use pure white for the ClickPulse title in the sidebar and Mini mode.
+
 ## 0.3.1 · 2026-11-15
 
 ### New

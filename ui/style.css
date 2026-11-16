@@ -14,7 +14,7 @@ button:disabled,select:disabled {opacity:.45;cursor:default}
 [hidden] {display:none!important}
 .sidebar {width:220px;flex:none;background:var(--navy);padding:28px 15px 20px;display:flex;flex-direction:column;color:#c8d7ee}
 html[data-platform="macos"] .sidebar {padding-top:46px}
-.brand {display:flex;align-items:center;gap:10px;font-family:var(--sans);font-size:18px;line-height:1.25;font-weight:700;letter-spacing:-.5px;padding:0 5px;color:#f8fbff}
+.brand {display:flex;align-items:center;gap:10px;font-family:var(--sans);font-size:18px;line-height:1.25;font-weight:700;letter-spacing:-.5px;padding:0 5px;color:#fff}
 .brand-icon {display:flex;align-items:center;justify-content:center;width:36px;height:36px;flex:none;background:#f5f8ff;border-radius:9px;overflow:hidden}
 .brand-icon img {display:block;width:36px;height:36px;object-fit:contain}
 .brand small {display:block;font:400 11px/1.4 var(--sans);letter-spacing:0;white-space:nowrap;color:#a4b8d3;margin-top:5px}

@@ -6,7 +6,7 @@ body.compact>.sidebar,body.compact>main {display:none}
 .mini-brand {display:flex;align-items:center;gap:7px;align-self:stretch;flex:1;cursor:grab;min-width:0}
 .mini-brand:active {cursor:grabbing}
 .mini-brand img {width:20px;height:20px;object-fit:contain;filter:brightness(0) invert(1);opacity:.92;pointer-events:none}
-.mini-brand strong {font-size:13px;letter-spacing:-.2px;font-weight:650;color:#dceaff;pointer-events:none}
+.mini-brand strong {font-size:13px;letter-spacing:-.2px;font-weight:650;color:#fff;pointer-events:none}
 .mini-grip {font:15px sans-serif;color:#6c8ab2;opacity:0;transition:opacity .15s;pointer-events:none}.mini-brand:hover .mini-grip {opacity:1}
 .mini-actions {display:flex;align-items:center;gap:3px}
 .mini-icon {display:grid;place-items:center;width:24px;height:24px;padding:4px;border:0;border-radius:6px;color:#88a6ce;background:transparent}
