@@ -21,7 +21,7 @@ jobs:
 
   package:
     name: Package (${{ matrix.platform }})
-    needs: checks
+    # Build alongside checks; the calling release job waits for both to succeed.
     strategy:
       fail-fast: false
       matrix:

@@ -19,10 +19,10 @@ This is the layout used by the release-note generator. Downloads are grouped by 
 | Workflow | Trigger | Result |
 | --- | --- | --- |
 | **Checks** | Push to `main`, pull request, manual run, or another workflow | Rust tests, formatting, Clippy, interface tests, packaging/release tests and release build |
-| **Packages** | Manual run, or Release candidate | Checks first, then Mac arm64/Intel x64, Windows x64 and Ubuntu arm64/x64 packages saved as Actions artifacts |
+| **Packages** | Manual run, or Release candidate | Checks and all five platform builds run in parallel; packages are saved as Actions artifacts |
 | **Release candidate** | Push a `vX.Y.Z` tag, or manually select an existing tag | Validate versions, run Packages, verify all assets, assemble corresponding source and retain a candidate artifact |
 
-Checks is reused by the other workflows. Every release stage uses the exact tagged commit. All workflow jobs have read-only repository access. The built-in GitHub token is used only for read access, with no personal token stored in Actions. Signing certificates are not configured.
+Checks is reused by the other workflows. Packaging starts alongside checks, but release assembly waits for both to succeed. Failed or cancelled checks prevent a verified release candidate even if package artifacts are available. Every release stage uses the exact tagged commit. All workflow jobs have read-only repository access. The built-in GitHub token is used only for read access, with no personal token stored in Actions. Signing certificates are not configured.
 
 Actions artifacts are retained for **14 days**; Release attachments are separate. Current targets are Apple Silicon, Intel Mac, Windows x64, Ubuntu x64 and Ubuntu ARM64. Linux packages are built on Ubuntu 22.04 for compatibility with 22.04 and 24.04. No Windows ARM package is generated.
 
