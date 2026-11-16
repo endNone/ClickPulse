@@ -103,9 +103,15 @@ fn native_evdev_records_repeats_pause_hotplug_and_persistent_history() {
     tap(&mut second, KeyCode::KEY_A);
     drop(second);
     thread::sleep(Duration::from_millis(1300));
+    for _ in 0..16 {
+        tap(&mut first, KeyCode::KEY_A);
+    }
+    for _ in 0..9 {
+        tap(&mut first, KeyCode::BTN_LEFT);
+    }
     let final_counts = runtime.snapshot().unwrap().stats.lifetime;
-    assert_eq!(final_counts.keyboard - baseline.stats.lifetime.keyboard, 4);
-    assert_eq!(final_counts.mouse - baseline.stats.lifetime.mouse, 1);
+    assert_eq!(final_counts.keyboard - baseline.stats.lifetime.keyboard, 20);
+    assert_eq!(final_counts.mouse - baseline.stats.lifetime.mouse, 10);
     runtime.shutdown().unwrap();
     drop(runtime);
     drop(first);
@@ -118,9 +124,9 @@ fn native_evdev_records_repeats_pause_hotplug_and_persistent_history() {
         saved
             .history_days
             .iter()
-            .any(|day| day.counts.keyboard >= 4 && day.counts.mouse >= 1)
+            .any(|day| day.counts.keyboard >= 20 && day.counts.mouse >= 10)
     );
     println!(
-        "native evdev: 4 keys + 1 click, repeats ignored, pause/resume, hotplug and history persistence passed"
+        "native evdev: 20 keys + 10 clicks, repeats ignored, pause/resume, hotplug and history persistence passed"
     );
 }

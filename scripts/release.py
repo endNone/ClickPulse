@@ -146,8 +146,10 @@ def release_notes(version, repository, revision, private=False, *, artwork_revis
                    '- Count physical Caps Lock presses correctly on macOS.\n')
     elif version == '0.3.1':
         changes = ('- Download updates automatically; install and restart when you confirm.\n'
-                   '- Keep WinGet installations updated through their package manager.\n'
-                   '- Restore missing Windows startup paths when ClickPulse opens.\n')
+                   '- Use less background memory and download smaller packages.\n'
+                   '- Recover recording automatically after temporary storage failures.\n'
+                   '- Ignore recognized software-generated input with an optional setting.\n'
+                   '- Keep Windows startup and package-manager upgrades working reliably.\n')
     return f'''Local keyboard and mouse activity statistics. Fully offline.
 {access}
 ## Downloads
