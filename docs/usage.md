@@ -46,7 +46,7 @@ Dropdown menus are rendered inside the app: use arrow keys to browse, Enter or S
 
 In **Settings → Application → App updates**, click **Check for updates**, or leave daily checks enabled. In 0.3.1, a newer version downloads automatically in the background. When it is ready, click **Update & restart** to save pending activity, install and reopen. Downloading alone never installs or restarts the app.
 
-Turn off **Check automatically every day** to stop scheduled checks; manual checks remain available. Checks run once per 24-hour window while the app is open, including in the background. The last attempt is remembered across restarts. Temporary connection failures retry a few times without interrupting recording.
+Turn off **Check automatically** to stop scheduled checks; manual checks remain available. Checks run once per 24-hour window while the app is open, including in the background. The last attempt is remembered across restarts. Temporary connection failures retry a few times without interrupting recording.
 
 Scoop and WinGet installations show their own upgrade command in Settings. Quit ClickPulse before running it. If a manual installation cannot update in its current location, Settings explains how to proceed. Demo and read-only sessions do not download updates or change your saved update preference.
 
@@ -54,11 +54,18 @@ The updater replaces program files and keeps a recovery copy; history, save-fold
 
 The updater is included starting with 0.2.1. Install 0.2.1 manually when upgrading from the published 0.2.0 or earlier; those packages do not include this control.
 
-## Time zone
+## Counter period and time zone
 
-In **Settings → Application → Time zone**, **System time zone** is the default. Choose an IANA zone such as **Asia/Shanghai** or **America/Los_Angeles** to use it throughout the desktop statistics. Type a city name while the menu is open to find a zone quickly. The choice is saved independently of language and theme. Choosing a different zone explicitly refreshes a read-only view once, even if its automatic updates are paused.
+In **Settings → Application**, choose **Calendar day** under **Counter period** to reveal **Time zone** below it. **System time zone** is the default. Choose an IANA zone such as **Asia/Shanghai** or **America/Los_Angeles** to use it throughout the desktop statistics. Type a city name while the menu is open to find a zone quickly. The choice is saved independently of language and theme. Choosing a different zone explicitly refreshes a read-only view once, even if its automatic updates are paused.
 
-Today, the seven-day summary, daily trends, history, the calendar and hourly labels use the same selected zone. A zone change can move activity across a date boundary. It does not rewrite timestamps, saved summaries or lifetime counts. System mode follows operating-system time-zone changes. Repeated daylight-saving hours remain separate, and rolling counters still cover the same elapsed intervals. Legacy minute records retain their minute precision.
+Calendar day, the seven-day summary, daily trends, history, the calendar and hourly labels use the same selected zone. A zone change can move activity across a date boundary. It does not rewrite timestamps, saved summaries or lifetime counts. System mode follows operating-system time-zone changes. Repeated daylight-saving hours remain separate, and rolling counters still cover the same elapsed intervals. Legacy minute records retain their minute precision.
+
+In **Settings → Application → Counter period**, choose what Overview and Mini display:
+
+- **Calendar day** counts from midnight in the selected time zone. This is the default.
+- **Last 24 hours** counts the 24 hours leading up to now, including yesterday.
+
+The heading changes with your choice, which is remembered after restarting. **Time zone** is hidden for **Last 24 hours**; switching back to **Calendar day** restores the selected zone. History and calendar dates stay unchanged. On daylight-saving transitions, a calendar day can span 23 or 25 hours; the rolling option always covers 24 hours.
 
 ## Mini mode and background recording
 

@@ -38,7 +38,7 @@ function createClickPulseDropdowns(document,window){
         menu.replaceChildren(...items);active=Math.max(0,options.findIndex(option=>option.value===activeValue));
         if(!options.some(option=>option.value===activeValue))active=current();
       }
-      if(opened===controller&&!rows.length)close();
+      if(opened===controller&&trigger.disabled)close();
       mark(changed);
     }
     function position(){

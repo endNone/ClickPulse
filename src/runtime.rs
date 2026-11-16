@@ -21,6 +21,7 @@ use crate::{
     collector::CollectorDb,
     db::{EventDb, Snapshot},
     input::InputEvent,
+    presentation::TodayPeriod,
     source::LiveSource,
 };
 
@@ -133,6 +134,7 @@ pub struct AppSnapshot {
 }
 
 type SnapshotCallback = Box<dyn FnOnce(Result<String>) + Send>;
+type MiniCounts = (crate::db::Counts, bool);
 
 pub(crate) struct SportDelivery {
     capture: Arc<Mutex<CaptureStatus>>,
@@ -174,6 +176,7 @@ impl Drop for SportDelivery {
 
 pub(crate) struct SnapshotDelivery {
     timezone: crate::timezone::TimeZonePreference,
+    today_period: TodayPeriod,
     capture: Arc<Mutex<CaptureStatus>>,
     paused: Arc<AtomicBool>,
     path: PathBuf,
@@ -184,9 +187,9 @@ pub(crate) struct SnapshotDelivery {
 }
 
 impl SnapshotDelivery {
-    fn complete_mini(mut self, today: Result<crate::db::Counts>) {
+    fn complete_mini(mut self, today: Result<MiniCounts>) {
         let result = (|| {
-            let today = today?;
+            let (today, approximate) = today?;
             let capture = self
                 .capture
                 .lock()
@@ -194,6 +197,8 @@ impl SnapshotDelivery {
                 .for_display();
             Ok(serde_json::to_string(&serde_json::json!({
                 "today": today,
+                "today_period": self.today_period,
+                "approximate": approximate,
                 "timezone": self.timezone,
                 "capture": capture,
                 "paused": self.paused.load(Ordering::Relaxed),
@@ -464,25 +469,27 @@ impl Runtime {
         timezone: crate::timezone::TimeZonePreference,
         reply: impl FnOnce(Result<String>) + Send + 'static,
     ) -> Result<()> {
-        self.queue_snapshot(timezone, false, reply)
+        self.queue_snapshot(timezone, None, reply)
     }
 
     pub fn request_mini_snapshot(
         &self,
         timezone: crate::timezone::TimeZonePreference,
+        period: TodayPeriod,
         reply: impl FnOnce(Result<String>) + Send + 'static,
     ) -> Result<()> {
-        self.queue_snapshot(timezone, true, reply)
+        self.queue_snapshot(timezone, Some(period), reply)
     }
 
     fn queue_snapshot(
         &self,
         timezone: crate::timezone::TimeZonePreference,
-        mini: bool,
+        mini: Option<TodayPeriod>,
         reply: impl FnOnce(Result<String>) + Send + 'static,
     ) -> Result<()> {
         let delivery = SnapshotDelivery {
             timezone,
+            today_period: mini.unwrap_or_default(),
             capture: self.status.clone(),
             paused: self.paused.clone(),
             path: self.path.clone(),
@@ -492,7 +499,7 @@ impl Runtime {
             reply: Some(Box::new(reply)),
         };
         self.tx
-            .try_send(if mini {
+            .try_send(if mini.is_some() {
                 Command::MiniSnapshot(delivery)
             } else {
                 Command::SnapshotAsync(delivery)
@@ -698,7 +705,7 @@ fn source_loop_inner(
     probe: bool,
 ) -> Result<()> {
     let mut cached: Option<(String, Snapshot)> = None;
-    let mut mini_cached: Option<(String, crate::db::Counts)> = None;
+    let mut mini_cached: Option<(String, TodayPeriod, MiniCounts)> = None;
     while let Ok(command) = rx.recv() {
         match command {
             Command::SportSample(delivery) => delivery.complete(source.lifetime()),
@@ -708,16 +715,25 @@ fn source_loop_inner(
                 let paused_counts = if paused.load(Ordering::Relaxed) {
                     mini_cached
                         .as_ref()
-                        .filter(|(zone, _)| *zone == key)
-                        .map(|(_, counts)| *counts)
+                        .filter(|(zone, period, _)| {
+                            *zone == key && *period == delivery.today_period
+                        })
+                        .map(|(_, _, counts)| *counts)
                 } else {
                     None
                 };
                 let result = paused_counts
                     .map(Ok)
-                    .unwrap_or_else(|| source.today_in_timezone(now, delivery.timezone));
+                    .unwrap_or_else(|| match delivery.today_period {
+                        TodayPeriod::CalendarDay => source
+                            .today_in_timezone(now, delivery.timezone)
+                            .map(|counts| (counts, false)),
+                        TodayPeriod::Rolling24h => source
+                            .rolling_day(now)
+                            .map(|window| (window.counts, window.approximate)),
+                    });
                 if let Ok(counts) = result.as_ref() {
-                    mini_cached = Some((key, *counts));
+                    mini_cached = Some((key, delivery.today_period, *counts));
                     if !paused.load(Ordering::Relaxed) {
                         cached = None;
                     }
@@ -755,7 +771,11 @@ fn source_loop_inner(
                     source.snapshot_in_timezone(now, timezone)
                 };
                 if let Ok(stats) = &result {
-                    mini_cached = Some((cache_key.clone(), stats.today));
+                    mini_cached = Some((
+                        cache_key.clone(),
+                        TodayPeriod::CalendarDay,
+                        (stats.today, false),
+                    ));
                     cached = Some((cache_key, stats.clone()));
                 }
                 let mut current = status
@@ -815,14 +835,23 @@ impl Storage {
             Self::App(db) => Ok(db.conn.busy_timeout(timeout)?),
         }
     }
-    fn today_in_timezone(
+    fn mini_counts(
         &self,
         now: chrono::DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
-    ) -> Result<crate::db::Counts> {
-        match self {
-            Self::Independent(db) => db.today_in_timezone(now, zone),
-            Self::App(db) => db.today_in_timezone(now, zone),
+        period: TodayPeriod,
+    ) -> Result<MiniCounts> {
+        match period {
+            TodayPeriod::CalendarDay => match self {
+                Self::Independent(db) => db.today_in_timezone(now, zone),
+                Self::App(db) => db.today_in_timezone(now, zone),
+            }
+            .map(|counts| (counts, false)),
+            TodayPeriod::Rolling24h => match self {
+                Self::Independent(db) => db.rolling(86_400, now.timestamp_millis()),
+                Self::App(db) => db.rolling_day(now),
+            }
+            .map(|window| (window.counts, window.approximate)),
         }
     }
     fn lifetime(&self) -> Result<crate::db::Counts> {
@@ -1029,7 +1058,7 @@ impl StorageWorker {
                 Box::new(move || delivery.complete(result))
             })?,
             Command::MiniSnapshot(delivery) => self.spawn_job(move |db| {
-                let result = db.today_in_timezone(Local::now(), delivery.timezone);
+                let result = db.mini_counts(Local::now(), delivery.timezone, delivery.today_period);
                 Box::new(move || delivery.complete_mini(result))
             })?,
             Command::SportSample(delivery) => delivery.complete(db.lifetime()),
@@ -1412,25 +1441,143 @@ mod tests {
         assert!(reader.is_recording(now.timestamp_millis()).unwrap());
         let conn = rusqlite::Connection::open(&path).unwrap();
         conn.execute_batch("DROP TABLE daily_totals; DROP TABLE native_key_totals; DROP TABLE historical_key_totals;").unwrap();
-        let (tx, rx) = bounded(1);
-        runtime
-            .request_mini_snapshot(Default::default(), move |r| {
-                tx.send(r).unwrap();
-            })
-            .unwrap();
-        let json = rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
-        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(value["today"]["keyboard"], 1);
-        assert!(value.get("history_days").is_none());
-        assert!(value.get("keyboard_stats").is_none());
-        assert!(value.get("auto_start").is_none());
-        assert!(json.len() < 1024);
+        for period in [TodayPeriod::CalendarDay, TodayPeriod::Rolling24h] {
+            let (tx, rx) = bounded(1);
+            runtime
+                .request_mini_snapshot(Default::default(), period, move |r| {
+                    tx.send(r).unwrap();
+                })
+                .unwrap();
+            let json = rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap();
+            let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert_eq!(value["today"]["keyboard"], 1);
+            assert_eq!(value["today_period"], serde_json::to_value(period).unwrap());
+            assert!(value.get("history_days").is_none());
+            assert!(value.get("keyboard_stats").is_none());
+            assert!(value.get("auto_start").is_none());
+            assert!(json.len() < 1024);
+        }
         runtime.shutdown().unwrap();
         assert!(
             !reader
                 .is_recording(Local::now().timestamp_millis())
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn counter_period_matches_full_snapshot_across_midnight_and_dst() {
+        use crate::input::Device;
+        use chrono::DateTime;
+        let zone =
+            crate::timezone::TimeZonePreference::Named("America/Los_Angeles".parse().unwrap());
+        for (time, calendar_total) in [
+            ("2026-03-09T06:59:30Z", 23),
+            ("2026-11-02T07:59:30Z", 25),
+            ("2026-11-03T08:00:30Z", 1),
+        ] {
+            let now = DateTime::parse_from_rfc3339(time)
+                .unwrap()
+                .with_timezone(&Local);
+            let temp = tempfile::tempdir().unwrap();
+            let app = CollectorDb::open(&temp.path().join("app.sqlite3")).unwrap();
+            app.conn
+                .execute(
+                    "UPDATE clickpulse_metadata SET value=?1 WHERE key='precise_since_ms'",
+                    [(now.timestamp_millis() - 86_400_000).to_string()],
+                )
+                .unwrap();
+            for mut db in [
+                Storage::App(app),
+                Storage::Independent(
+                    EventDb::open(&temp.path().join("independent.sqlite3")).unwrap(),
+                ),
+            ] {
+                db.insert(
+                    &(0..28)
+                        .map(|h| InputEvent {
+                            ts_ms: (now - chrono::Duration::hours(h)).timestamp_millis(),
+                            device: Device::Keyboard,
+                            code: 4,
+                        })
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap();
+                for zone in [
+                    zone,
+                    crate::timezone::TimeZonePreference::Named("Asia/Shanghai".parse().unwrap()),
+                ] {
+                    let full = db.snapshot_in_timezone(now, zone).unwrap();
+                    let day = db.mini_counts(now, zone, TodayPeriod::CalendarDay).unwrap();
+                    assert_eq!(day.0, full.today);
+                    let rolling = db.mini_counts(now, zone, TodayPeriod::Rolling24h).unwrap();
+                    let expected = full.windows.iter().find(|w| w.seconds == 86_400).unwrap();
+                    assert_eq!(rolling.0, expected.counts);
+                    assert_eq!(rolling.1, expected.approximate);
+                    assert_eq!(rolling.0.total(), 24);
+                }
+                assert_eq!(
+                    db.mini_counts(now, zone, TodayPeriod::CalendarDay)
+                        .unwrap()
+                        .0
+                        .total(),
+                    calendar_total
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn paused_source_invalidates_mini_counts_when_counter_period_changes() {
+        use crate::input::Device;
+        use chrono::{TimeZone, Timelike};
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("source-period.sqlite3");
+        let mut writer = CollectorDb::open(&path).unwrap();
+        let now = Local::now();
+        // Keep yesterday's final minute inside the rolling window at any UTC hour.
+        let zone = crate::timezone::TimeZonePreference::Named(
+            if now.with_timezone(&chrono::Utc).hour() < 12 {
+                "UTC"
+            } else {
+                "Pacific/Honolulu"
+            }
+            .parse()
+            .unwrap(),
+        );
+        let projected = zone.at(now);
+        let midnight = projected
+            .timezone()
+            .from_local_datetime(&projected.date_naive().and_hms_opt(0, 0, 0).unwrap())
+            .single()
+            .unwrap();
+        let events = [now.timestamp_millis(), midnight.timestamp_millis() - 60_000].map(|ts_ms| {
+            InputEvent {
+                ts_ms,
+                device: Device::Keyboard,
+                code: 4,
+            }
+        });
+        writer.insert(&events).unwrap();
+        let mut runtime = Runtime::start_source(&path, true).unwrap();
+        let read = |period| {
+            let (tx, rx) = bounded(1);
+            runtime
+                .request_mini_snapshot(zone, period, move |r| {
+                    tx.send(r).unwrap();
+                })
+                .unwrap();
+            let value: serde_json::Value =
+                serde_json::from_str(&rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap())
+                    .unwrap();
+            value["today"]["keyboard"].as_i64().unwrap()
+        };
+        assert_eq!(read(TodayPeriod::CalendarDay), 1);
+        assert_eq!(read(TodayPeriod::Rolling24h), 2);
+        writer.insert(&events[..1]).unwrap();
+        assert_eq!(read(TodayPeriod::Rolling24h), 2);
+        assert_eq!(read(TodayPeriod::CalendarDay), 2);
+        runtime.shutdown().unwrap();
     }
 
     #[test]

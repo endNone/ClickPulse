@@ -268,6 +268,17 @@ impl LiveSource {
         activity_counts(&tx, now.timestamp_millis(), aggregates_ready(&tx)?)
     }
 
+    /// Read only the trailing day's counters for Mini, without calendar history.
+    pub fn rolling_day(&self, now: DateTime<Local>) -> Result<WindowCount> {
+        let tx = self.conn.unchecked_transaction()?;
+        let coverage = if aggregates_ready(&tx)? {
+            metadata_int(&tx, "precise_since_ms")?
+        } else {
+            None
+        };
+        window_counts(&tx, now.timestamp_millis(), 86_400, coverage)
+    }
+
     pub fn is_recording(&self, now_ms: i64) -> Result<bool> {
         if !table_exists(&self.conn, "clickpulse_metadata")? {
             return Ok(false);
@@ -325,30 +336,41 @@ fn activity_counts(conn: &Connection, now_ms: i64, ready: bool) -> Result<Activi
     } else {
         None
     };
-    let mut windows = Vec::new();
-    for seconds in [60, 600, 3600, 86400] {
-        let cutoff = now_ms - seconds * 1000;
-        let precise = coverage.is_some_and(|since| cutoff >= since);
-        let c = if precise {
-            counts(
-                conn,
-                "SELECT dev,SUM(cnt) FROM recent_counts WHERE ts_ms>?1 AND ts_ms<=?2 GROUP BY dev",
-                params![cutoff, now_ms],
-            )?
-        } else {
-            counts(
-                conn,
-                "SELECT dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY dev",
-                params![cutoff.div_euclid(60000), now_ms.div_euclid(60000)],
-            )?
-        };
-        windows.push(WindowCount {
-            seconds,
-            counts: c,
-            approximate: !precise && c.total() > 0,
-        });
-    }
+    let windows = [60, 600, 3600, 86400]
+        .into_iter()
+        .map(|seconds| window_counts(conn, now_ms, seconds, coverage))
+        .collect::<Result<_>>()?;
     Ok(ActivityCounts { lifetime, windows })
+}
+
+fn window_counts(
+    conn: &Connection,
+    now_ms: i64,
+    seconds: i64,
+    coverage: Option<i64>,
+) -> Result<WindowCount> {
+    let cutoff = now_ms
+        .checked_sub(seconds * 1000)
+        .context("Time range overflow")?;
+    let precise = coverage.is_some_and(|since| cutoff >= since);
+    let c = if precise {
+        counts(
+            conn,
+            "SELECT dev,SUM(cnt) FROM recent_counts WHERE ts_ms>?1 AND ts_ms<=?2 GROUP BY dev",
+            params![cutoff, now_ms],
+        )?
+    } else {
+        counts(
+            conn,
+            "SELECT dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY dev",
+            params![cutoff.div_euclid(60000), now_ms.div_euclid(60000)],
+        )?
+    };
+    Ok(WindowCount {
+        seconds,
+        counts: c,
+        approximate: !precise && c.total() > 0,
+    })
 }
 
 fn table_exists(conn: &Connection, name: &str) -> Result<bool> {
@@ -457,6 +479,9 @@ mod tests {
             let source = LiveSource::open(&path).unwrap();
             let stats = source.snapshot(now).unwrap();
             let day = stats.windows.iter().find(|w| w.seconds == 86_400).unwrap();
+            let mini = source.rolling_day(now).unwrap();
+            assert_eq!(mini.counts, day.counts, "{mode}");
+            assert_eq!(mini.approximate, day.approximate, "{mode}");
             let sum = stats
                 .hourly
                 .iter()

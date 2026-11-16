@@ -46,10 +46,10 @@ function renderUpdateState(){
   const installHelp=$('update-install-help');
   if(installHelp){installHelp.hidden=!available||managed||state.can_install||state.automatic===false;setSelectableText(installHelp,t('update.install_help'));}
   // Demo, read-only and independent sessions cannot schedule checks or change
-  // the installed app's preference, so show why the switch is unavailable.
+  // the installed app's preference, so show why this setting is unavailable.
   const scheduled=state.automatic!==false;
   const automatic=$('automatic-updates'),last=$('update-last-checked');
-  if(automatic){automatic.checked=scheduled&&window.presentationView?.auto_check_updates!==false;automatic.disabled=!scheduled||updateInstalling();}
+  if(automatic){automatic.value=String(scheduled&&window.presentationView?.auto_check_updates!==false);automatic.disabled=!scheduled||updateInstalling();Dropdowns.sync('automatic-updates');}
   const unavailable=$('update-automatic-unavailable');
   if(unavailable)unavailable.hidden=scheduled;
   const checked=window.presentationView?.last_update_check;
@@ -75,10 +75,10 @@ $('check-updates')?.addEventListener('click',()=>{
   send(['available','ready'].includes(updateState.status)&&!updateState.update_command?(updateState.can_install?'install_update':'update_release'):'check_updates');
 });
 $('update-details')?.addEventListener('click',event=>{event.preventDefault();send('update_release');});
-$('ignore-software-input')?.addEventListener('change',event=>send('ignore_software_input',{enabled:event.target.checked}));
+$('ignore-software-input')?.addEventListener('change',event=>send('ignore_software_input',{enabled:event.target.value==='true'}));
 $('automatic-updates')?.addEventListener('change',event=>{
   if(updateInstalling()||updateState.automatic===false)return;
-  send('automatic_updates',{enabled:event.target.checked});
+  send('automatic_updates',{enabled:event.target.value==='true'});
 });
 
 function renderDataOperation(){
@@ -110,7 +110,7 @@ window.receivePaused=paused=>{
   }
   if(changed)sportView?.setPaused(paused);
 };
-window.updateSportActivity=()=>sportView?.sync(window.presentationView);
+window.updateSportActivity=()=>{sportView?.sync(window.presentationView);Dropdowns.sync('sport-visible');};
 function updateHeading(){
   $('page-title').textContent=t(titles[page]);
   $('page-description').hidden=page==='settings';
@@ -121,6 +121,7 @@ window.setInterfaceLanguage=(locale,preference)=>{
   Dropdowns.sync('language-select');
   if(I.locale===locale)return;
   I.setLocale(locale);I.apply(document);updateHeading();renderDataOperation();
+  window.renderTodayPeriod?.();
   renderTimeZoneOptions();Dropdowns.syncAll();
   calendarLayout='';historySignature='';
   sportView?.render();
@@ -147,6 +148,27 @@ window.setInterfaceTimeZone=value=>{
   }catch{window.toast(t('settings.timezone_unavailable'));return false;}
 };
 $('timezone-select').addEventListener('change',event=>send('timezone',{timezone:event.target.value}));
+$('today-period-select').addEventListener('change',event=>send('today_period',{period:event.target.value}));
+const todayPeriod=()=>window.presentationView?.today_period||'calendar_day';
+window.counterSummary=snapshot=>{
+  if(!snapshot)return null;
+  if(!Array.isArray(snapshot.windows)){
+    if((snapshot.today_period||'calendar_day')!==todayPeriod())return null;
+    return {counts:snapshot.today,approximate:!!snapshot.approximate};
+  }
+  return todayPeriod()==='rolling_24h'
+    ?snapshot.windows.find(window=>window.seconds===86400)||null
+    :{counts:snapshot.today,approximate:false};
+};
+window.renderTodayPeriod=()=>{
+  const rolling=todayPeriod()==='rolling_24h',label=rolling?'metric.last24':'metric.today';
+  for(const id of ['today-label','mini-period-label']){$(id).dataset.i18n=label;$(id).textContent=t(label);}
+  const scope=rolling?'metric.last24.scope':'metric.today.scope';
+  $('mini-period-label').title=t(scope);
+  $('timezone-row').hidden=rolling;
+  if(rolling)Dropdowns.controllers.get('timezone-select')?.close();
+  $('today-period-select').value=todayPeriod();Dropdowns.sync('today-period-select');
+};
 $('language-select').addEventListener('change',event=>send('language',{language:event.target.value}));
 $('theme-select').addEventListener('change',event=>send('theme',{theme:event.target.value}));
 const K=ClickPulseKeyboard;
@@ -246,12 +268,14 @@ window.failure=message=>{
   }
 };
 window.receiveMini=snapshot=>{
-  if(!window.presentationView?.compact||snapshot.timezone!==(window.presentationView?.timezone||'system'))return;
+  if(!window.presentationView?.compact||snapshot.timezone!==(window.presentationView?.timezone||'system')||!window.counterSummary(snapshot))return;
   miniData=recordingPaused===null?snapshot:{...snapshot,paused:recordingPaused};
   window.presentationStats?.(miniData);
 };
 window.renderMiniSnapshot=()=>{
-  if(miniData&&miniData.timezone===(window.presentationView?.timezone||'system'))window.presentationStats?.(miniData);
+  const snapshot=[miniData,data].find(value=>value&&(value.timezone||'system')===(window.presentationView?.timezone||'system')&&window.counterSummary(value));
+  if(snapshot)window.presentationStats?.(snapshot);
+  else for(const id of ['mini-today','mini-keyboard','mini-mouse'])setSelectableText($(id),'—');
 };
 // Navigation survives renderer disposal, without saving history or input text.
 let pendingSessionState=null,pendingSessionScroll=null,lastSessionState='',scrollStateTimer;
@@ -329,8 +353,12 @@ window.receive=snapshot=>{
   if(data.capture.error)$('error-banner').textContent=t(data.capture.error_code||'error.recording');
   if(page==='settings')renderSettings();
   if(page==='overview'){
-    for(const key of ['today','week','lifetime']){setSelectableText($(key),n(total(data[key])));setSelectableText($(key+'-detail'),`${t('common.keyboard')} ${n(data[key].keyboard)} / ${t('common.mouse')} ${n(data[key].mouse)}`);}
-    $('legacy-note').textContent=t(data.source_mode?'metric.readonly':data.legacy_imported?'metric.imported':'metric.all');
+    const summary=window.counterSummary(data);
+    for(const key of ['today','week','lifetime']){
+      const counts=key==='today'?summary?.counts:data[key],prefix=key==='today'&&summary?.approximate?'≈ ':'';
+      setSelectableText($(key),counts?prefix+n(total(counts)):'—');
+      setSelectableText($(key+'-detail'),counts?`${t('common.keyboard')} ${prefix}${n(counts.keyboard)} / ${t('common.mouse')} ${prefix}${n(counts.mouse)}`:t('metric.placeholder'));
+    }
     renderChanged('windows',data.windows,()=>$('windows').replaceChildren(...data.windows.map(w=>{
       const node=document.createElement('div');node.className='window';const count=document.createElement('strong'),label=document.createElement('span');count.textContent=(w.approximate?'≈ ':'')+n(total(w.counts));label.textContent=t('window.'+w.seconds);node.append(count,label);return node;
     })));
@@ -366,12 +394,12 @@ function renderSettings(){
   $('permission-reset-settings').hidden=onLinux || $('permission-row').hidden || data.capture.listening;
   $('capture-settings').hidden=!!data.source_mode && !data.setup_pending;
   $('ignore-software-row').hidden=onLinux || !!data.source_mode;
-  $('ignore-software-input').checked=!!window.presentationView?.ignore_software_input;
+  $('ignore-software-input').value=String(!!window.presentationView?.ignore_software_input);Dropdowns.sync('ignore-software-input');
   $('handoff-settings').hidden=!data.setup_pending;
   $('takeover').disabled=dataOperationBusy || !data.capture.listening || data.capture.permission_needed;
   $('handoff-description').textContent=t(data.capture.listening?'settings.takeover_ready':'settings.takeover_wait');
   $('autostart-row').hidden=data.auto_start_available!==true;
-  $('autostart').textContent=t(data.auto_start?'action.disable':'action.enable');
+  $('autostart').value=String(!!data.auto_start);Dropdowns.sync('autostart');
   setSelectableText($('db-path'),data.demo?t('demo.storage'):data.database_path);
   const storageMode=data.demo?'demo':data.database_mode||'custom';
   const storageDescriptions={default:'settings.storage_default',custom:'settings.storage_custom',source:'settings.storage_source',demo:'settings.storage_demo'};
@@ -432,13 +460,13 @@ function renderHourly(hours){
     time.textContent=I.date(h.start_ms,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'});date.textContent=I.date(h.start_ms,{month:'short',day:'numeric'});label.append(time,date);return label;
   }));
   chart.empty.hidden=hours.some(h=>total(h.counts)>0);chart.empty.textContent=t('common.empty');
-  chart.defaultDescription=t('chart.hourly_hint');updateHourlyDetail();
+  updateHourlyDetail();
 }
 function updateHourlyDetail(){
   if(!hourlyNodes?.hours)return;
   const chart=hourlyNodes,index=chart.slots.findIndex(slot=>slot.node.dataset.hour===chart.active);
   chart.slots.forEach((slot,i)=>{slot.node.classList.toggle('active',i===index);slot.node.tabIndex=i===(index>=0?index:chart.slots.length-1)?0:-1;});
-  setSelectableText($('hourly-detail'),index>=0?chart.description(chart.hours[index]):chart.defaultDescription);
+  setSelectableText($('hourly-detail'),index>=0?chart.description(chart.hours[index]):'');
 }
 function renderTrend(container,days){
   const svg=svgNode('svg',{viewBox:'0 0 600 132',preserveAspectRatio:'none',class:'trend-plot',role:'img','aria-label':t('chart.aria')});
@@ -625,4 +653,4 @@ function renderKeyboardTreemap(view){
 send('ready');
 
 $('takeover').addEventListener('click',()=>send('takeover'));
-$('autostart').addEventListener('click',()=>send('autostart'));
+$('autostart').addEventListener('change',event=>{if(data?.auto_start_available&&(event.target.value==='true')!==!!data.auto_start)send('autostart');});

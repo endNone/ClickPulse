@@ -207,6 +207,10 @@ impl CollectorDb {
     pub fn activity_counts(&self, now: DateTime<Local>) -> Result<crate::source::ActivityCounts> {
         self.reader.activity_counts(now)
     }
+
+    pub fn rolling_day(&self, now: DateTime<Local>) -> Result<crate::db::WindowCount> {
+        self.reader.rolling_day(now)
+    }
     pub fn heartbeat(&self, now: i64) -> Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO clickpulse_metadata VALUES('heartbeat_ms',?1)",

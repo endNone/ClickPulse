@@ -84,6 +84,14 @@ test('unchanged background synchronization does not reset an open menu scroll po
   t.trigger.fire('keydown',{key:'ArrowDown'});
   assert.equal(t.menu.children[1].scrolled,true,'keyboard navigation still reveals its active option');
 });
+test('disabling a setting closes its open menu without changing the saved value',()=>{
+  const {t,themes,dropdowns}=fixture(),value=themes.value;
+  t.open();t.trigger.fire('keydown',{key:'ArrowDown'});
+  themes.disabled=true;dropdowns.sync(themes);
+  assert.equal(t.menu.hidden,true);assert.equal(t.trigger.disabled,true);
+  assert.equal(t.trigger.getAttribute('aria-expanded'),'false');assert.equal(themes.value,value);
+  themes.disabled=false;dropdowns.sync(themes);t.open();assert.equal(t.menu.hidden,false);
+});
 test('menus flip above controls near the bottom and stay inside the viewport',()=>{
   const {h,window}=fixture();h.trigger.rect={left:750,top:465,bottom:497,width:108};h.open();
   assert.ok(parseFloat(h.menu.style.top)<465);assert.ok(parseFloat(h.menu.style.left)+parseFloat(h.menu.style.width)<=window.innerWidth-8);

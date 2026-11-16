@@ -1,5 +1,5 @@
 (() => {
-  const view={timezone:'system',compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:false,auto_check_updates:true,last_update_check:null};
+  const view={timezone:'system',today_period:'calendar_day',compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:false,auto_check_updates:true,last_update_check:null};
   window.presentationView=view;
   const put=(id,value)=>window.setSelectableText($(id),value);
   const onWindows=window.clickpulsePlatform==='windows',onLinux=window.clickpulsePlatform==='linux';
@@ -55,6 +55,7 @@
     if(next.locale)window.setInterfaceLanguage(next.locale,next.language_preference);
     if(next.theme)window.setInterfaceTheme(next.theme);
     Object.assign(view,next);
+    window.renderTodayPeriod();
     window.renderUpdatePreferences?.();
     if(onWindows||onLinux){
       const key=view.maximized?'window.restore':'window.maximize';
@@ -84,9 +85,12 @@
   };
   window.presentationStats=snapshot=>{
     window.presentationRecordingState(snapshot);
-    put('mini-today',n(total(snapshot.today)));
-    put('mini-keyboard',n(snapshot.today.keyboard));
-    put('mini-mouse',n(snapshot.today.mouse));
+    const summary=window.counterSummary(snapshot);
+    if(!summary)return;
+    const prefix=summary.approximate?'≈ ':'';
+    put('mini-today',prefix+n(total(summary.counts)));
+    put('mini-keyboard',prefix+n(summary.counts.keyboard));
+    put('mini-mouse',prefix+n(summary.counts.mouse));
   };
   $('mini-drag').addEventListener('mousedown',event=>{if(event.button===0){event.preventDefault();send('drag');}});
   for(const [id,action] of [['compact','compact'],['mini-expand','expand'],['mini-hide','hide'],['mini-pin','pin'],['mini-pause','pause']]) {

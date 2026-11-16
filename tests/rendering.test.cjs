@@ -43,7 +43,7 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   get('keyboard-layout').parentElement=new Element();
   get('keyboard-treemap').clientWidth=640;get('keyboard-treemap').clientHeight=279;
   const root=new Element('root');root.lang='en';
-  document={documentElement:root,body:new Element(),getElementById:id=>['export','history-export','settings-pause','recording-description','quit','sport-open-mini','refresh-time','calendar-description'].includes(id)?null:get(id),
+  document={documentElement:root,body:new Element(),getElementById:id=>['today-scope','legacy-note','export','history-export','settings-pause','recording-description','quit','sport-open-mini','refresh-time','calendar-description'].includes(id)?null:get(id),
     querySelector(selector){return get(selector==='header'?'header':selector==='.sidebar'?'sidebar':'main');},
     querySelectorAll(selector){return selector==='nav button[data-page]'?nav:selector==='[data-settings-section]'?settingsLinks:selector==='.page'?pages:selector==='[data-range]'?ranges:[];},
     createElement(){const node=new Element();node.ownerDocument=document;return node;},createElementNS(){const node=new Element();node.ownerDocument=document;return node;}};
@@ -87,6 +87,50 @@ test('Mini ignores stale timezone results and needs no full snapshot to show err
   assert.equal(a.get('mini-status').textContent,messages.en['status.recording_error']);
 });
 
+test('counter period switches Overview and Mini together without changing calendar history',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+    const full=snapshot();full.windows.push({seconds:86400,counts:{keyboard:250,mouse:50},approximate:true});
+    full.timezone='America/Los_Angeles';
+    a.window.receiveView({today_period:'calendar_day',timezone:full.timezone});a.window.receive(full);
+    assert.equal(a.get('timezone-row').hidden,false);
+    assert.equal(a.get('today').textContent,'120');
+    a.get('today-period-select').value='rolling_24h';a.get('today-period-select').fire('change');
+    assert.deepEqual(sent.at(-1),{action:'today_period',period:'rolling_24h'});
+    a.window.receiveView({today_period:'rolling_24h'});
+    assert.equal(a.get('timezone-row').hidden,true);
+    assert.equal(a.window.presentationView.timezone,'America/Los_Angeles');
+    assert.equal(a.get('today-label').textContent,messages.en['metric.last24']);
+    assert.equal(a.get('today').textContent,'≈ 300');
+    assert.equal(a.get('week').textContent,'120');assert.equal(full.today.keyboard,100);
+    a.window.receiveView({compact:true});assert.equal(a.get('mini-today').textContent,'≈ 300');
+    a.window.receiveMini({timezone:full.timezone,today_period:'calendar_day',today:{keyboard:999,mouse:0},capture:{listening:true}});
+    assert.equal(a.get('mini-today').textContent,'≈ 300');
+    a.window.receiveMini({timezone:full.timezone,today_period:'rolling_24h',today:{keyboard:260,mouse:50},approximate:true,capture:{listening:true}});
+    assert.equal(a.get('mini-today').textContent,'≈ 310');
+    assert.equal(a.get('mini-keyboard').textContent,'≈ 260');
+    a.window.receiveView({locale:'zh-CN',compact:false});
+    assert.equal(a.get('today-label').textContent,'最近24小时');
+    assert.equal(a.get('today-period-select').value,'rolling_24h');
+    a.window.receiveView({today_period:'calendar_day'});
+    assert.equal(a.get('timezone-row').hidden,false);
+    assert.equal(a.get('timezone-select').value,'America/Los_Angeles');
+    assert.equal(a.get('today').textContent,'120');assert.equal(a.get('today-label').textContent,'时区当天');
+    assert.equal(a.get('mini-today').textContent,'120');
+  }
+});
+
+test('cold Mini uses the restored counter period and refuses stale or missing-period results',()=>{
+  const a=app();a.window.receiveView({compact:true,today_period:'rolling_24h'});
+  assert.equal(a.get('mini-period-label').textContent,'Last 24 hours');
+  assert.equal(a.get('mini-today').textContent,'—');
+  const mini={timezone:'system',today:{keyboard:11,mouse:2},capture:{listening:true}};
+  a.window.receiveMini(mini);assert.equal(a.get('mini-today').textContent,'—');
+  a.window.receiveMini({...mini,today_period:'rolling_24h'});assert.equal(a.get('mini-today').textContent,'13');
+  a.window.receiveView({today_period:'calendar_day'});assert.equal(a.get('mini-today').textContent,'—');
+  a.window.receiveMini({...mini,today_period:'calendar_day'});assert.equal(a.get('mini-today').textContent,'13');
+});
+
 test('Sport polls only in enabled visible Mini windows and discards historical or resume bursts',()=>{
   const a=app(),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
   a.window.receive(snapshot());assert.equal(a.intervals.size,0);
@@ -122,7 +166,7 @@ test('Mini Sport controls retain Warp for old preferences and clear energy on pa
   a.window.receiveSport({keyboard:0,mouse:4,available:true,paused:true});assert.equal(a.get('mini-sport-cps').textContent,'0.0');
   a.window.receiveView({locale:'zh-CN',language_preference:'zh-CN'});
   assert.equal(a.get('mini-sport').attributes['aria-label'],messages['zh-CN']['sport.disable']);
-  a.get('sport-visible').checked=false;a.get('sport-visible').fire('change');
+  a.get('sport-visible').value='false';a.get('sport-visible').fire('change');
   assert.deepEqual(sent.pop(),{action:'sport_visible',visible:false});
   a.window.receiveView({sport_visible:false,sport_enabled:false});assert.equal(a.get('mini-sport-readout').hidden,true);
   assert.equal(a.get('mini-widget').dataset.sportSkin,'warp');
@@ -348,12 +392,25 @@ test('software-input filtering defaults off and is available only for supported 
     const a=app(platform),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
     a.window.receive(snapshot());a.navigate('settings');
     assert.equal(a.get('ignore-software-row').hidden,platform==='linux');
-    assert.equal(a.get('ignore-software-input').checked,false);
+    assert.equal(a.get('ignore-software-input').value,'false');
     a.window.receiveView({ignore_software_input:true});
-    assert.equal(a.get('ignore-software-input').checked,true);
-    a.get('ignore-software-input').checked=false;a.get('ignore-software-input').fire('change');
+    assert.equal(a.get('ignore-software-input').value,'true');
+    a.get('ignore-software-input').value='false';a.get('ignore-software-input').fire('change');
     assert.deepEqual(sent.at(-1),{action:'ignore_software_input',enabled:false});
   }
+});
+
+test('startup dropdown shows current state and toggles only when a different state is chosen',()=>{
+  const a=app('windows'),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+  a.window.receive(snapshot());a.navigate('settings');
+  const control=a.get('autostart');sent.length=0;
+  assert.equal(control.value,'true');control.fire('change');assert.equal(sent.length,0);
+  control.value='false';control.fire('change');assert.deepEqual(sent.pop(),{action:'autostart'});
+  a.window.receive({...snapshot(),auto_start:false});assert.equal(control.value,'false');
+  control.fire('change');assert.equal(sent.length,0);
+  control.value='true';control.fire('change');assert.deepEqual(sent.pop(),{action:'autostart'});
+  a.window.receive({...snapshot(),auto_start:false,auto_start_available:false});
+  control.value='true';control.fire('change');assert.equal(sent.length,0);
 });
 
 test('macOS access guidance explains stale grants and names a completed update',()=>{
@@ -712,10 +769,10 @@ test('hourly local times distinguish repeated DST hours and span the spring cloc
 
 
 test('Sport is hidden and inactive by default until its control is explicitly enabled',()=>{
-  const a=app();a.window.receive(snapshot());
+  const a=app();a.window.receiveView({});a.window.receive(snapshot());
   assert.equal(a.window.presentationView.sport_enabled,false);
   assert.equal(a.window.presentationView.sport_visible,false);
-  assert.equal(a.get('sport-visible').checked,false);
+  assert.equal(a.get('sport-visible').value,'false');
   a.window.receiveView({compact:true});assert.equal(a.get('mini-sport').hidden,true);assert.equal(a.intervals.size,0);
   a.window.receiveView({sport_visible:true});assert.equal(a.get('mini-sport').hidden,false);assert.equal(a.intervals.size,0);
   a.window.receiveView({sport_enabled:true});assert.equal(a.intervals.size,1);
@@ -875,16 +932,16 @@ test('daily update preference and last attempt survive UI refresh and language c
   for(const platform of ['macos','windows'])for(const locale of Object.keys(messages)){
     const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
     a.window.receiveView({locale,auto_check_updates:false,last_update_check:1794310000});
-    assert.equal(a.get('automatic-updates').checked,false);
+    assert.equal(a.get('automatic-updates').value,'false');
     assert.equal(a.get('update-last-checked').hidden,false);
     assert.ok(a.get('update-last-checked').textContent.startsWith(messages[locale]['update.last_checked'].split('{time}')[0]));
-    a.get('automatic-updates').checked=true;a.get('automatic-updates').fire('change');
+    a.get('automatic-updates').value='true';a.get('automatic-updates').fire('change');
     assert.deepEqual(sent.pop(),{action:'automatic_updates',enabled:true});
     a.window.receiveView({auto_check_updates:true});a.window.receive(snapshot());
-    assert.equal(a.get('automatic-updates').checked,true);assert.equal(sent.length,0);
+    assert.equal(a.get('automatic-updates').value,'true');assert.equal(sent.length,0);
     a.window.receiveUpdateState({status:'checking'});assert.equal(a.get('automatic-updates').disabled,false);
     a.window.receiveUpdateState({status:'downloading'});assert.equal(a.get('automatic-updates').disabled,false);
-    a.get('automatic-updates').checked=false;a.get('automatic-updates').fire('change');
+    a.get('automatic-updates').value='false';a.get('automatic-updates').fire('change');
     assert.deepEqual(sent.pop(),{action:'automatic_updates',enabled:false});
     for(const last_update_check of [null,undefined,'invalid',Number.MAX_VALUE]){
       a.window.receiveView({last_update_check});assert.equal(a.get('update-last-checked').hidden,true);
@@ -898,10 +955,10 @@ test('demo, read-only and independent sessions cannot change the installed app d
     assert.equal(a.get('update-automatic-unavailable').hidden,true);
     a.window.receiveUpdateState({status:'current',current:'0.2.0',automatic:false});
     const toggle=a.get('automatic-updates');
-    assert.equal(toggle.checked,false);assert.equal(toggle.disabled,true);
+    assert.equal(toggle.value,'false');assert.equal(toggle.disabled,true);
     assert.equal(a.get('update-automatic-unavailable').hidden,false);
     assert.equal(a.get('update-last-checked').hidden,true);
-    toggle.checked=true;toggle.fire('change');assert.equal(sent.length,0);
+    toggle.value='true';toggle.fire('change');assert.equal(sent.length,0);
     // Manual checks stay available in these sessions.
     a.get('check-updates').fire();assert.deepEqual(sent.pop(),{action:'check_updates'});
     assert.ok(messages[locale]['update.automatic_unavailable']);

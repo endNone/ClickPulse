@@ -46,6 +46,15 @@ pub enum CloseAction {
     Quit,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TodayPeriod {
+    #[default]
+    CalendarDay,
+    #[serde(rename = "rolling_24h")]
+    Rolling24h,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
@@ -53,6 +62,7 @@ pub struct Preferences {
     pub pinned: bool,
     pub language: crate::localization::LanguagePreference,
     pub timezone: crate::timezone::TimeZonePreference,
+    pub today_period: TodayPeriod,
     pub theme: Theme,
     pub close_action: CloseAction,
     pub auto_check_updates: bool,
@@ -70,6 +80,7 @@ impl Default for Preferences {
             pinned: true,
             language: Default::default(),
             timezone: Default::default(),
+            today_period: Default::default(),
             theme: Default::default(),
             close_action: Default::default(),
             auto_check_updates: true,
@@ -176,6 +187,26 @@ impl Preferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn counter_period_defaults_to_today_and_survives_restart() {
+        let old: Preferences = serde_json::from_str(r#"{"timezone":"Asia/Shanghai"}"#).unwrap();
+        assert_eq!(old.today_period, TodayPeriod::CalendarDay);
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("presentation.json");
+        let prefs = Preferences {
+            today_period: TodayPeriod::Rolling24h,
+            ..old
+        };
+        prefs.save_to(&path).unwrap();
+        let restored = Preferences::load_from(&path).unwrap().preferences;
+        assert_eq!(restored.today_period, TodayPeriod::Rolling24h);
+        assert_eq!(restored.timezone, prefs.timezone);
+        assert_eq!(
+            serde_json::to_value(restored.today_period).unwrap(),
+            "rolling_24h"
+        );
+    }
 
     #[test]
     fn daily_checks_migrate_old_preferences_and_retain_opt_out_and_attempt_time() {

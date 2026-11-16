@@ -570,6 +570,11 @@ pub fn run(
                             view_changed = true;
                             refresh = true;
                         }
+                        Request::TodayPeriod { period } => {
+                            preferences.today_period = period;
+                            view_changed = true;
+                            refresh = true;
+                        }
                         Request::Theme { theme } => {
                             preferences.theme = theme;
                             view_changed = true;
@@ -1102,7 +1107,7 @@ pub fn run(
             mini.set_text(locale.text("action.mini"));
             hide.set_text(locale.text("native.hide"));
             quit.set_text(locale.text("native.quit"));
-            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"ignore_software_input":preferences.ignore_software_input,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
+            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"today_period":preferences.today_period,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"ignore_software_input":preferences.ignore_software_input,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
             if webview.is_ready() {
                 let _ = webview.evaluate_script(&format!(
                     "window.receiveView({view});window.receiveDataBusy?.({});",
@@ -1144,7 +1149,11 @@ pub fn run(
                             });
                         };
                         let result = if compact {
-                            rt.request_mini_snapshot(preferences.timezone, reply)
+                            rt.request_mini_snapshot(
+                                preferences.timezone,
+                                preferences.today_period,
+                                reply,
+                            )
                         } else {
                             rt.request_snapshot_in_timezone(preferences.timezone, reply)
                         };

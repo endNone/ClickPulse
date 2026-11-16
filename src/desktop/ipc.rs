@@ -13,6 +13,9 @@ pub(super) enum Request {
     Timezone {
         timezone: clickpulse::timezone::TimeZonePreference,
     },
+    TodayPeriod {
+        period: clickpulse::presentation::TodayPeriod,
+    },
     Theme {
         theme: Theme,
     },
@@ -84,6 +87,9 @@ mod tests {
             r#"{"action":"timezone","timezone":"not/a-zone"}"#,
             r#"{"action":"timezone"}"#,
             r#"{"action":"timezone","timezone":null}"#,
+            r#"{"action":"today_period"}"#,
+            r#"{"action":"today_period","period":"all"}"#,
+            r#"{"action":"today_period","period":"rolling_24h","hours":48}"#,
             r#"{"action":"export"}"#,
             r#"{"action":"theme"}"#,
             r#"{"action":"theme","theme":"unknown"}"#,
@@ -119,6 +125,13 @@ mod tests {
             assert!(matches!(
                 serde_json::from_str::<Request>(&body).unwrap(),
                 Request::Timezone { .. }
+            ));
+        }
+        for period in ["calendar_day", "rolling_24h"] {
+            let body = serde_json::json!({"action":"today_period","period":period}).to_string();
+            assert!(matches!(
+                serde_json::from_str::<Request>(&body).unwrap(),
+                Request::TodayPeriod { .. }
             ));
         }
     }

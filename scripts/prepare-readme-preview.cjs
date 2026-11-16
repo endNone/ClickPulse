@@ -87,7 +87,7 @@ const boot = `(() => {
     document.body.style.setProperty('--capture-scale',String(scale));
     document.body.style.setProperty('--capture-width','1280px');
   }
-  const view = {timezone:options.get('timezone')||'system',timezones:[...new Set(['UTC',...(Intl.supportedValuesOf?.('timeZone')||['America/Los_Angeles','America/New_York','Europe/London','Asia/Shanghai','Asia/Tokyo','Asia/Kathmandu','Australia/Sydney'])])],compact:options.get('page') === 'mini',pinned:true,visible:true,locale,language_preference:locale,theme:'blue',sport_enabled:options.get('sport')==='1',sport_visible:options.get('sport')==='1'};
+  const view = {today_period:options.get('period')==='rolling_24h'?'rolling_24h':'calendar_day',timezone:options.get('timezone')||'system',timezones:[...new Set(['UTC',...(Intl.supportedValuesOf?.('timeZone')||['America/Los_Angeles','America/New_York','Europe/London','Asia/Shanghai','Asia/Tokyo','Asia/Kathmandu','Australia/Sydney'])])],compact:options.get('page') === 'mini',pinned:true,visible:true,locale,language_preference:locale,theme:'blue',sport_enabled:options.get('sport')==='1',sport_visible:options.get('sport')==='1'};
   const snapshot = ${JSON.stringify(snapshot)};
   const baseline=JSON.parse(JSON.stringify(snapshot));
   function projectTimeZone(){
@@ -121,7 +121,11 @@ const boot = `(() => {
     const request = JSON.parse(message);
     if(request.action === 'language'){view.locale = createClickPulseI18n(window.clickpulseMessages,request.language==='system'?locale:request.language).locale;view.language_preference=request.language;}
     if(request.action === 'theme')view.theme=request.theme;
+    if(request.action === 'today_period')view.today_period=request.period;
     if(request.action === 'timezone'){view.timezone=request.timezone;projectTimeZone();}
+    if(request.action === 'automatic_updates')view.auto_check_updates=request.enabled;
+    if(request.action === 'ignore_software_input')view.ignore_software_input=request.enabled;
+    if(request.action === 'autostart')snapshot.auto_start=!snapshot.auto_start;
     if(request.action === 'sport')view.sport_enabled=request.enabled&&view.sport_visible;
     if(request.action === 'sport_visible'){view.sport_visible=request.visible;if(!request.visible)view.sport_enabled=false;}
     if(request.action === 'compact')view.compact=true;

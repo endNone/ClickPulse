@@ -57,12 +57,12 @@ test('missing translations use the English platform variant and decimal formatti
 
 test('switching language updates formatting without changing statistics values',()=>{
   const i=create(messages,'en');
-  assert.equal(i.t('metric.today'),'Today');
+  assert.equal(i.t('metric.today'),'Calendar day');
   assert.equal(i.number(1987549),'1,987,549');
   assert.equal(i.percent(.125),'12.50%');
   assert.equal(i.month(10),'Oct');
   i.setLocale('zh-CN');
-  assert.equal(i.t('metric.today'),'今日');
+  assert.equal(i.t('metric.today'),'时区当天');
   assert.equal(i.number(1987549),'1,987,549');
   assert.equal(i.month(10),'10月');
   i.setLocale('unsupported');

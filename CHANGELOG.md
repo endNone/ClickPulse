@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### New
+
+- Choose a calendar day or the last 24 hours for Overview and Mini counts.
+
+### Improved
+
+- Adjust Settings more easily with compact controls and consistent On/Off options.
+- Read a cleaner overview with fewer labels and a consistent brand subtitle.
+
 ### Fixed
 
 - Restore tabular numeral shapes and spacing in the bundled fonts.

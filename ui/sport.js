@@ -127,7 +127,7 @@ const ClickPulseSport=(() => {
       enabled=view.sport_enabled===true;shown=view.sport_visible!==false;
       el('mini-sport').hidden=!shown;el('mini-sport').setAttribute('aria-pressed',String(enabled&&shown));
       const title=t(enabled?'sport.disable':'sport.enable');el('mini-sport').setAttribute('aria-label',title);el('mini-sport').title=title;
-      el('sport-visible').checked=shown;
+      el('sport-visible').value=String(shown);
       setActive(!!view.compact&&enabled&&shown&&view.visible!==false);
     }
     function receive(sample){
@@ -140,7 +140,7 @@ const ClickPulseSport=(() => {
       paused=value;meter.suspend();marks=[];lastHit=-Infinity;paint(0);render();
     }
     el('mini-sport').addEventListener('click',()=>send('sport',{enabled:!enabled}));
-    el('sport-visible').addEventListener('change',event=>send('sport_visible',{visible:!!event.target.checked}));
+    el('sport-visible').addEventListener('change',event=>send('sport_visible',{visible:event.target.value==='true'}));
     doc.addEventListener?.('visibilitychange',()=>win.updateSportActivity?.());
     motion?.addEventListener?.('change',()=>{paint(0);render();wake();});
     win.addEventListener?.('resize',()=>{resize();wake();});
