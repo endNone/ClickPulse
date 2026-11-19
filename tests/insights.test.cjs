@@ -15,7 +15,7 @@ function viewHarness({lateBrand=false,fonts,platform='macos',preview=false,timeZ
  global.ClickPulseShortcutCatalog=C;
  const window={captureSessionState(){},clickpulsePlatform:platform,clickpulsePreview:preview},synced=[];
  const I={locale:'en',timezone:timeZone,effectiveTimeZone:timeZone,t:(key,vars)=>key+(vars?.count||''),number:String,percent:(ratio,digits)=>(ratio*100).toFixed(digits)+'%',day:String,date:String};
- const view=M.create({document,window,I,T:{get:()=>({empty:'#eee',accent:'#123',mouse:'#456',navy:'#789'})},send:(...args)=>sent.push(args),toast:message=>toasts.push(message),getSystemTimeZone:()=>systemTimeZone,syncSelect(id){synced.push([id,get(id).value]);}});
+ const view=M.create({document,window,I,send:(...args)=>sent.push(args),toast:message=>toasts.push(message),getSystemTimeZone:()=>systemTimeZone,syncSelect(id){synced.push([id,get(id).value]);}});
  delete global.ClickPulseShortcutCatalog;
  return {view,get,styles,document,window,brand,I,synced,texts,sent,toasts,setSystemTimeZone:zone=>{systemTimeZone=zone;},draws:()=>draws,exports:()=>exports};
 }
@@ -56,19 +56,39 @@ test('combined Heatmap refreshes mouse buttons only while that page is active',(
  const drawing=a.get('mouse-diagram').children[0],replacements=a.get('mouse-distribution').replacements;
  a.view.render('keys',changed);assert.equal(a.get('mouse-distribution').replacements,replacements);assert.equal(a.get('mouse-diagram').children[0],drawing);
 });
-test('mouse button grayscale follows relative counts, including the wheel, ties and empty history',()=>{
+test('mouse diagram, donut and legend share a neutral scale for every button',()=>{
  const a=viewHarness();
- const levels=()=>{
-  const found={};
-  function walk(el){const key=el.attributes?.['data-mouse-button'];if(key){const rgb=el.attributes.fill.match(/\d+/g).map(Number);assert.equal(rgb[0],rgb[1]);assert.equal(rgb[1],rgb[2]);found[key]=rgb[0];}el.children.forEach(walk);}
-  walk(a.get('mouse-diagram'));return found;
- };
- a.view.render('keys',{lifetime:{mouse:10000},mouse_buttons:{left:100,right:20,middle:2,side:0}});
- let color=levels();assert(color.left<color.right);assert(color.right<color.middle);assert(color.middle<color.side);
- const unchanged={...color};a.view.render('keys',{lifetime:{mouse:1000000},mouse_buttons:{left:100,right:20,middle:2,side:0}});assert.deepEqual(levels(),unchanged,'unknown history does not distort physical heat');
- a.view.render('keys',{mouse_buttons:{left:2,right:20,middle:100,side:20}});
- color=levels();assert(color.middle<color.right);assert(color.right<color.left);assert.equal(color.side,color.right);
- a.view.render('keys',{mouse_buttons:{}});assert.equal(new Set(Object.values(levels())).size,1);assert(Object.values(levels()).every(level=>level>230));
+ function check(snapshot){
+  a.view.render('keys',snapshot);
+  const rows=M.mouseBreakdown(snapshot);
+  const legend=new Map(a.get('mouse-distribution').children.map(row=>{
+   const [swatch,name]=row.children[0].children;
+   return [name.textContent.slice('chart.mouse_'.length),swatch.style.backgroundColor];
+  }));
+  function checkShape(el){
+   const key=el.attributes['data-mouse-button'];
+   if(key&&legend.has(key))assert.equal(el.attributes.fill,legend.get(key));
+   el.children.forEach(checkShape);
+  }
+  checkShape(a.get('mouse-diagram'));
+  const arcs=a.get('mouse-chart').children[0].children[0].children.slice(1);
+  assert.deepEqual(arcs.map(arc=>arc.attributes.stroke),rows.filter(row=>row.count).map(row=>legend.get(row.key)));
+  const levels={};
+  for(const [key,color] of legend){
+   const [r,g,b]=color.match(/\d+/g).map(Number);
+   assert.equal(r,g);assert.equal(g,b);levels[key]=r;
+  }
+  return levels;
+ }
+ const skewed=check({mouse_buttons:{left:773640,right:15022,middle:169}});
+ assert(skewed.left<skewed.right && skewed.right<skewed.middle);
+ const swapped=check({mouse_buttons:{left:15022,right:169,middle:773640}});
+ assert.equal(swapped.middle,skewed.left);assert.equal(swapped.left,skewed.right);
+ const legacy=check({lifetime:{mouse:1000},mouse_buttons:{other:60,side:20,right:20}});
+ assert(legacy.unknown<legacy.other && legacy.other<legacy.side && legacy.side<legacy.left);
+ assert.equal(legacy.side,legacy.right);
+ const empty=Object.values(check({mouse_buttons:{}}));
+ assert.equal(new Set(empty).size,1);assert(empty[0]>230);
 });
 test('mouse donut accounts for legacy unknown clicks and handles empty or single-button history',()=>{
  const a=viewHarness(),arcs=()=>a.get('mouse-chart').children[0].children[0].children.slice(1);

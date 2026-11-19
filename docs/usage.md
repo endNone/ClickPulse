@@ -22,7 +22,7 @@ On Windows, extract and keep the complete portable program folder. Install WebVi
 | Mini Sport | Optional ranks and effects for combined keyboard and mouse speed inside Mini |
 | Settings | Themes, language, recording access, launch at login and data locations |
 
-A held key counts once until released. Mouse counts track button presses, not movement, release or scrolling. Use **Compact / Full** above the heatmap to choose a layout. Your choice survives restarting the app. **Settings → Personalization → Keyboard layout** offers **Automatic**, **Compact** and **Full size**. Automatic shows navigation and number-pad keys when their recorded counts are present. The full Mac layout includes F13–F19; Windows and Linux show PrtSc, ScrLk and Pause above navigation. Recognized keys outside the selected layout remain available in **Treemap** without adding extra rows. **Other keys** shows counts that cannot be identified.
+A held key counts once until released. Mouse counts track button presses, not movement, release or scrolling. Use **Compact / Full** above the heatmap to choose a layout. Your choice survives restarting the app. **Settings → Personalization → Keyboard layout** offers **Automatic**, **Compact** and **Full size**. Automatic shows navigation and number-pad keys when their recorded counts are present. The full Mac layout includes F13–F19; Windows and Linux show PrtSc, ScrLk and Pause above navigation. Recognized keys outside the selected layout remain available in **Treemap** without adding extra rows.
 
 Keys keep their size when you resize the window. Scroll sideways in narrower windows, or choose an explicit **Interface size** to enlarge them.
 

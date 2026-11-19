@@ -39,7 +39,7 @@ The desktop calendar groups all saved minute records into dates in the selected 
 
 ## Historical keys
 
-Older records can contain characters, special keys and hashed codes that cannot always be mapped to a physical position. Known identities map to the keyboard; unresolved counts appear as **Other keys** below it and remain in the keyboard total. Original records are retained.
+Older records can contain characters, special keys and hashed codes that cannot always be mapped to a physical position. The heatmap shows recognized keys. The keyboard total also includes unresolved presses. Original records are retained.
 
 New records use a separate physical-key encoding space. Overlapping character history and physical summaries are not added twice. Details deleted before migration cannot be recovered.
 

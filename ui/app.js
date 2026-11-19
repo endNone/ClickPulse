@@ -129,7 +129,7 @@ window.clearHistoryScatter=()=>scatter.clear();
 let calendarBook=H.nextBook(-1,Math.random()),calendarPhrase=H.nextPhrase(-1,Math.random());
 const titles={overview:'page.overview',history:'page.history',keys:'page.heatmap',shortcuts:'page.shortcuts',mouse:'page.heatmap',share:'page.share',settings:'page.settings'};
 const navTitles={...titles,shortcuts:'nav.shortcuts',share:'nav.share'};
-const insights=typeof ClickPulseInsights==='undefined'?null:ClickPulseInsights.create({document,window,I,T,send,toast:message=>window.toast(message),syncSelect:Dropdowns.sync});
+const insights=typeof ClickPulseInsights==='undefined'?null:ClickPulseInsights.create({document,window,I,send,toast:message=>window.toast(message),syncSelect:Dropdowns.sync});
 window.updateInsightsVisibility=()=>insights?.setWindowState(window.presentationView);
 const sportView=typeof ClickPulseSport==='undefined'?null:ClickPulseSport.createView({document,window,translate:t,formatSpeed:value=>I.decimal(value,1),send});
 window.receiveSport=sample=>sportView?.receive(recordingPaused===null?sample:{...sample,paused:recordingPaused});
@@ -776,8 +776,6 @@ function renderKeyboard(){
   const stats=data.keyboard_stats||{physical:data.top_keys};
   const view=K.distribution(stats,'history',window.presentationView?.keyboard_layout||'auto');
   keyboardDistribution=view;updateKeyboardView();
-  $('keyboard-other').hidden=view.other<=0;
-  $('keyboard-other').textContent=view.other>0?t('keys.other',{count:n(view.other)}):'';
   if(keyboardView==='treemap'){
     renderKeyboardTreemap(view);return;
   }

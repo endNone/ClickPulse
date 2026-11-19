@@ -32,7 +32,7 @@ function shortcutSummary(rows){
  const total=rows.reduce((sum,row)=>sum+row.count,0),topFive=rows.slice(0,5).reduce((sum,row)=>sum+row.count,0);
  return {total,distinct:rows.length,top:rows.slice(0,8),topFive,others:total-topFive};
 }
-function create({document,window,I,T,send,toast,syncSelect=()=>{},getSystemTimeZone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone}){
+function create({document,window,I,send,toast,syncSelect=()=>{},getSystemTimeZone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone}){
  const C=ClickPulseShortcutCatalog,$=id=>document.getElementById(id),t=(key,vars)=>I.t(key,vars),n=value=>I.number(value);
  const datePicker=typeof ClickPulseDatePicker==='undefined'?null:ClickPulseDatePicker.create({document,window,I,input:$('share-date')});
  let paintVersion=0,painting=false,painted=false,exporting=false,suspended=false;
@@ -105,15 +105,21 @@ function create({document,window,I,T,send,toast,syncSelect=()=>{},getSystemTimeZ
   if(!library)shown.forEach((row,i)=>{listCounters[i].label.textContent=n(row.count);listCounters[i].bar.style.width=(row.count/max*100)+'%';});
  }
  function renderMouse(){
-  const rows=mouseBreakdown(snapshot),total=rows.reduce((sum,row)=>sum+row.count,0),palette=T.get(document.documentElement.dataset.theme);
-  const buttonsSignature=JSON.stringify([rows,I.locale,document.documentElement.dataset.theme]);
+  const rows=mouseBreakdown(snapshot),total=rows.reduce((sum,row)=>sum+row.count,0);
+  const buttonsSignature=JSON.stringify([rows,I.locale]);
   if(buttonsSignature===mouseButtonsSignature)return;
   mouseButtonsSignature=buttonsSignature;
-  const colors={left:palette.accent,right:palette.mouse,middle:palette.navy,side:'var(--heat-3)',other:'var(--muted)',unknown:'var(--heat-1)'};
+  const colors={};
+  for(const {key,count} of rows){
+   // A cube-root scale keeps infrequent buttons distinguishable when one dominates.
+   const share=total ? count/total : 0;
+   const gray=Math.round(242-148*Math.cbrt(share));
+   colors[key]=`rgb(${gray}, ${gray}, ${gray})`;
+  }
   const percentage=count=>total?I.percent(count/total,1):'—';
   const caption=row=>t('chart.mouse_'+row.key)+': '+n(row.count)+' · '+percentage(row.count);
   const ring=node('div',undefined,'mouse-ring'),chart=svg('svg',{viewBox:'0 0 200 200',role:'img','aria-label':t('mouse.buttons')});
-  chart.append(svg('circle',{cx:100,cy:100,r:82,fill:'none',stroke:'var(--heat-0)','stroke-width':23}));
+  chart.append(svg('circle',{cx:100,cy:100,r:82,fill:'none',stroke:'#f2f2f2','stroke-width':23}));
   let offset=0;
   for(const row of rows.filter(row=>row.count)){
    const share=row.count/total*100,arc=svg('circle',{cx:100,cy:100,r:82,fill:'none',stroke:colors[row.key],'stroke-width':23,pathLength:100,'stroke-dasharray':share+' 100','stroke-dashoffset':-offset,transform:'rotate(-90 100 100)'});
@@ -127,18 +133,14 @@ function create({document,window,I,T,send,toast,syncSelect=()=>{},getSystemTimeZ
    label.append(swatch,node('span',t('chart.mouse_'+row.key)));el.append(label,node('strong',n(row.count)),node('small',percentage(row.count)));return el;
   }));
   const drawing=svg('svg',{viewBox:'0 0 200 270',class:'mouse-drawing',role:'img','aria-label':t('mouse.buttons')});
-  // Share one linear grayscale scale across physical buttons: more clicks, darker fill.
-  // Unknown historic clicks have no physical region and do not set this scale.
-  const ink={shell:'#f6f6f6',edge:'#b9b9b9'},buttons=rows.filter(row=>['left','right','middle','side'].includes(row.key));
-  const maximum=Math.max(1,...buttons.map(row=>row.count));
-  for(const row of buttons){const level=Math.round(242-146*row.count/maximum);ink[row.key]=`rgb(${level}, ${level}, ${level})`;}
-  const side=svg('rect',{x:32,y:111,width:9,height:37,rx:4.5,fill:ink.side,stroke:ink.edge,'stroke-width':1,'data-mouse-button':'side'}),sideTitle=svg('title');sideTitle.textContent=caption(rows.find(row=>row.key==='side'));side.append(sideTitle);drawing.append(side);
+  const ink={shell:'#f6f6f6',edge:'#b9b9b9'};
+  const side=svg('rect',{x:32,y:111,width:9,height:37,rx:4.5,fill:colors.side,stroke:ink.edge,'stroke-width':1,'data-mouse-button':'side'}),sideTitle=svg('title');sideTitle.textContent=caption(rows.find(row=>row.key==='side'));side.append(sideTitle);drawing.append(side);
   drawing.append(svg('path',{d:'M100 17C65 17 43 43 41 82L35 166C32 211 55 246 100 246S168 211 165 166L159 82C157 43 135 17 100 17Z',fill:ink.shell,stroke:ink.edge,'stroke-width':1.5}));
   for(const [key,d]of [['left','M97 24C67 25 49 46 47 81L45 108C61 114 79 117 97 117Z'],['right','M103 24C133 25 151 46 153 81L155 108C139 114 121 117 103 117Z']]){
-   const shape=svg('path',{d,fill:ink[key],'data-mouse-button':key}),title=svg('title');title.textContent=caption(rows.find(row=>row.key===key));shape.append(title);drawing.append(shape);
+   const shape=svg('path',{d,fill:colors[key],'data-mouse-button':key}),title=svg('title');title.textContent=caption(rows.find(row=>row.key===key));shape.append(title);drawing.append(shape);
   }
   const wheel=svg('g'),wheelTitle=svg('title');wheelTitle.textContent=caption(rows.find(row=>row.key==='middle'));
-  wheel.append(wheelTitle,svg('rect',{x:91,y:45,width:18,height:40,rx:9,fill:ink.middle,stroke:ink.edge,'stroke-width':1.2,'data-mouse-button':'middle'}));
+  wheel.append(wheelTitle,svg('rect',{x:91,y:45,width:18,height:40,rx:9,fill:colors.middle,stroke:ink.edge,'stroke-width':1.2,'data-mouse-button':'middle'}));
   for(const y of [57,63,69])wheel.append(svg('path',{d:'M97 '+y+'h6',stroke:ink.edge,'stroke-width':1,'stroke-linecap':'round',opacity:'.7'}));
   drawing.append(wheel);$('mouse-diagram').replaceChildren(drawing);
  }

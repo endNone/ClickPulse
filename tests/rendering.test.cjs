@@ -502,24 +502,18 @@ test('an empty treemap recovers when new counts arrive and follows locale change
   assert.equal(a.get('keyboard-treemap').children.length,1);
   assert.equal(a.get('keyboard-treemap').firstElementChild.dataset.key,'space');
 });
-test('keyboard and treemap keep extended keys and show only unresolved counts in the footer',()=>{
+test('keyboard and treemap keep extended keys without a separate unresolved count',()=>{
+  assert.doesNotMatch(readFileSync('ui/index.html','utf8'),/keyboard-other|mouse\.note/);
   for(const platform of ['macos','windows','linux']){
     const a=app(platform),s=snapshot(),physical=[{code:115,count:1000},{code:86,count:7},{code:999,count:3}];
     a.window.receive({...s,keyboard_stats:{physical}});a.navigate('keys');
-    assert.equal(a.get('keyboard-other').hidden,false);
-    assert.equal(a.get('keyboard-other').textContent,'Other keys: 3');
     a.get('keyboard-view-toggle').fire();
     assert.equal(a.get('keyboard-treemap').children.filter(key=>key.dataset.key).length,2);
     a.window.receive({...s,keyboard_stats:{physical:[...physical,{code:0,count:5}]}});
     assert.equal(a.get('keyboard-treemap').children.filter(key=>key.dataset.key).length,3);
     a.window.receiveView({locale:'zh-CN'});
-    assert.equal(a.get('keyboard-other').textContent,'其他按键：3 次');
     a.get('keyboard-view-toggle').fire();
     assert.equal(keyCells(a).find(key=>key.dataset.key==='A').lastElementChild.textContent,'5');
-    a.window.receive({...s,keyboard_stats:{physical:[]}});
-    assert.equal(a.get('keyboard-other').hidden,true);
-    a.get('keyboard-view-toggle').fire();
-    assert.equal(a.get('keyboard-other').textContent,'');
   }
 });
 test('Mac full layout stops at F19 while additional keys stay available in treemap',()=>{
@@ -564,7 +558,6 @@ test('recorded extra keys never append a bottom row and retain their treemap cou
     const blocks=a.get('keyboard-treemap').children.filter(k=>k.dataset.key);
     assert.equal(blocks.length,2);
     assert.ok(blocks.some(k=>k.dataset.key===extra));
-    assert.equal(a.get('keyboard-other').hidden,true);
   }
 });
 test('Windows settings report native capture without offering macOS permission controls',()=>{
@@ -708,8 +701,6 @@ test('the Windows heatmap automatically adds navigation and a number pad when us
   assert.equal(a.get('keyboard-layout').children[0].className,'keyboard-main');
   assert.ok(keyCells(a).some(cell=>cell.dataset.key==='home'));
   assert.ok(keyCells(a).some(cell=>cell.dataset.key==='num4'));
-  assert.equal(a.get('keyboard-other').hidden,false);
-  assert.equal(a.get('keyboard-other').textContent,'Other keys: 3');
   a.window.receiveView({keyboard_layout:'compact'});
   assert.equal(a.get('keyboard-layout').children[0].className,'keyboard-row function-row');
   assert.equal(keyCells(a).filter(cell=>cell.dataset.key==='num4').length,0);
