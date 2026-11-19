@@ -24,6 +24,28 @@
 
 <p align="center">检查和下载更新时会连接 GitHub。你可以在设置中关闭自动检查。</p>
 
+## 下载体积与运行内存
+
+v0.3.1 各平台的桌面安装包均小于 7 MiB。在三个测试系统上，后台启动时的内存占用比 v0.3.0 **降低了 88.5%–98.9%**。
+
+**下载体积（MiB）**
+
+| 平台 | x64 | ARM64 |
+| :--- | ---: | ---: |
+| macOS 12+ | 6.93 DMG · 6.26 ZIP | 6.66 DMG · 6.02 ZIP |
+| Windows 10/11 | 4.40 ZIP | — |
+| Ubuntu 22.04 / 24.04 | 6.23 ZIP | 6.15 ZIP |
+
+**实测内存（MiB）**
+
+| 测试系统 | 后台启动 | 完整窗口 | Mini 模式 | 隐藏 10 分钟后 |
+| :--- | ---: | ---: | ---: | ---: |
+| macOS · Apple Silicon | **15.8** | 223.2 | 158.0 | 29.7 |
+| Windows 11 · x64 | **2.3** | 214.5 | 173.0 | 3.6 |
+| Ubuntu 24.04 · x64 | **42.5** | 249.7 | 254.2 | 104.2 |
+
+数值包含主程序和界面进程，取 5 次采样的中位数。测试时关闭了输入记录，完整窗口使用英文界面。macOS 统计物理内存占用（physical footprint），Windows 使用 USS，Ubuntu 使用 PSS 并采用软件渲染。 [v0.3.1 安装包与完整测试数据](https://github.com/endNone/ClickPulse/releases/tag/v0.3.1).
+
 ## 概览
 
 [![概览](../images/overview-en.jpg)](../images/overview-en.jpg)

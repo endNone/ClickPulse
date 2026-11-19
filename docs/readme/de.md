@@ -24,6 +24,28 @@
 
 <p align="center">Für die Update-Suche und den Download von Updates verbindet sich die App mit GitHub. Die automatische Suche kannst du in den Einstellungen ausschalten.</p>
 
+## Downloadgröße und Speicherbedarf
+
+Alle Desktop-Pakete von v0.3.1 sind kleiner als 7 MiB. Beim Start im Hintergrund war der Speicherbedarf auf den drei getesteten Systemen **88,5–98,9 % niedriger** als mit v0.3.0.
+
+**Downloadgröße (MiB)**
+
+| Plattform | x64 | ARM64 |
+| :--- | ---: | ---: |
+| macOS 12+ | 6,93 DMG · 6,26 ZIP | 6,66 DMG · 6,02 ZIP |
+| Windows 10/11 | 4,40 ZIP | — |
+| Ubuntu 22.04 / 24.04 | 6,23 ZIP | 6,15 ZIP |
+
+**Gemessener Speicherbedarf (MiB)**
+
+| Testsystem | Hintergrundstart | Hauptfenster | Mini-Modus | 10 Min. ausgeblendet |
+| :--- | ---: | ---: | ---: | ---: |
+| macOS · Apple Silicon | **15,8** | 223,2 | 158,0 | 29,7 |
+| Windows 11 · x64 | **2,3** | 214,5 | 173,0 | 3,6 |
+| Ubuntu 24.04 · x64 | **42,5** | 249,7 | 254,2 | 104,2 |
+
+Median aus fünf Messungen für die App und ihre Oberflächenprozesse bei ausgeschalteter Eingabeaufzeichnung. Das Hauptfenster wurde auf Englisch angezeigt. Messgrößen waren der Physical Footprint unter macOS, USS unter Windows und PSS unter Ubuntu mit Software-Rendering. [Downloads und Messergebnisse für v0.3.1](https://github.com/endNone/ClickPulse/releases/tag/v0.3.1).
+
 ## Überblick
 
 [![Überblick](../images/overview-en.jpg)](../images/overview-en.jpg)

@@ -24,6 +24,28 @@
 
 <p align="center">La aplicación se conecta a GitHub para buscar y descargar actualizaciones. Puedes desactivar la búsqueda automática en los ajustes.</p>
 
+## Tamaño de descarga y uso de memoria
+
+Todos los paquetes de escritorio de v0.3.1 ocupan menos de 7 MiB. Al iniciarse en segundo plano, la aplicación usó **entre un 88,5 % y un 98,9 % menos de memoria** que v0.3.0 en los tres sistemas probados.
+
+**Tamaño de descarga (MiB)**
+
+| Plataforma | x64 | ARM64 |
+| :--- | ---: | ---: |
+| macOS 12+ | 6,93 DMG · 6,26 ZIP | 6,66 DMG · 6,02 ZIP |
+| Windows 10/11 | 4,40 ZIP | — |
+| Ubuntu 22.04 / 24.04 | 6,23 ZIP | 6,15 ZIP |
+
+**Memoria medida (MiB)**
+
+| Sistema probado | Inicio en segundo plano | Ventana principal | Modo Mini | Tras 10 min oculta |
+| :--- | ---: | ---: | ---: | ---: |
+| macOS · Apple Silicon | **15,8** | 223,2 | 158,0 | 29,7 |
+| Windows 11 · x64 | **2,3** | 214,5 | 173,0 | 3,6 |
+| Ubuntu 24.04 · x64 | **42,5** | 249,7 | 254,2 | 104,2 |
+
+Mediana de cinco mediciones de la aplicación y sus procesos de interfaz, con el registro de entradas desactivado y la ventana principal en inglés. En macOS se midió la huella física de memoria, en Windows el USS y en Ubuntu el PSS con renderizado por software. [Descargas y resultados de v0.3.1](https://github.com/endNone/ClickPulse/releases/tag/v0.3.1).
+
 ## Vista general
 
 [![Vista general](../images/overview-en.jpg)](../images/overview-en.jpg)

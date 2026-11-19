@@ -24,6 +24,28 @@
 
 <p align="center">檢查與下載更新時會連線至 GitHub。你可以在設定中關閉自動檢查。</p>
 
+## 下載大小與記憶體用量
+
+v0.3.1 各平台的桌面版下載檔都小於 7 MiB。在三個測試系統上，背景啟動時的記憶體用量比 v0.3.0 **減少了 88.5%–98.9%**。
+
+**下載大小（MiB）**
+
+| 平台 | x64 | ARM64 |
+| :--- | ---: | ---: |
+| macOS 12+ | 6.93 DMG · 6.26 ZIP | 6.66 DMG · 6.02 ZIP |
+| Windows 10/11 | 4.40 ZIP | — |
+| Ubuntu 22.04 / 24.04 | 6.23 ZIP | 6.15 ZIP |
+
+**實測記憶體用量（MiB）**
+
+| 測試系統 | 背景啟動 | 完整視窗 | Mini 模式 | 隱藏 10 分鐘後 |
+| :--- | ---: | ---: | ---: | ---: |
+| macOS · Apple Silicon | **15.8** | 223.2 | 158.0 | 29.7 |
+| Windows 11 · x64 | **2.3** | 214.5 | 173.0 | 3.6 |
+| Ubuntu 24.04 · x64 | **42.5** | 249.7 | 254.2 | 104.2 |
+
+數值包含主程式與介面程序，取五次取樣的中位數。測試時關閉了輸入記錄，完整視窗使用英文介面。macOS 採用 physical footprint，Windows 採用 USS，Ubuntu 採用 PSS 並使用軟體算繪。 [v0.3.1 安裝套件與完整測試數據](https://github.com/endNone/ClickPulse/releases/tag/v0.3.1).
+
 ## 總覽
 
 [![總覽](../images/overview-en.jpg)](../images/overview-en.jpg)
