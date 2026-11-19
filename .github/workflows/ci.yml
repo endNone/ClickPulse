@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-15-intel, windows-2025, ubuntu-22.04, ubuntu-24.04]
+        os: [macos-15, macos-15-intel, windows-2025, ubuntu-22.04, ubuntu-24.04, ubuntu-22.04-arm]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -73,10 +73,13 @@ jobs:
             gdbus wait --session --timeout 10 org.freedesktop.Notifications
             cargo +stable test --locked --bin clickpulse desktop::storage_status::tests::linux_notification_service_accepts_repeated_alerts -- --ignored --exact
           '
+      - name: Linux native recovery dialogs
+        if: runner.os == 'Linux'
+        run: xvfb-run -a dbus-run-session -- cargo +stable test --locked --lib native_dialogs_work_without_zenity -- --ignored --test-threads=1
       - name: Clippy
         run: cargo +stable clippy --all-targets --locked -- -D warnings
       - name: Portable interface tests
-        run: node --test tests/history.test.cjs tests/i18n.test.cjs tests/keyboard.test.cjs tests/rendering.test.cjs tests/dropdown.test.cjs tests/themes.test.cjs tests/sport.test.cjs tests/readme-preview.test.cjs
+        run: node scripts/test-ui.cjs
       - name: Packaging boundaries
         run: python -m unittest discover -s tests -p 'test_*.py'
       - name: Build

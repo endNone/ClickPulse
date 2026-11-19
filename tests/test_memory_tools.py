@@ -38,7 +38,11 @@ class MemoryToolsTests(unittest.TestCase):
                 path = source / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes((ROOT / name).read_bytes() + marker.encode('utf-8'))
-            with patch.object(Path, 'open', gbk_open):
+            # UTF-8 mode resolves an omitted encoding before Path.open runs.
+            # Force only that default to locale, then emulate a GBK machine;
+            # explicitly requested UTF-8 must still pass through unchanged.
+            with patch('io.text_encoding', side_effect=lambda encoding, *_: encoding or 'locale'), \
+                    patch.object(Path, 'open', gbk_open):
                 with self.assertRaises(UnicodeDecodeError):
                     (source / 'ui/app.js').read_text()
                 ui.prepare(source, root / 'ui')
@@ -47,6 +51,10 @@ class MemoryToolsTests(unittest.TestCase):
                 for name in files:
                     self.assertIn(marker, (root / folder / name).read_text(encoding='utf-8'))
             self.assertIn('ProbeAssets', (root / 'ui/src/desktop.rs').read_text(encoding='utf-8'))
+            prepared = (root / 'ui/src/desktop.rs').read_text(encoding='utf-8')
+            for call in ['_target.show_application();', 'window.set_focus();']:
+                self.assertIn('if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { '+call+' }', prepared)
+
             self.assertIn('CLICKPULSE_MEMORY_PROBE', (root / 'recorder/src/bin/memory_runtime.rs').read_text(encoding='utf-8'))
 
 

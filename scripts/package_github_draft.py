@@ -12,15 +12,15 @@ import zipfile
 ROOTS = [
     ".gitattributes", ".gitignore", "Cargo.toml", "Cargo.lock", "build.rs",
     "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
-    "LICENSE",
+    "LICENSE", "TRADEMARKS.md",
 ]
-FOLDERS = [".github", "assets", "docs", "scripts", "src", "tests", "ui"]
+FOLDERS = [".github", "assets", "docs", "scripts", "src", "tests", "ui", "Casks", "bucket"]
 EXCLUDED = {".DS_Store", "__pycache__", ".Codex", ".codex", ".git", "target", "dist", "trace.md"}
 
 
 def source_files(root):
     root = root.resolve()
-    files = [root / file for file in ROOTS]
+    files = [root / file for file in ROOTS if file != "TRADEMARKS.md" or (root / file).is_file()]
     for folder in FOLDERS:
         files.extend(file for file in (root / folder).rglob("*") if file.is_file())
     selected = []

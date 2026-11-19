@@ -15,10 +15,17 @@ sys.path.insert(0, str(ROOT/'scripts'))
 from windows_payload import payload_paths
 import build
 import package_macos
-from third_party import rust_notices
+from third_party import rust_notices, asset_notices
 from windows_imports import imported_libraries, verify_static_crt
 
 class PackagingTests(unittest.TestCase):
+
+    def test_bundled_asset_notices_include_complete_lucide_license_and_fonts(self):
+        notices = asset_notices(ROOT)
+        self.assertIn('Inter and Noto Sans Mono', notices)
+        self.assertIn('ISC License', notices)
+        self.assertIn('Copyright (c) 2026 Lucide', notices)
+        self.assertIn('OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.', notices)
 
     def test_windows_manifest_identity_matches_public_package_version(self):
         version = tomllib.loads((ROOT/'Cargo.toml').read_text(encoding='utf-8'))['package']['version']
@@ -26,6 +33,21 @@ class PackagingTests(unittest.TestCase):
         identity = manifest.find('{urn:schemas-microsoft-com:asm.v1}assemblyIdentity')
         self.assertIsNotNone(identity)
         self.assertEqual(identity.attrib['version'], version+'.0')
+
+    def test_custom_windows_dialogs_ship_the_required_common_controls_activation(self):
+        cargo = tomllib.loads((ROOT/'Cargo.toml').read_text(encoding='utf-8'))
+        desktop = cargo['target']['cfg(any(target_os = \"macos\", target_os = \"windows\", target_os = \"linux\"))']['dependencies']
+        self.assertIn('common-controls-v6', desktop['rfd']['features'])
+        manifest = ET.parse(ROOT/'assets/windows/ClickPulse.manifest')
+        namespace = {'asm': 'urn:schemas-microsoft-com:asm.v1'}
+        identities = manifest.findall('asm:dependency/asm:dependentAssembly/asm:assemblyIdentity', namespace)
+        common = [identity for identity in identities if identity.get('name') == 'Microsoft.Windows.Common-Controls']
+        self.assertEqual(len(common), 1)
+        self.assertEqual(common[0].attrib, {
+            'type': 'win32', 'name': 'Microsoft.Windows.Common-Controls',
+            'version': '6.0.0.0', 'processorArchitecture': '*',
+            'publicKeyToken': '6595b64144ccf1df', 'language': '*',
+        })
 
     def test_windows_package_rejects_external_crt_missing_on_a_clean_machine(self):
         def executable(library):
@@ -104,6 +126,26 @@ class PackagingTests(unittest.TestCase):
                 ]},
             }
             self.assertIn(text, rust_notices(metadata, root))
+
+    def test_missing_dependency_licenses_use_pinned_verified_upstream_copies(self):
+        import hashlib
+        index = json.loads((ROOT/'assets/third-party/licenses/index.json').read_text(encoding='utf-8'))
+        self.assertEqual(len(index), 16)
+        with tempfile.TemporaryDirectory() as temporary:
+            dependency = Path(temporary)
+            packages = [{'id':'root', 'name':'clickpulse', 'version':'0.1.0', 'source':None}]
+            for identity, entries in index.items():
+                name, version = identity.split('@')
+                packages.append({'id':identity, 'name':name, 'version':version, 'source':'registry+fixture', 'manifest_path':str(dependency/'Cargo.toml'), 'license':'fixture', 'repository':None})
+                for entry in entries:
+                    self.assertEqual(hashlib.sha256((ROOT/'assets/third-party/licenses'/entry['file']).read_bytes()).hexdigest(), entry['sha256'])
+                    self.assertRegex(entry['source'], r'/[0-9a-f]{40}/')
+            metadata = {'packages':packages, 'resolve':{'root':'root', 'nodes':[{'id':'root','dependencies':list(index)}]+[{'id':identity,'dependencies':[]} for identity in index]}}
+            notices = rust_notices(metadata, ROOT)
+            for entry in index.values():
+                for item in entry:self.assertIn(item['source'], notices)
+            packages[-1]['version']='99.99.99'
+            with self.assertRaisesRegex(ValueError, 'Missing dependency license text'):rust_notices(metadata, ROOT)
 
     def test_mac_build_selects_host_architecture_or_an_explicit_cross_target(self):
         self.assertEqual(package_macos.mac_target(machine='arm64'), 'aarch64-apple-darwin')

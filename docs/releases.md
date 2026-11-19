@@ -108,3 +108,6 @@ Windows builds produce the portable ZIP. Release assembly uses an explicit asset
 Build and integrity results do not certify window appearance, DPI, physical input, login startup, upgrades or actual process exit. Those still need native checks. No workflow operates a personal Windows machine or reads local statistics.
 
 The Mac preview remains ad-hoc signed without notarization; Windows packages remain unsigned. Installation notes explain manual authorization. Daily and manual checks are included. From 0.3.1, ordinary installations download updates automatically and wait for confirmation in Settings before installation and restart.
+
+
+For upcoming releases, the source archive also includes `TRADEMARKS.md`, `Casks/` and `bucket/` so its links and distribution tests remain usable. Do not add new top-level files to binary packages that older updaters would reject. Packaging retains separate matching debug symbols outside the downloadable payloads; required symbol tools are checked before building. `--skip-build` packages the supplied binary unchanged and does not claim separate symbol coverage.

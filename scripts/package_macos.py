@@ -13,8 +13,9 @@ import subprocess
 import sys
 import tempfile
 import tomllib
-from third_party import rust_notices
+from third_party import rust_notices, asset_notices
 from release import source_revision
+from release_symbols import build_release, stage_binary, record_packaged_binary
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = {'aarch64-apple-darwin': ('arm64', 'Apple Silicon'),
@@ -69,7 +70,7 @@ def main():
     environment = os.environ.copy()
     environment.setdefault('MACOSX_DEPLOYMENT_TARGET', '12.0')
     if not args.skip_build:
-        run(['cargo', 'build', '--release', '--locked', '--target', target], env=environment)
+        build_release(ROOT, target, environment)
     metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--locked', '--format-version', '1', '--filter-platform', target], cwd=ROOT, env=environment))
     binary = Path(metadata['target_directory'])/target/'release/clickpulse'
     if not binary.is_file():
@@ -84,16 +85,18 @@ def main():
         app = stage/'ClickPulse.app'; contents = app/'Contents'
         resources = contents/'Resources'; licenses = resources/'Licenses'
         (contents/'MacOS').mkdir(parents=True); licenses.mkdir(parents=True)
-        shutil.copy2(binary, contents/'MacOS/clickpulse')
+        if (ROOT/'TRADEMARKS.md').is_file(): shutil.copy2(ROOT/'TRADEMARKS.md', licenses/'TRADEMARKS.txt')
+        symbol_manifest = stage_binary(binary, contents/'MacOS/clickpulse', ROOT, target, version, not args.skip_build)
         shutil.copy2(ROOT/'assets/Info.plist', contents/'Info.plist')
         shutil.copy2(ROOT/'LICENSE', resources/'LICENSE.txt')
         for file in sorted((ROOT/'assets/fonts').glob('*-OFL.txt')):
             shutil.copy2(file, licenses/file.name)
-        (resources/'THIRD-PARTY-NOTICES.txt').write_text('ClickPulse third-party notices\n\nFonts: Inter and Noto Sans Mono (subsets). Full SIL OFL licenses are in Licenses/.\n\n'+rust_notices(metadata, ROOT), encoding='utf-8')
+        (resources/'THIRD-PARTY-NOTICES.txt').write_text(asset_notices(ROOT)+rust_notices(metadata, ROOT), encoding='utf-8')
         shutil.copytree(ROOT/'assets/localizations', resources, dirs_exist_ok=True)
         run([sys.executable, 'scripts/make_icon.py', str(resources/'ClickPulseLogo.icns')])
         run(['codesign', '--force', '--sign', '-', '--identifier', 'app.clickpulse.desktop', str(app)])
         run(['codesign', '--verify', '--deep', '--strict', str(app)])
+        record_packaged_binary(symbol_manifest, contents/'MacOS/clickpulse')
         (stage/'Install Guide.txt').write_text(f'''ClickPulse {version} / macOS 12+ / {chip} ({arch})
 
 Code license: GNU GPL version 3 or later (GPL-3.0-or-later).

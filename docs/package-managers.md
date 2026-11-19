@@ -25,6 +25,8 @@ brew upgrade --cask --greedy endnone/clickpulse/clickpulse
 brew uninstall --cask endnone/clickpulse/clickpulse
 ```
 
+Normal removal keeps history and settings. To remove ClickPulse's saved data as well, use `brew uninstall --zap --cask endnone/clickpulse/clickpulse`. Custom data folders remain at their chosen locations.
+
 `--greedy` includes this Cask even though the App also offers its own updater. Prefer Homebrew updates for a Homebrew installation so its recorded version stays consistent. Updates can require refreshing the existing Input Monitoring grant.
 
 The Cask's `auto_updates true` declares that the App supports its own updater; it does not synchronize Homebrew's installed-version receipt after an in-app update.
@@ -89,3 +91,5 @@ The Scoop manifest also supplies `checkver` and `autoupdate` rules for bucket-ma
 The **Package manager installation** workflow tests actual Homebrew installation/removal on Apple Silicon and Intel runners, plus Scoop installation, payload hashes, command, shortcut and removal on Windows x64. It also runs Scoop's real autoupdate engine on a stale temporary manifest and compares the generated URL, hash and extraction directory with the verified public release. It does not disable system protection or claim Gatekeeper/Smart App Control approval.
 
 Official Homebrew inclusion requires passing its [Gatekeeper requirements](https://docs.brew.sh/Acceptable-Casks). Broader Windows trust needs a [trusted code signature](https://learn.microsoft.com/windows/apps/develop/smart-app-control/code-signing-for-smart-app-control). Signing and Apple notarization remain separate release work; package-manager distribution alone does not provide them.
+
+Before removing ClickPulse on Windows, use **Settings → Application → Uninstall and data** to choose whether to keep your local history and settings. Direct `scoop uninstall clickpulse` or `winget uninstall --id endNone.ClickPulse --exact` retains that data without a prompt. Reinstalling with the same Windows account reuses it. Databases outside the data folder remain at their chosen location.

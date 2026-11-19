@@ -22,6 +22,18 @@ cask "clickpulse" do
 
   app "ClickPulse.app"
 
+  uninstall launchctl: "app.clickpulse.desktop.login",
+            quit:      "app.clickpulse.desktop"
+
+  zap trash: [
+    "~/Library/Application Support/ClickPulse",
+    "~/Library/Caches/ClickPulse",
+    "~/Library/LaunchAgents/app.clickpulse.desktop.login.plist",
+    "~/Library/Logs/clickpulse.log*",
+    "~/Library/Preferences/app.clickpulse.desktop.plist",
+    "~/Library/WebKit/app.clickpulse.desktop",
+  ]
+
   caveats <<~EOS
     ClickPulse is not notarized. macOS may require Open Anyway on first launch.
     Enable Input Monitoring in System Settings to start recording.

@@ -38,6 +38,7 @@ const physical = entries.map(k => ({code:k.code,count:Math.floor(k.weight / weig
 physical.find(k => k.code === 49).count += lifetime.keyboard - physical.reduce((a, k) => a + k.count, 0);
 const snapshot = {
   now:'2026-10-08T15:42:00Z', today:history.at(-1).counts, week:sum(history.slice(-7)), lifetime,
+  mouse_buttons:{left:Math.floor(lifetime.mouse*.85),right:Math.floor(lifetime.mouse*.12),middle:Math.floor(lifetime.mouse*.02),side:lifetime.mouse-Math.floor(lifetime.mouse*.85)-Math.floor(lifetime.mouse*.12)-Math.floor(lifetime.mouse*.02),other:0},
   days:history.slice(-90), history_days:history,
   windows:[{seconds:60,counts:{keyboard:38,mouse:9},approximate:false},{seconds:600,counts:{keyboard:452,mouse:108},approximate:false},{seconds:3600,counts:{keyboard:2146,mouse:594},approximate:false},{seconds:86400,counts:history.at(-1).counts,approximate:false}],
   keyboard_stats:{physical,history_available:false}, top_keys:physical,
@@ -63,8 +64,8 @@ snapshot.hourly.forEach((h,i)=>{
 assert.deepEqual(sum(snapshot.hourly),snapshot.windows[3].counts);
 assert.equal(physical.reduce((n,k)=>n+k.count,0), lifetime.keyboard);
 assert.deepEqual(sum(history), lifetime);
-const scripts = ['i18n.js','themes.js','dropdown.js','history.js','keyboard.js','sport.js','app.js','presentation.js'];
-const styles = ['style.css','history.css','compact.css','themes.css','dropdown.css','sport.css'];
+const scripts = ['i18n.js','themes.js','dropdown.js','history.js','keyboard.js','sport.js','shortcuts-catalog.js','date-picker.js','insights.js','app.js','presentation.js'];
+const styles = ['style.css','history.css','compact.css','themes.css','dropdown.css','sport.css','insights.css'];
 const fonts = [['ClickPulse UI','Inter.woff2'],['ClickPulse Mono','NotoSansMono.woff2']];
 fs.mkdirSync(path.join(output,'fonts'),{recursive:true});
 fs.mkdirSync(path.join(output,'images'),{recursive:true});
@@ -79,6 +80,7 @@ body[data-capture-scale]{zoom:var(--capture-scale);width:var(--capture-width)}
 body:not(.compact)[data-capture-scale]{min-height:calc(100vh / var(--capture-scale))}
 body.compact[data-capture-scale]{width:320px;height:208px}`;
 const boot = `(() => {
+  window.clickpulsePreview=true;
   const options = new URLSearchParams(location.search);
   const locale = createClickPulseI18n(window.clickpulseMessages,options.get('locale')||'en').locale;
   const scale = Number(options.get('scale'));
@@ -88,7 +90,13 @@ const boot = `(() => {
     document.body.style.setProperty('--capture-width','1280px');
   }
   const view = {today_period:options.get('period')==='rolling_24h'?'rolling_24h':'calendar_day',timezone:options.get('timezone')||'system',timezones:[...new Set(['UTC',...(Intl.supportedValuesOf?.('timeZone')||['America/Los_Angeles','America/New_York','Europe/London','Asia/Shanghai','Asia/Tokyo','Asia/Kathmandu','Australia/Sydney'])])],compact:options.get('page') === 'mini',pinned:true,visible:true,locale,language_preference:locale,theme:'blue',sport_enabled:options.get('sport')==='1',sport_visible:options.get('sport')==='1'};
+  const layoutStorageKey='clickpulse.preview.keyboardLayout';
+  let savedLayout;
+  try {savedLayout=localStorage.getItem(layoutStorageKey);}catch {}
+  const layout=options.get('layout')||savedLayout;
+  if(['auto','compact','full_size'].includes(layout))view.keyboard_layout=layout;
   const snapshot = ${JSON.stringify(snapshot)};
+  snapshot.shortcuts=[{platform:'macos',modifiers:4,key:123,count:450},{platform:'macos',modifiers:4,key:48,count:80},{platform:'macos',modifiers:8,key:8,count:342},{platform:'macos',modifiers:8,key:9,count:298},{platform:'macos',modifiers:8,key:6,count:125},{platform:'macos',modifiers:8,key:0,count:96},{platform:'macos',modifiers:8,key:1,count:84},{platform:'macos',modifiers:8,key:48,count:73},{platform:'macos',modifiers:8,key:3,count:61},{platform:'macos',modifiers:8,key:7,count:48},{platform:'macos',modifiers:12,key:21,count:34},{platform:'macos',modifiers:12,key:6,count:26},{platform:'macos',modifiers:8,key:13,count:18},{platform:'macos',modifiers:9,key:7,count:12}];
   const baseline=JSON.parse(JSON.stringify(snapshot));
   function projectTimeZone(){
     const timeZone=view.timezone==='system'?Intl.DateTimeFormat().resolvedOptions().timeZone:view.timezone;
@@ -117,10 +125,23 @@ const boot = `(() => {
     });
   }
   projectTimeZone();
+  // Preview-only dated counters; do not present the all-time example as today's usage.
+  function projectShareShortcut(day){
+    day=day||snapshot.now.slice(0,10);
+    const counts=snapshot.history_days.find(row=>row.day===day)?.counts;
+    snapshot.share_shortcut={day,top:counts?.keyboard?{platform:'macos',modifiers:8,key:8,count:Math.max(1,Math.floor(counts.keyboard/80))}:null};
+  }
+  projectShareShortcut();
   window.ipc = {postMessage(message){
     const request = JSON.parse(message);
+    if(request.action === 'session_state')projectShareShortcut(request.state?.insights?.share_day);
     if(request.action === 'language'){view.locale = createClickPulseI18n(window.clickpulseMessages,request.language==='system'?locale:request.language).locale;view.language_preference=request.language;}
     if(request.action === 'theme')view.theme=request.theme;
+    if(request.action === 'keyboard_layout'){
+      view.keyboard_layout=request.layout;
+      try {localStorage.setItem(layoutStorageKey,request.layout);}catch {}
+    }
+    if(request.action === 'ui_scale')view.ui_scale=request.scale;
     if(request.action === 'today_period')view.today_period=request.period;
     if(request.action === 'timezone'){view.timezone=request.timezone;projectTimeZone();}
     if(request.action === 'automatic_updates')view.auto_check_updates=request.enabled;
@@ -136,16 +157,16 @@ const boot = `(() => {
   }};
   window.receiveView(view);window.receive(snapshot);
   const page = options.get('page') || 'overview';
-  if(['history','keys','settings'].includes(page))document.querySelector('nav button[data-page="'+page+'"]').click();
+  if(['history','keys','heatmap','shortcuts','mouse','share','settings'].includes(page))document.querySelector('nav button[data-page="'+(['heatmap','mouse'].includes(page)?'keys':page)+'"]').click();
   if(page === 'keys' && options.get('view') === 'treemap')document.getElementById('keyboard-view-toggle').click();
   document.fonts.ready.then(() => document.documentElement.dataset.previewReady='true');
 })();`;
 let html = fs.readFileSync(path.join(root,'ui/index.html'),'utf8')
-  .replaceAll('__LOCALE__','en').replaceAll('__PLATFORM__','macos').replaceAll('__THEME__','blue').replaceAll('__VERSION__',version)
+  .replaceAll('__MAC_TITLEBAR__','integrated').replaceAll('__LOCALE__','en').replaceAll('__PLATFORM__','macos').replaceAll('__THEME__','blue').replaceAll('__VERSION__',version)
   .replaceAll('__BRAND_MARK__','images/brand-mark.png')
-  .replace('/*__MESSAGES__*/',fs.readFileSync(path.join(root,'ui/locales.json'),'utf8'))
-  .replace('/*__STYLE__*/',fontCSS+'\n'+styles.map(name=>fs.readFileSync(path.join(root,'ui',name),'utf8')).join('\n')+'\n'+captureCSS)
-  .replace('/*__SCRIPT__*/',scripts.map(name=>fs.readFileSync(path.join(root,'ui',name),'utf8')).join('\n')+'\n'+boot);
+  .replace('/*__MESSAGES__*/',()=>fs.readFileSync(path.join(root,'ui/locales.json'),'utf8'))
+  .replace('/*__STYLE__*/',()=>fontCSS+'\n'+styles.map(name=>fs.readFileSync(path.join(root,'ui',name),'utf8')).join('\n')+'\n'+captureCSS)
+  .replace('/*__SCRIPT__*/',()=>scripts.map(name=>fs.readFileSync(path.join(root,'ui',name),'utf8')).join('\n')+'\n'+boot);
 assert(!/__VERSION__|__BRAND_MARK__|\/\*__SCRIPT__\*\//.test(html));
 fs.writeFileSync(path.join(output,'index.html'),html);
 fs.writeFileSync(path.join(output,'synthetic-snapshot.json'),JSON.stringify(snapshot,null,2)+'\n');

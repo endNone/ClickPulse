@@ -65,6 +65,15 @@ jobs:
           pattern: ClickPulse-${{ needs.version.outputs.version }}-*
           merge-multiple: true
           path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: Debug-symbols-${{ needs.version.outputs.version }}-*
+          merge-multiple: true
+          path: dist/symbols
+      - name: Verify separate debug symbols for every platform
+        env:
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+        run: python scripts/release_symbols.py --symbols dist/symbols --packages dist --version "$RELEASE_VERSION"
       - name: Build corresponding source archive
         env:
           RELEASE_TAG: ${{ needs.version.outputs.tag }}

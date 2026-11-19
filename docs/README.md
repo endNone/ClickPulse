@@ -6,9 +6,10 @@
 | --- | --- |
 | [macOS installation](install-macos.md) | Applications, first launch, Input Monitoring, updates and uninstalling |
 | [Windows installation](install-windows.md) | Portable ZIP, WebView2, directories, updates and removal |
-| [Ubuntu installation](install-linux.md) | Linux development packages, input permissions, dependencies and storage |
-| [Usage](usage.md) | Overview, history, keyboard views, themes, language, mini mode and close behavior |
+| [Ubuntu installation](install-linux.md) | Portable packages, input permissions, dependencies and storage |
+| [Usage](usage.md) | Overview, history, heatmaps, shortcuts, share cards, settings and Mini |
 | [Data and privacy](data-and-privacy.md) | What is recorded, retention, storage, backups and migration |
+| [Shortcut encyclopedia](shortcuts.md) | macOS, Windows and Ubuntu combinations, common uses and official references |
 
 ## Development and project information
 
@@ -17,7 +18,7 @@
 | [Development](development.md) | Prerequisites, source builds, isolated checks and explicit migration |
 | [Builds and releases](releases.md) | GitHub Actions, platform packages, source/checksum verification and preview drafts |
 | [Contributing](../CONTRIBUTING.md#contributing) | Bug reports, change scope and verification |
-| [Changelog](../CHANGELOG.md) | Features and known limits in the initial preview |
+| [Changelog](../CHANGELOG.md) | Released changes and pending development |
 | [Roadmap](roadmap.md) | Release preparation and possible future work |
 | [Security policy](../SECURITY.md) | Sensitive reports and the reporting channel’s current status |
 | [Package managers](package-managers.md) | First-party Homebrew Cask and Scoop installation, updates and limitations |

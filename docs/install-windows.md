@@ -36,8 +36,22 @@ Smart App Control can block ClickPulse and has no individual-app exception. On a
 
 **Installed with Scoop?** Quit ClickPulse, then run `scoop update clickpulse`. See [package-manager updates](package-managers.md#windows-scoop-bucket).
 
-**Where is my history?** In `%LOCALAPPDATA%\ClickPulse`, unless you selected another folder. Updating or removing the program keeps it.
+**Where is my history?** In `%LOCALAPPDATA%\ClickPulse`, unless you selected another folder. Updates keep your history; see [Uninstall](#uninstall) for removal choices.
 
 **Why did closing the window keep it running?** Choose **Quit ClickPulse** from the tray menu to stop recording.
 
 From 0.3.1, normal installations download updates automatically and wait for **Update & restart**. WinGet and Scoop installations show their upgrade command instead. Missing startup paths are repaired when you next open ClickPulse.
+
+## Uninstall
+
+Open **Settings → Application → Uninstall and data**. ClickPulse saves and closes before asking:
+
+- **Keep data:** retain history and settings; remove cache, downloads and logs.
+- **Remove local data:** delete history, settings, logs and cache after a second confirmation.
+
+Databases outside the data folder stay at the displayed location. Keep that path to reopen or import the history later.
+
+Portable installations remove their packaged files. Files you added to the program folder remain.
+Scoop and WinGet installations show their uninstall command after the data choice.
+Running those commands directly, or simply deleting the program folder, retains data without opening this dialog.
+You can also run `ClickPulse.exe uninstall` before deleting the executable.

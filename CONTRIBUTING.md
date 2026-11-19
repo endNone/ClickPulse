@@ -11,7 +11,7 @@ For capture problems, include the access status and whether the app was reopened
 ## Changes
 
 - Keep each change focused on one concrete behavior.
-- Keep Chinese and English message keys aligned, including platform-specific text.
+- Keep message keys aligned across all eight supported languages, including platform-specific text.
 - Verify with temporary data; never delete real history to work around a failure.
 - Preserve historical totals without adding overlapping summaries twice.
 - Keep background saving independent of visible-window and mini-mode state.

@@ -13,7 +13,7 @@
   <br>
   <a href="docs/install-macos.md"><img src="assets/badges/macos.svg" height="24" alt="macOS: 12+ · arm64/x64"></a>
   <a href="docs/install-windows.md"><img src="assets/badges/windows.svg" height="24" alt="Windows: 10/11 · x64"></a>
-  <a href="#install"><img src="assets/badges/linux.svg" height="24" alt="Linux: Ubuntu 22.04 / 24.04"></a>
+  <a href="docs/install-linux.md"><img src="assets/badges/linux.svg" height="24" alt="Linux: Ubuntu 22.04 / 24.04"></a>
 </p>
 
 <p align="center"><a href="https://github.com/endNone/ClickPulse/releases/latest">Download packages</a>. You can also <a href="docs/development.md">build from source</a>.</p>
@@ -57,7 +57,7 @@ scoop bucket add clickpulse https://github.com/endNone/ClickPulse
 scoop install clickpulse
 ```
 
-The macOS and Windows apps aren't signed yet; your system may block their first launch. [macOS steps](docs/install-macos.md) · [Windows steps](docs/install-windows.md)
+The macOS and Windows apps aren't signed yet; your system may block their first launch. [macOS steps](docs/install-macos.md) · [Windows steps](docs/install-windows.md) · [Ubuntu steps](docs/install-linux.md)
 
 ## Screenshots
 
@@ -86,6 +86,10 @@ Optional effects in Mini mode react to your typing and clicking speed. Enable th
 ### History
 
 [![History](docs/images/history-en.jpg)](docs/images/history-en.jpg)
+
+## License
+
+Code: [GPL-3.0-or-later](LICENSE). From v0.3.2, the ClickPulse name and icons are excluded from that license grant; [additional terms](TRADEMARKS.md) apply under GPLv3 sections 7(c) and 7(e). Earlier releases retain their original terms.
 
 ## More
 

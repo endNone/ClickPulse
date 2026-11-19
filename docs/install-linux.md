@@ -29,6 +29,6 @@ Membership in `input` allows programs running as your account to read input devi
 
 Close offers hiding to the tray or saving and quitting. Ubuntu's AppIndicator extension must be enabled to show the tray icon. Use Mini to keep a visible counter. Pinning and window placement follow the compositor's capabilities; Wayland may restrict them.
 
-Settings includes launch at login, manual update checks and daily automatic checks. Installing an update requires your action and a writable complete portable folder. Keep the folder at the same path after enabling launch at login.
+Settings includes launch at login, manual update checks and automatic checks. A new package downloads in the background; installation and restart require confirmation and a writable complete portable folder. Use a permanent installation folder. If an enabled startup entry points to a deleted old location, opening ClickPulse from its new folder repairs that entry; an existing different program is left untouched.
 
 History and settings live in `$XDG_DATA_HOME/ClickPulse`, normally `~/.local/share/ClickPulse`. Updating or deleting the program folder retains these files. Linux packages use system GTK/WebKit libraries; build the distributed binary on Ubuntu 22.04 before validating it on both supported systems.

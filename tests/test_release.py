@@ -28,7 +28,8 @@ class ReleaseTests(unittest.TestCase):
         (self.root/'Cargo.toml').write_text('[package]\nname="clickpulse"\nversion="0.1.0"\nlicense="GPL-3.0-or-later"\n')
         (self.root/'Cargo.lock').write_text('version=4\n[[package]]\nname="clickpulse"\nversion="0.1.0"\n')
         (self.root/'assets/Info.plist').write_bytes(plistlib.dumps({'CFBundleShortVersionString':'0.1.0', 'CFBundleVersion':'45'}))
-        (self.root/'assets/windows/app.rc').write_text('FILEVERSION 0,1,0,45\n')
+        (self.root/'assets/windows/app.rc').write_text('FILEVERSION 0,1,0,45\nPRODUCTVERSION 0,1,0,0\nVALUE "FileVersion", "0.1.0.45"\nVALUE "ProductVersion", "0.1.0"\n')
+        (self.root/'assets/windows/ClickPulse.manifest').write_text('<assembly xmlns="urn:schemas-microsoft-com:asm.v1"><assemblyIdentity name="ClickPulse.Desktop" version="0.1.0.0"/></assembly>')
         (self.root/'LICENSE').write_bytes(b'GPL license fixture\n')
         (self.root/'.gitattributes').write_bytes((ROOT/'.gitattributes').read_bytes())
         self.packages = Path(self.temporary.name)/'packages'
@@ -83,6 +84,22 @@ class ReleaseTests(unittest.TestCase):
             for entry,data in entries.items():
                 archive.writestr(entry, data)
         self.checksum(file)
+
+    def test_rejects_stale_windows_version_strings_and_manifest(self):
+        for filename, old, new in [
+            ('app.rc', '"0.1.0.45"', '"0.1.0.44"'),
+            ('app.rc', '"0.1.0"', '"0.2.0"'),
+            ('app.rc', 'PRODUCTVERSION 0,1,0,0', 'PRODUCTVERSION 0,2,0,0'),
+            ('ClickPulse.manifest', 'version="0.1.0.0"', 'version="0.2.0.0"'),
+        ]:
+            path = self.root/'assets/windows'/filename
+            original = path.read_text()
+            try:
+                path.write_text(original.replace(old, new))
+                with self.subTest(filename=filename, old=old), self.assertRaises(ValueError):
+                    release.release_plan(self.root)
+            finally:
+                path.write_text(original)
 
     def test_tag_rejects_other_versions_and_shell_text(self):
         for tag in ['v0.2.0', '0.1.0', 'v0.1.0\nversion=9', 'v0.1.0;echo unsafe']:
@@ -150,9 +167,9 @@ class ReleaseTests(unittest.TestCase):
 
     def linux_candidate(self):
         self.candidate()
-        for relative in ['Cargo.toml', 'Cargo.lock', 'assets/windows/app.rc']:
+        for relative in ['Cargo.toml', 'Cargo.lock', 'assets/windows/app.rc', 'assets/windows/ClickPulse.manifest']:
             p = self.root/relative
-            p.write_text(p.read_text().replace('0.1.0', '0.3.0').replace('0,1,0,45', '0,3,0,45'))
+            p.write_text(p.read_text().replace('0.1.0', '0.3.0').replace('0,1,0,45', '0,3,0,45').replace('0,1,0,0', '0,3,0,0'))
         p = self.root/'assets/Info.plist'
         data = plistlib.loads(p.read_bytes());data['CFBundleShortVersionString'] = '0.3.0'
         p.write_bytes(plistlib.dumps(data))
@@ -340,6 +357,10 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(len(manifest['files']), 2)
 
     def test_source_modes_include_license_and_exclude_history_environment_and_private_notes(self):
+        (self.root/'TRADEMARKS.md').write_text('Additional terms fixture')
+        for folder, name in [('Casks', 'clickpulse.rb'), ('bucket', 'clickpulse.json')]:
+            (self.root/folder).mkdir()
+            (self.root/folder/name).write_text('public fixture')
         for name in ['.gitignore','build.rs','README.md','CHANGELOG.md','CONTRIBUTING.md','SECURITY.md']:
             (self.root/name).write_text('public fixture')
         (self.root/'docs').mkdir()
@@ -353,6 +374,8 @@ class ReleaseTests(unittest.TestCase):
             with zipfile.ZipFile(archive) as file:
                 names = file.namelist()
                 self.assertTrue(any(name.endswith('/LICENSE') for name in names))
+                for included in ['/TRADEMARKS.md', '/Casks/clickpulse.rb', '/bucket/clickpulse.json']:
+                    self.assertTrue(any(name.endswith(included) for name in names))
                 self.assertTrue(any(name.endswith('/.gitattributes') for name in names))
                 self.assertFalse(any('credentials.toml' in name for name in names))
                 self.assertFalse(any('capture.log' in name.lower() or '.Codex' in name or name.endswith('trace.md') or 'events.sqlite3' in name or '/.env' in name for name in names))

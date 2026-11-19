@@ -75,3 +75,10 @@ jobs:
             dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}.zip
             dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}*.sha256
             dist/ClickPulse-${{ steps.version.outputs.version }}-${{ matrix.platform }}.manifest.json
+      - name: Retain matching debug symbols separately
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Debug-symbols-${{ steps.version.outputs.version }}-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 30
+          path: dist/symbols/

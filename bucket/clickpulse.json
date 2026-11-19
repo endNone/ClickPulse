@@ -7,6 +7,7 @@
         "Microsoft Edge WebView2 Runtime is required: https://developer.microsoft.com/microsoft-edge/webview2/",
         "ClickPulse is unsigned. Scoop does not bypass Smart App Control or error 4551.",
         "Quit ClickPulse before scoop update clickpulse. User data is kept outside the package folder.",
+        "History and settings are stored in %LOCALAPPDATA%\\ClickPulse. scoop uninstall keeps them. To remove them after uninstalling, delete that folder manually. Back up any history you want to keep first.",
         "Installation guide: https://github.com/endNone/ClickPulse/blob/main/docs/install-windows.md"
     ],
     "architecture": {

@@ -11,9 +11,10 @@ import tempfile
 import tomllib
 import zipfile
 from windows_payload import payload_paths
-from third_party import rust_notices
+from third_party import rust_notices, asset_notices
 from release import source_revision
 from windows_imports import verify_static_crt
+from release_symbols import build_release, stage_binary
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--target', default='x86_64-pc-windows-gnu', choices=['x86_64-pc-windows-gnu', 'x86_64-pc-windows-msvc'])
@@ -28,7 +29,7 @@ else:
     # --target keeps build-host proc macros separate from the static app CRT.
     environment.setdefault('CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS', '-C target-feature=+crt-static')
 if not args.skip_build:
-    subprocess.run(['cargo', 'build', '--release', '--target', args.target, '--locked'], env=environment, check=True)
+    build_release(root, args.target, environment)
 metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--locked', '--format-version', '1', '--filter-platform', args.target], env=environment))
 packages = {p['id']: p for p in metadata['packages']}
 version = tomllib.loads((root/'Cargo.toml').read_text(encoding='utf-8'))['package']['version']
@@ -48,16 +49,17 @@ with tempfile.TemporaryDirectory(prefix='.windows-package-', dir=dist) as tempor
     temp = Path(temporary)
     bundle = temp/name
     bundle.mkdir()
-    shutil.copy2(exe, bundle/'ClickPulse.exe')
+    stage_binary(exe, bundle/'ClickPulse.exe', root, args.target, version, not args.skip_build)
     shutil.copy2(root/'LICENSE', bundle/'LICENSE.txt')
     loader = next(p for p in packages.values() if p['name'] == 'webview2-com-sys')
     loader_dir = Path(loader['manifest_path']).parent
     shutil.copy2(loader_dir/'x64/WebView2Loader.dll', bundle/'WebView2Loader.dll')
     licenses = bundle/'Licenses'
     licenses.mkdir()
+    if (root/'TRADEMARKS.md').is_file(): shutil.copy2(root/'TRADEMARKS.md', licenses/'TRADEMARKS.txt')
     for file in [*(root/'assets/fonts').glob('*-OFL.txt'), *(root/'assets/windows').glob('*LICENSE*.txt'), *(root/'assets/windows').glob('*NOTICE*.txt')]:
         shutil.copy2(file, licenses/file.name)
-    notices = ['ClickPulse third-party notices', '', 'Fonts: Inter and Noto Sans Mono (subsets). Full SIL OFL licenses are in Licenses/.', 'WebView2Loader.dll: Microsoft WebView2 SDK 1.0.3650.58. SDK license/notice and webview2-rs MIT license are in Licenses/.', '', rust_notices(metadata, root)]
+    notices = [asset_notices(root), 'WebView2Loader.dll: Microsoft WebView2 SDK (version resolved by Cargo.lock / webview2-com-sys). SDK license/notice and webview2-rs MIT license are in Licenses/.', '', rust_notices(metadata, root)]
     (bundle/'THIRD-PARTY-NOTICES.txt').write_text('\n'.join(notices), encoding='utf-8')
     (bundle/'README.txt').write_text(f'''ClickPulse {version} — Windows x64
 
@@ -70,9 +72,12 @@ The program is unsigned. Windows 11 Smart App Control may block it; ZIP packagin
 Windows 10/11 x64 requires Microsoft Edge WebView2 Runtime:
 https://go.microsoft.com/fwlink/p/?LinkId=2124703
 
-Quit the old version from the tray before updating. Updates and uninstalling retain history and preferences.
+Quit the old version from the tray before updating. Updates retain history and preferences.
+To uninstall, use Settings > Application > Uninstall and data, or run ClickPulse.exe uninstall.
+Choose whether to keep local data for reinstalling or remove it after confirmation.
+Databases outside the data folder are kept at the displayed location. Direct program removal keeps all user data.
 First launch uses the standard app data folder without automatically selecting old developer databases.
-The app follows the system language; English and Simplified Chinese are available in Settings.
+The app follows the system language; English, Simplified Chinese, Traditional Chinese, Japanese, Korean, German, French and Spanish are available in Settings.
 Choose Blue, Teal, Violet or Graphite; the full and mini views share the saved theme.
 
 Closing offers Minimize to tray or Save and quit, with an optional remembered choice.
@@ -90,6 +95,7 @@ Package integrity checks do not replace native Windows desktop/input testing.
 ''', encoding='utf-8')
     files = {path.as_posix(): hashlib.sha256((bundle/path).read_bytes()).hexdigest() for path in payload_paths(bundle)}
     (bundle/'build-manifest.json').write_text(json.dumps({'version':version,'internal_build':internal_build,'target':args.target,'source_revision':source_revision(root),'code_license':'GPL-3.0-or-later','files':files,'native_windows_tested':False}, indent=2)+'\n')
+    external_manifest = (bundle/'build-manifest.json').read_bytes()
     archive = temp/(name+'.zip')
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as output:
         for file in sorted(bundle.rglob('*')):
@@ -97,6 +103,7 @@ Package integrity checks do not replace native Windows desktop/input testing.
                 output.write(file,file.relative_to(temp))
     destination = dist/(name+'.zip')
     os.replace(archive,destination)
+    (dist/(name+'.manifest.json')).write_bytes(external_manifest)
 sha = hashlib.sha256(destination.read_bytes()).hexdigest()
 destination.with_suffix('.zip.sha256').write_text(sha+'  '+destination.name+'\n')
 print(f'Windows release: {destination}\nSHA256: {sha}')

@@ -109,9 +109,17 @@ def prepare(source, output):
           window.ipc.postMessage('probe-assets:'+JSON.stringify({images,fonts}));
         });\n''', encoding='utf-8')
     path.write_text(text, encoding='utf-8')
-    path = output/'src/desktop/window.rs'
-    text = path.read_text(encoding='utf-8').replace('        _target.show_application();', '        if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { _target.show_application(); }').replace('    window.set_focus();', '    if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { window.set_focus(); }')
-    path.write_text(text, encoding='utf-8')
+    # Calls moved between window.rs and desktop.rs across versions. Patch both,
+    # and fail loudly if the probe would unexpectedly steal focus again.
+    for call in ['_target.show_application();', 'window.set_focus();']:
+        replacements = 0
+        for name in ['src/desktop.rs', 'src/desktop/window.rs']:
+            path = output / name
+            text = path.read_text(encoding='utf-8')
+            replacements += text.count(call)
+            text = text.replace(call, 'if std::env::var_os("CLICKPULSE_MEMORY_PROBE").is_none() { ' + call + ' }')
+            path.write_text(text, encoding='utf-8')
+        assert replacements == 1, f"Expected one focus call {call}, found {replacements}"
 
 
 def processes():

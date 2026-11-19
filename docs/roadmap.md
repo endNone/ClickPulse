@@ -12,6 +12,12 @@ Release 0.2.0 adds Mini Sport, hourly activity, selectable time zones, eight lan
 
 Release 0.2.1 adds daily and manual update checks, verified installation with explicit confirmation, persistent one-time reminders, bounded failure logs and clearer Settings controls. It also caches calendar history for read-only sources. Existing 0.2.0 installations need a manual upgrade once to obtain the updater.
 
+## Current development (not yet released)
+
+The 0.3.1 release introduced background memory reduction, smaller font assets and Linux packages. Work after that release includes daily shortcut statistics and references, share-card export/copy, a combined keyboard/mouse Heatmap, collapsible navigation, startup data recovery and safer removal. See [CHANGELOG](../CHANGELOG.md) for the proposed release grouping; these local changes are not a published version.
+
+The current audit also hardens storage worker failures and import validation, updater rollback/cleanup, Windows session transitions, frozen read-only views, idle status updates and dependency-license packaging. Native edge-case acceptance remains a release gate; unit tests and cross-compilation do not replace it.
+
 ## Release follow-up
 
 1. Extend Windows hardware coverage for physical special keys, sign-out/sign-in, multi-display DPI, upgrades and removal. Record publisher-trust behavior with Smart App Control separately from capture results.

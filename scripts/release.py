@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import tomllib
 import zipfile
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent.parent
 VERSION = r'(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)'
@@ -46,6 +47,17 @@ def release_plan(root, tag=None, require_tag=False):
     build = int(info['CFBundleVersion'])
     if int(resource.group(4)) != build:
         raise ValueError('macOS and Windows internal build numbers must match.')
+    resource_text = (root/'assets/windows/app.rc').read_text(encoding='utf-8')
+    for key, expected in [('FileVersion', version+'.'+str(build)), ('ProductVersion', version)]:
+        value = re.search(r'VALUE\s+"'+key+r'",\s*"([^"\n]+)"', resource_text)
+        if value is None or value.group(1) != expected:
+            raise ValueError('Windows '+key+' string must match the package version.')
+    product = re.search(r'PRODUCTVERSION\s+(\d+),(\d+),(\d+),(\d+)', resource_text)
+    if product is None or '.'.join(product.groups()) != version+'.0':
+        raise ValueError('Windows PRODUCTVERSION must match the package version.')
+    identity = ET.parse(root/'assets/windows/ClickPulse.manifest').getroot().find('{urn:schemas-microsoft-com:asm.v1}assemblyIdentity')
+    if identity is None or identity.get('version') != version+'.0':
+        raise ValueError('Windows manifest must match the package version.')
     result = {'version': version, 'tag': tag, 'internal_build': build}
     if require_tag:
         head = subprocess.check_output(['git', 'rev-parse', '--verify', 'HEAD'], cwd=root, text=True).strip()
@@ -223,7 +235,7 @@ def prepare_release(root, packages, output, tag, revision, repository, private=F
     source_manifest = verify_archive(packages/(source+'.zip'), source, 'source-manifest.json', plan, 'LICENSE', license_bytes)
     if source_manifest.get('revision') != revision or source_manifest.get('tag') != tag:
         raise ValueError('Corresponding source provenance does not match the version tag.')
-    manifests.append((win, win_manifest, {'x86_64-pc-windows-msvc', 'x86_64-pc-windows-gnu'}))
+    manifests.append((win, win_manifest, {'x86_64-pc-windows-msvc'}))
     for _,manifest,targets in manifests:
         if manifest.get('source_revision') != revision:
             raise ValueError('Binary source provenance does not match the corresponding source.')

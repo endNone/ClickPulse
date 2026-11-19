@@ -30,10 +30,10 @@ These commands only generate artifacts in `dist/`. They do not install or start 
 
 | Platform | Output |
 | --- | --- |
-| macOS arm64 | `ClickPulse.app`, `ClickPulse-0.2.1-macos-arm64.dmg`, matching ZIP, SHA256 files and manifest |
-| macOS Intel x64 | `ClickPulse-macos-x64.app`, `ClickPulse-0.2.1-macos-x64.dmg`, matching ZIP, SHA256 files and manifest |
-| Windows | `ClickPulse-0.2.1-windows-x64.zip`, SHA256 file and manifest |
-| Ubuntu ARM64 / x64 | `ClickPulse-0.2.1-linux-arm64.zip` / `ClickPulse-0.2.1-linux-x64.zip`, SHA256 file and manifest |
+| macOS arm64 | `ClickPulse.app`, `ClickPulse-X.Y.Z-macos-arm64.dmg`, matching ZIP, SHA256 files and manifest |
+| macOS Intel x64 | `ClickPulse-macos-x64.app`, `ClickPulse-X.Y.Z-macos-x64.dmg`, matching ZIP, SHA256 files and manifest |
+| Windows | `ClickPulse-X.Y.Z-windows-x64.zip`, SHA256 file and manifest |
+| Ubuntu ARM64 / x64 | `ClickPulse-X.Y.Z-linux-arm64.zip` / `ClickPulse-X.Y.Z-linux-x64.zip`, SHA256 file and manifest |
 
 Mac builds default to the host architecture. To cross-build Intel packages on an Apple Silicon Mac:
 
@@ -55,6 +55,8 @@ python3 scripts/build.py --platform windows
 
 The existing `package-macos.sh` and `package-windows.ps1` wrappers use this same entry point. `package_windows.py` remains available for lower-level portable builds.
 
+Release builds use thin LTO, one codegen unit and stripped symbols. Normal packaging temporarily retains line-table debug information, saves the matching dSYM (macOS), PDB (MSVC) or separate debug file (Linux/MinGW) under `dist/symbols/`, and strips only the staged executable. Cargo’s original binary is left intact. CI retains these symbols as a separate artifact; they are not included in download packages. Keep them with the corresponding build for crash diagnosis. Symbol manifests identify the executable before signing; package manifests record the final signed files. `--skip-build` packages the supplied binary as-is and does not generate or guarantee debug symbols.
+
 On Linux, run `python3 scripts/build.py`. A shared Git worktree whose `.git` path only resolves on the host can use `python3 scripts/package_linux.py --source-revision FULL_COMMIT_SHA`; supply the actual revision from the host. Linux package generation is local; it does not add assets to an existing public release. See [Linux validation](linux-testing.md) for the distinction between unit, native-input and desktop checks.
 
 ## Checks and isolated previews
@@ -64,19 +66,33 @@ cargo run --locked -- --demo
 cargo fmt --check
 cargo test --all-targets --locked
 cargo clippy --all-targets --locked -- -D warnings
-node --test tests/history.test.cjs tests/i18n.test.cjs tests/keyboard.test.cjs tests/rendering.test.cjs tests/dropdown.test.cjs tests/themes.test.cjs tests/sport.test.cjs
+node scripts/test-ui.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
+
+`node scripts/test-ui.cjs` discovers every `*.test.cjs` recursively under `tests/`, including the insights and shortcut-guide suites. Discovery runs in Node, so the same command works without shell wildcard expansion on macOS, Windows and Linux. Use `node scripts/test-ui.cjs --list` to inspect the discovered files.
 
 On Windows, the WinGet symbolic-link test needs link-creation permission. Without it, only that test returns early with a `SKIPPED` diagnostic (`cargo test -- --nocapture` shows it). Other failures remain fatal. `CLICKPULSE_REQUIRE_SYMLINK_TEST=1` requires this coverage; the Windows checks set it automatically.
 
 Demo mode does not open a statistics database or capture input. Its metrics, daily history, hourly totals and keyboard counts use one consistent generated dataset. Use synthetic data for documentation screenshots and temporary directories for storage tests. Rust storage unit tests do not start native input listeners or write to the normal App log. Public tests are self-contained; legacy tests that required a separate personal Python/dashboard checkout are excluded.
 
-Full windows request a snapshot every 2 seconds; Mini requests counts only every 500 ms. Queries use a reusable worker without waiting on the interface thread, with at most one snapshot in flight. Additional requests are coalesced; slow completed results are still delivered. Pause/Resume is acknowledged independently of those statistics. Exclusive app writers cache calendar totals by timezone and apply committed input deltas, including late input. Imports invalidate the cache; reopening, relocation and timezone changes rebuild it. Hour and rolling windows remain fresh bounded reads. Read-only external sources cannot see each write, so they cache only minutes older than two days and rescan that tail on every refresh. A late write or import before that point changes lifetime-minus-tail totals and rebuilds immediately; deleted old details are picked up by a rebuild at least every 10 minutes. Hidden windows check status every 5 seconds without requesting snapshots. Full windows still receive history payloads, so incremental history delivery remains a future optimization.
+Full windows request a snapshot every 2 seconds; Mini requests counts only every 500 ms. Queries use a reusable worker without waiting on the interface thread, with at most one snapshot in flight. Additional requests are coalesced; slow completed results are still delivered. Pause/Resume is acknowledged independently of those statistics. Exclusive app writers cache calendar totals by timezone and apply committed input deltas, including late input. Imports invalidate the cache; reopening, relocation and timezone changes rebuild it. Hour and rolling windows remain fresh bounded reads. Read-only external sources cannot see each write, so they cache only minutes older than two days and rescan that tail on every refresh. A late write or import before that point changes lifetime-minus-tail totals and rebuilds immediately; deleted old details are picked up by a rebuild at least every 10 minutes. Hidden windows check status every 5 seconds without requesting snapshots. Calendar projection starts from a non-calendar snapshot rather than querying local-day totals first. Preferences are saved only after a value changes; renderer visibility and readiness do not trigger disk writes. Timezone choices are cached and delivered once to each new renderer. Status pushes and live chart/calendar updates reuse unchanged values and nodes. Full windows still receive history payloads, so incremental history delivery remains a future optimization.
 
 `.github/workflows/ci.yml` checks macOS/Windows code and Ubuntu 22.04/24.04 x64 code. The Linux matrix is configured here; a local ARM64 VM pass does not mean that the hosted x64 jobs have run. Packages reuses those checks before building CI artifacts. Release candidate runs the same pipeline for a version tag, verifies corresponding source and complete packages, then retains a candidate artifact. The maintainer creates and publishes the Release through the personal `endNone` account. See [Builds and releases](releases.md). The initial preview passes the GitHub checks and complete packaging/release workflow on Apple Silicon, Intel Mac and Windows x64.
 
 For an interactive Mini Sport preview, run `node scripts/prepare-sport-preview.cjs` and serve `dist/sport-preview/` locally. The preview shows the production Warp Mini window using simulated click counts. Try C/B/A/S/SS, the Mini lightning switch, or the link to the actual Personalization settings. This does not open a database or start a capture listener.
+
+To profile full snapshots with isolated synthetic data (365 days, temporary databases, no capture or installed App):
+
+```sh
+cargo test --locked --test performance -- --ignored --nocapture
+```
+
+Compare the same build profile and fixture before and after a change. These timings measure snapshot work, not total App memory or CPU. Linux input polling retains descriptor arrays until devices change and reuses its event buffer; physical input and hotplug acceptance still need the native test environment described in `linux-testing.md`.
+
+## macOS titlebar compatibility
+
+The integrated titlebar with custom traffic-light alignment is enabled only on Apple Silicon with macOS 26 or later. macOS 12–25 and Intel Macs use the system’s default titlebar layout, including after leaving Mini mode. These environments have not received native visual validation for the custom layout; the fallback avoids moving their AppKit button containers. Fullscreen, resizing and theme changes on those systems still need a native smoke test before expanding custom-titlebar support.
 
 ## Paths and explicit migration
 
@@ -116,8 +132,15 @@ The timestamp is an example; use the recorder's actual change time and original 
 
 ## Version and publication
 
-Release **0.2.1** is internal build **78**; the previous **0.2.0** release remains build 69 and the original **0.1.0** preview remains build 55. The app shows the public version only; `--version` and package manifests include the internal build for diagnostic reports. `build.rs` validates the Windows and macOS package versions and embeds that build in the executable. Use a new public version for each tagged release; never move a published tag or replace its packages with a different source revision. Internal build numbers identify unpublished revisions. Keep Cargo, macOS public version and Windows ProductVersion aligned. Verify signatures, versions, manifests, checksums, third-party licenses and absence of user data before distribution.
+The latest published version is **0.3.1**; read the current internal build from `assets/Info.plist` and `assets/windows/app.rc` instead of a fixed documentation example. The app shows the public version only; `--version` and package manifests include the internal build for diagnostic reports. `build.rs` validates the Windows and macOS package versions and embeds that build in the executable. Use a new public version for each tagged release; never move a published tag or replace its packages with a different source revision. Internal build numbers identify unpublished revisions. Keep Cargo, macOS public version and Windows ProductVersion aligned. Verify signatures, versions, manifests, checksums, third-party licenses and absence of user data before distribution.
 
 The updater checks daily by default in normal desktop sessions, with a persisted 24-hour attempt timestamp and a Settings opt-out; manual checks remain available at any time. Demo, read-only source, setup-pending and independent sessions do not run scheduled checks. A failed attempt is also recorded to prevent startup retry loops; the running app then retries at most three times (5 min, 30 min, 2 h, not persisted) before waiting for the next daily window. Background failures are logged and return to current-version copy (or retain an existing update offer); manual check and installation failures remain visible. Normal-session check and installation-preparation failures are written to the application log with UTC time, request source and operation. Diagnostics and periodic statistics share serialized rotation (10 MiB per file, three archives); log write failures do not change the update result or stop recording. Excluded sessions keep update diagnostics on stderr only. Only normal sessions persist the toggle or attempt time, because other sessions share the preferences file. Successful automatic checks queue a localized eight-second in-app reminder for a newer stable version; a manual check records its result as already announced. The pending version and highest version already shown survive restarts; delivery waits for the full, focused window, so hidden, minimized and Mini views do not consume it. A successful check with no update clears a pending offer. Starting with 0.3.1, a successful check automatically downloads and verifies an update for a writable ordinary installation. The controller retains the temporary staged package in a ready state; only an explicit install request starts the helper. A same-version recheck retains it, a withdrawn or changed offer discards it, and exiting before installation cleans the completed temporary staging. Downloading does not block normal quit. Managed installations never stage packages. The updater uses the fixed public GitHub repository, semantic stable versions and the matching ZIP/manifest/checksums. Downloads are bounded and validated before a helper runs. The helper waits for a successful normal shutdown and the profile lock, revalidates the staged payload and backs up program files before replacement. It never opens the statistics database. Source/demo/independent sessions cannot download or install themselves. The network regression is opt-in: `cargo test --lib updater::tests::published_release_downloads_and_verifies_without_installing -- --ignored`; all ordinary tests use disposable local fixtures.
 
 Project code is licensed under [GPL-3.0-or-later](../LICENSE). Source archives and both platforms' packages include the full license; fonts and other third-party components retain their own licenses. Mac packages are ad-hoc signed and Windows packages are unsigned. Hardware-specific validation is tracked in the Windows checklist and roadmap. See the [roadmap](roadmap.md). Local scripts do not create repositories or publish Releases; the tag workflow retains verified artifacts for personal-account publication.
+
+
+Linux message dialogs use the existing GTK runtime, including startup recovery before a window exists; `zenity` is not required. Folder selection still uses rfd's portal backend. Native confirmation checks run under Xvfb in an isolated environment.
+
+After a committed update, the restarted App cleans exact recorded staging/backup files in a background worker. Checksums, installation identity and a complete no-link inventory gate deletion; changed or unrecognized files stay in place. Failed replacements retain recovery material. Windows cleanup tolerates the helper remaining open briefly after launch.
+
+Database locks append `.lock` to the full filename. A shared legacy lock also excludes older ClickPulse recorders while allowing separate new databases with the same stem. Settings use synced temporary files and atomic persistence.

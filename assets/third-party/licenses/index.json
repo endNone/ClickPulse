@@ -1,0 +1,124 @@
+{
+  "block2@0.6.2": [
+    {
+      "file": "objc2-b4167b58-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/b4167b582b2f75f9a1be75495c41b765344fd03c/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "dispatch2@0.3.1": [
+    {
+      "file": "objc2-8852b424-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/8852b424193ca41602281b3d7540d7c8ed51e49a/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "mac-notification-sys@0.6.15": [
+    {
+      "file": "mac-notification-sys-deb55968-LICENSE-Apache",
+      "source": "https://raw.githubusercontent.com/h4llow3En/mac-notification-sys/deb559683962d314a7693478476bf8d052efa84e/LICENSE-Apache",
+      "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+    },
+    {
+      "file": "mac-notification-sys-deb55968-LICENSE-MIT",
+      "source": "https://raw.githubusercontent.com/h4llow3En/mac-notification-sys/deb559683962d314a7693478476bf8d052efa84e/LICENSE-MIT",
+      "sha256": "1299b4d9d15e9d67e4ac0e7d47ae9404887ca3cf0764aadeec7588d5a6e8e0cc"
+    }
+  ],
+  "objc2@0.6.5": [
+    {
+      "file": "objc2-d7d2fa23-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "objc2-app-kit@0.3.2": [
+    {
+      "file": "objc2-7b1abfd7-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "objc2-core-foundation@0.3.2": [
+    {
+      "file": "objc2-7b1abfd7-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "objc2-core-graphics@0.3.2": [
+    {
+      "file": "objc2-7b1abfd7-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "objc2-encode@4.1.0": [
+    {
+      "file": "objc2-8d214f54-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "objc2-exception-helper@0.1.1": [
+    {
+      "file": "objc2-8d214f54-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "objc2-foundation@0.3.2": [
+    {
+      "file": "objc2-7b1abfd7-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "objc2-io-surface@0.3.2": [
+    {
+      "file": "objc2-7b1abfd7-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "objc2-web-kit@0.3.2": [
+    {
+      "file": "objc2-7b1abfd7-LICENSE.md",
+      "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+      "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "clipboard-win@5.4.3": [
+    {
+      "file": "clipboard-win-ed27008a-LICENSE",
+      "source": "https://raw.githubusercontent.com/DoumanAsh/clipboard-win/ed27008ae5d1f10cfbb266de039f0fb35fd05a56/LICENSE",
+      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+    }
+  ],
+  "dlopen2@0.8.2": [
+    {
+      "file": "dlopen2-cc80e4a0-LICENSE",
+      "source": "https://raw.githubusercontent.com/OpenByteDev/dlopen2/cc80e4a0a90d499b677fdf7743699b4b3a43a989/LICENSE",
+      "sha256": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2"
+    }
+  ],
+  "dlopen2_derive@0.4.3": [
+    {
+      "file": "dlopen2-cc80e4a0-LICENSE",
+      "source": "https://raw.githubusercontent.com/OpenByteDev/dlopen2/cc80e4a0a90d499b677fdf7743699b4b3a43a989/LICENSE",
+      "sha256": "39fa265207450e77c62e90c5594a06c085b655d8374c7ced4bf7894b6bd95dd2"
+    }
+  ],
+  "libappindicator-sys@0.9.0": [
+    {
+      "file": "libappindicator-rs-eafd1e36-LICENSE-APACHE",
+      "source": "https://raw.githubusercontent.com/tauri-apps/libappindicator-rs/eafd1e3682a1247f595410266091e9684021cb6f/LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+    },
+    {
+      "file": "libappindicator-rs-eafd1e36-LICENSE-MIT",
+      "source": "https://raw.githubusercontent.com/tauri-apps/libappindicator-rs/eafd1e3682a1247f595410266091e9684021cb6f/LICENSE-MIT",
+      "sha256": "eb227437252b2a7a9c1fc342c93ade1f3d7ce38cc6dd754f613db07d53ceff0b"
+    }
+  ]
+}

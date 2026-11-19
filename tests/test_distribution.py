@@ -44,6 +44,9 @@ class DistributionTests(unittest.TestCase):
         self.assertTrue(arch['url'].endswith('/v9.8.7/ClickPulse-9.8.7-windows-x64.zip'))
         self.assertEqual(arch['hash'], hashes['windows-x64'])
         original = json.loads(self.before[self.root/'bucket/clickpulse.json'])
+        self.assertEqual(scoop['notes'], original['notes'])
+        original_cask = self.before[self.root/'Casks/clickpulse.rb'].decode('utf-8')
+        self.assertEqual(cask[cask.index('  uninstall '):], original_cask[original_cask.index('  uninstall '):])
         self.assertEqual(scoop['autoupdate'], original['autoupdate'])
         template = scoop['autoupdate']['architecture']['64bit']
         for field in ['url', 'extract_dir']:

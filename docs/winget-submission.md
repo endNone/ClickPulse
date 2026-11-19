@@ -1,7 +1,6 @@
-# Submit ClickPulse 0.3.1 to WinGet
+# WinGet manifest preparation
 
-Status: preparation only. Publish 0.3.1 before opening the first submission to
-[microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs).
+The examples below use the published 0.3.1 package. For a newer version, replace **every** version, archive path and release URL with that final published release. This document does not describe the live review status of any submission in [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs). Issues, pull requests and maintainer replies are handled manually.
 
 ## Prepare the published package
 
@@ -38,7 +37,7 @@ Use architecture `x64` and the published ZIP URL above. Set `ReleaseDate` to the
 actual publication date. Compare `InstallerSha256` with that release's
 `SHA256SUMS.txt`; never reuse the 0.3.0 value, an earlier draft's value, or a
 private test package's value. Regenerate the manifests from the final published
-package if the unpublished 0.3.1 candidate is rebuilt.
+package whenever an unpublished candidate is rebuilt. Never move a published release tag or substitute a different package under it.
 
 ## Validate and submit
 

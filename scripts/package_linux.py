@@ -11,7 +11,9 @@ import struct
 import subprocess
 import tempfile
 import zipfile
-from third_party import rust_notices
+from third_party import rust_notices, asset_notices
+from release_symbols import build_release, stage_binary
+from release import source_revision
 
 
 def validate_elf(data, target):
@@ -32,13 +34,13 @@ def main():
     if target not in {'aarch64-unknown-linux-gnu','x86_64-unknown-linux-gnu'}:
         parser.error('Build with a Linux ARM64 or x64 toolchain')
     if not args.skip_build:
-        subprocess.run(['cargo','build','--release','--locked','--target',target],check=True)
+        build_release(root, target)
     metadata = json.loads(subprocess.check_output(['cargo','metadata','--locked','--format-version','1','--filter-platform',target]))
     package = next(p for p in metadata['packages'] if p['id'] == metadata['resolve']['root'])
     version = package['version']
-    internal_build = int(re.search(r'FILEVERSION\s+\d+,\d+,\d+,(\d+)',(root/'assets/windows/app.rc').read_text()).group(1))
-    revision = args.source_revision or subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-    if not re.fullmatch(r'[0-9a-f]{40}',revision):
+    internal_build = int(re.search(r'FILEVERSION\s+\d+,\d+,\d+,(\d+)',(root/'assets/windows/app.rc').read_text(encoding='utf-8')).group(1))
+    revision = args.source_revision or source_revision(root)
+    if revision is not None and not re.fullmatch(r'[0-9a-f]{40}',revision):
         parser.error('A full source revision is required')
     executable = Path(metadata['target_directory'])/target/'release/clickpulse'
     validate_elf(executable.read_bytes(),target)
@@ -47,14 +49,15 @@ def main():
     dist = root/'dist'; dist.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.linux-package-',dir=dist) as temporary:
         bundle = Path(temporary)/name; bundle.mkdir()
-        shutil.copy2(executable,bundle/'clickpulse'); (bundle/'clickpulse').chmod(0o755)
+        stage_binary(executable,bundle/'clickpulse',root,target,version,not args.skip_build); (bundle/'clickpulse').chmod(0o755)
         shutil.copy2(root/'LICENSE',bundle/'LICENSE.txt')
         shutil.copy2(root/'assets/clickpulse-mark-blue-transparent-v1-1024.png',bundle/'clickpulse.png')
         licenses = bundle/'Licenses'; licenses.mkdir()
+        if (root/'TRADEMARKS.md').is_file(): shutil.copy2(root/'TRADEMARKS.md', licenses/'TRADEMARKS.txt')
         for license_file in (root/'assets/fonts').glob('*-OFL.txt'):
             shutil.copy2(license_file,licenses/license_file.name)
-        (bundle/'THIRD-PARTY-NOTICES.txt').write_text(rust_notices(metadata,root),encoding='utf-8')
-        (bundle/'README.txt').write_text((root/'docs/install-linux.md').read_text(),encoding='utf-8')
+        (bundle/'THIRD-PARTY-NOTICES.txt').write_text(asset_notices(root)+rust_notices(metadata,root),encoding='utf-8')
+        (bundle/'README.txt').write_text((root/'docs/install-linux.md').read_text(encoding='utf-8'),encoding='utf-8')
         (bundle/'clickpulse.desktop').write_text('[Desktop Entry]\nType=Application\nName=ClickPulse\nComment=Local keyboard and mouse activity statistics\nExec=clickpulse\nIcon=clickpulse\nTerminal=false\nCategories=Utility;\n',encoding='utf-8')
         files = {f.relative_to(bundle).as_posix():hashlib.sha256(f.read_bytes()).hexdigest() for f in sorted(bundle.rglob('*')) if f.is_file()}
         manifest = {'version':version,'internal_build':internal_build,'target':target,'source_revision':revision,'code_license':'GPL-3.0-or-later','files':files,'native_linux_tested':False}

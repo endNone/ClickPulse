@@ -2,20 +2,31 @@
 
 ## Unreleased
 
-### New
-
-- Choose a calendar day or the last 24 hours for Overview and Mini counts.
-
-### Improved
-
-- Set preferences in a cleaner layout with compact controls and clear switches.
-- See a full year of activity, with empty days shown as pale squares.
-- Read a cleaner overview with fewer labels and a consistent brand subtitle.
+Suggested scope: prioritize stability and resource use in **0.3.2**; stage the larger interface and statistics additions for **0.3.3**. These are planning labels, not released versions or separately prepared builds. The current working tree still contains both groups.
 
 ### Fixed
 
-- Restore tabular numeral shapes and spacing in the bundled fonts.
-- Use pure white for the ClickPulse title in the sidebar and Mini mode.
+- **0.3.2:** Recover unavailable or damaged storage without discarding existing files; distinguish temporary locks, permissions and databases from newer versions. Keep final buffered events through short shutdown lock conflicts.
+- **0.3.2:** Keep Mac and Linux login startup working after moving the app; keep windows within the available screen and disable unwanted Windows browser actions.
+- **0.3.2:** Restore safe default buttons in Mac and Linux confirmations, localized Windows recovery actions, and Linux recovery dialogs without requiring zenity. Reopen hidden or released windows after minimization.
+- **0.3.2:** Keep Windows recording when optional session/desktop notifications are unavailable. Correct Windows uninstall cleanup, preserve requested history and settings, and clean verified update staging and backups after successful updates.
+- **0.3.2:** Reduce duplicate database work, unchanged preference writes and frontend redraws. In a controlled 365-day synthetic-history benchmark, median full-snapshot time fell **73.8%** for standalone databases and **59.2%** for collector views; these are query/aggregation timings, not whole-app CPU or memory savings.
+- **0.3.2:** Reduce package size with thin LTO and separate debug symbols. Same-source build-profile comparisons measured **10.3%** smaller macOS ARM64 DMGs, **31.7%** smaller Ubuntu ARM64 ZIPs and **50.9%** smaller Windows x64 **MinGW cross-built** ZIPs. These compare private build profiles, not published versions; final release sizes and Windows MSVC savings still need measurement.
+- **0.3.2:** Restore tabular numerals, font spacing and white brand titles; correct Settings control sizes and overlay layering, calendar labels and translated accessibility text.
+- **0.3.2:** Keep update checks working after temporary GitHub rate limits; handle data handoff errors without crashing and reap external desktop launchers.
+- **0.3.2:** Preserve buffered data when background storage jobs cannot start, retain custom database folders and recovery backups during uninstall, and attempt every file restore if an update rolls back.
+- **0.3.2:** Freeze all read-only source views consistently while paused, including Mini and share cards; stop repeated heartbeat writes while recording is paused or unavailable.
+- **0.3.3:** Preserve fast Windows shortcut packet order; reconcile stale modifiers after 1.5 seconds, retain held keys across foreground changes, and reset state on secure-desktop or session changes. Search all available shortcut-title and context translations.
+- **0.3.3:** Release inactive share canvases without interrupting exports; wait for fonts, keep long footer text clear of the project link, and omit the top shortcut when its local-date basis differs from the card's selected time zone.
+
+### New
+
+- **0.3.3:** Discover daily shortcut counts with an offline, source-linked reference library. Use **Show Shift combinations** to include Shift-only entries in the usage list; the choice lasts for the current session and recording is unchanged.
+- **0.3.3:** Create daily activity cards with the day's most-used shortcut and count when date bases agree. Save PNGs, or **copy the image** directly to the native clipboard on macOS and Windows.
+- **0.3.3:** Explore cumulative mouse-button usage and proportions below the keyboard in Heatmap, including individual buttons and distinct left/right Mac modifier keys.
+- **0.3.3:** Collapse the sidebar with its button or **⌘B** on Mac (**Ctrl+B** on Windows/Linux). Open the project from the footer GitHub icon and send feedback from Settings.
+- **0.3.3:** Choose the counter period, interface size and compact or full keyboard layout in reorganized Settings.
+- **0.3.3:** View a full year of activity with pale empty days and varied literary comparisons; keep recording quietly from the Mac menu bar after closing the window.
 
 ## 0.3.1 · 2026-11-15
 
