@@ -101,4 +101,10 @@ Mini 창의 번개 버튼을 누르면 타이핑이나 클릭 속도에 반응�
 
 ## GitHub 스타 수 추이
 
+ClickPulse가 유용했다면 [GitHub에서 별표](https://github.com/endNone/ClickPulse)를 남겨 주세요 🌟
+
 <p align="center"><a href="https://www.star-history.com/#endNone/ClickPulse&amp;Date"><img src="https://api.star-history.com/image?repos=endNone/ClickPulse&amp;type=Date" width="800" alt="GitHub 스타 수 추이"></a></p>
+
+## 감사의 말
+
+ClickPulse를 사용해 보고 소감과 개선 의견을 나눠 주신 [Appinn(小众软件) 커뮤니티](https://meta.appinn.net/t/topic/95871/16) 여러분께 감사드립니다.

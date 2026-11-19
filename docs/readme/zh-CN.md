@@ -101,4 +101,10 @@ macOS 版未经 Apple 公证，Windows 版未签名。系统可能会在首次�
 
 ## GitHub 星标趋势
 
+如果 ClickPulse 对你有帮助，欢迎在 [GitHub 上给它点颗星](https://github.com/endNone/ClickPulse) 🌟
+
 <p align="center"><a href="https://www.star-history.com/#endNone/ClickPulse&amp;Date"><img src="https://api.star-history.com/image?repos=endNone/ClickPulse&amp;type=Date" width="800" alt="GitHub 星标趋势"></a></p>
+
+## 致谢
+
+感谢[小众软件社区](https://meta.appinn.net/t/topic/95871/16)的朋友们试用 ClickPulse，分享使用感受和改进建议。

@@ -101,4 +101,10 @@ Mini ウィンドウの稲妻ボタンを押すと、入力やクリックの速
 
 ## GitHub スター数の推移
 
+ClickPulse が役に立ったら、[GitHub でスター](https://github.com/endNone/ClickPulse)を付けていただけるとうれしいです 🌟
+
 <p align="center"><a href="https://www.star-history.com/#endNone/ClickPulse&amp;Date"><img src="https://api.star-history.com/image?repos=endNone/ClickPulse&amp;type=Date" width="800" alt="GitHub スター数の推移"></a></p>
+
+## 謝辞
+
+ClickPulse を試し、感想や改善案を寄せてくださった [Appinn（小众软件）コミュニティ](https://meta.appinn.net/t/topic/95871/16)の皆さんに感謝します。

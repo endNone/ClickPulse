@@ -100,4 +100,10 @@ Read the [documentation](docs/README.md) and [changelog](CHANGELOG.md).<br>
 
 ## Star history
 
+If ClickPulse has been useful to you, give it a [star on GitHub](https://github.com/endNone/ClickPulse) 🌟
+
 <p align="center"><a href="https://www.star-history.com/#endNone/ClickPulse&amp;Date"><img src="https://api.star-history.com/image?repos=endNone/ClickPulse&amp;type=Date" width="800" alt="Star history"></a></p>
+
+## Acknowledgments
+
+Thank you to the [Appinn community (小众软件)](https://meta.appinn.net/t/topic/95871/16) for trying ClickPulse and sharing your feedback.

@@ -101,4 +101,10 @@ Le code est distribué sous licence [GPL-3.0-or-later](../../LICENSE). À partir
 
 ## Évolution des étoiles sur GitHub
 
+Si ClickPulse vous est utile, pensez à lui laisser [une étoile sur GitHub](https://github.com/endNone/ClickPulse) 🌟
+
 <p align="center"><a href="https://www.star-history.com/#endNone/ClickPulse&amp;Date"><img src="https://api.star-history.com/image?repos=endNone/ClickPulse&amp;type=Date" width="800" alt="Évolution des étoiles sur GitHub"></a></p>
+
+## Remerciements
+
+Merci à la [communauté Appinn (小众软件)](https://meta.appinn.net/t/topic/95871/16) d’avoir essayé ClickPulse et partagé ses impressions et ses suggestions.
