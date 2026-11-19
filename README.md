@@ -2,6 +2,8 @@
 
 <h1 align="center">ClickPulse</h1>
 
+<p align="center"><strong>English</strong> · <a href="docs/readme/zh-CN.md">简体中文</a> · <a href="docs/readme/zh-TW.md">繁體中文</a> · <a href="docs/readme/ja.md">日本語</a> · <a href="docs/readme/ko.md">한국어</a> · <a href="docs/readme/de.md">Deutsch</a> · <a href="docs/readme/es.md">Español</a> · <a href="docs/readme/fr.md">Français</a></p>
+
 <p align="center"><strong>Small app. Every click. Big insights. Fully offline.</strong></p>
 
 <p align="center">ClickPulse is an offline desktop app that turns your keyboard and mouse activity into daily statistics, history and heatmaps.</p>
@@ -57,7 +59,7 @@ scoop bucket add clickpulse https://github.com/endNone/ClickPulse
 scoop install clickpulse
 ```
 
-The macOS and Windows apps aren't signed yet; your system may block their first launch. [macOS steps](docs/install-macos.md) · [Windows steps](docs/install-windows.md) · [Ubuntu steps](docs/install-linux.md)
+The macOS app is not notarized by Apple and the Windows app is unsigned. Your system may block the first launch. [macOS steps](docs/install-macos.md) · [Windows steps](docs/install-windows.md) · [Ubuntu steps](docs/install-linux.md)
 
 ## Screenshots
 
