@@ -326,7 +326,17 @@ for(const id of ['permission','settings-permission'])$(id).addEventListener('cli
 $('storage-directory').addEventListener('click',()=>send('storage_directory'));
 $('import-history').addEventListener('click',()=>send('import_history'));
 $('reveal').addEventListener('click',()=>send('reveal'));
-$('calendar-range-select').addEventListener('change',event=>{calendarRange=event.target.value;if(data)renderCalendar();window.captureSessionState?.();});
+function setCalendarRange(value){
+  calendarRange=value;
+  const select=$('calendar-range-select');select.value=value;Dropdowns.sync(select);
+  if(data)renderCalendar();
+  window.captureSessionState?.();
+}
+$('calendar-range-select').addEventListener('change',event=>setCalendarRange(event.target.value));
+$('calendar-range-reset').addEventListener('click',()=>{
+  setCalendarRange('365');
+  $('calendar-range-select-trigger').focus();
+});
 $('history-range-select').addEventListener('change',event=>{historyRange=event.target.value;historyPage=0;if(data)renderHistory();window.captureSessionState?.();});
 $('history-prev').addEventListener('click',()=>{historyPage--;if(data)renderHistory();window.captureSessionState?.();});
 $('history-next').addEventListener('click',()=>{historyPage++;if(data)renderHistory();window.captureSessionState?.();});
@@ -664,17 +674,24 @@ function renderDonut(counts){
     donutNodes.labels[index].node.title=description;setSelectableText(donutNodes.labels[index].count,n(value));
   });
 }
-function updateRangeOptions(select,includeRecent){
-  const options=[['all',t('common.all_history')],...H.years(data.history_days).map(year=>[year,t('common.year',{year})])];
-  if(includeRecent){options.unshift(['365',t('common.past_year')]);options.push(['90',t('common.recent90')]);}
+function updateRangeOptions(select,isCalendar){
+  const years=H.years(data.history_days);
+  if(isCalendar){
+    const currentYear=data.now.slice(0,4);
+    if(!years.includes(currentYear))years.unshift(currentYear);
+  }
+  const options=isCalendar
+    ? [['365',t('common.past_year')],...years.map(year=>[year,year])]
+    : [['all',t('common.all_history')],...years.map(year=>[year,t('common.year',{year})])];
   const signature=I.locale+':'+options.map(option=>option[0]).join(',');
   if(select.dataset.options===signature)return;
   const selected=select.value;
-  select.replaceChildren(...options.map(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;return option}));
-  select.value=options.some(option=>option[0]===selected)?selected:includeRecent?'365':'all';select.dataset.options=signature;
+  select.replaceChildren(...options.map(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;option.hidden=isCalendar&&value==='365';return option}));
+  select.value=options.some(option=>option[0]===selected)?selected:options[0][0];select.dataset.options=signature;
   Dropdowns.sync(select);
 }
 function renderCalendar(){
+  $('calendar-range-reset').hidden=calendarRange==='365';
   const today=data.now.split('T')[0],bounds=H.bounds(data.history_days,today,calendarRange);
   const days=H.calendarDays(data.history_days,bounds.start,bounds.end);
   const firstYear=bounds.start.slice(0,4),lastYear=bounds.end.slice(0,4);

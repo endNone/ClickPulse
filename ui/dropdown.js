@@ -16,8 +16,9 @@ function createClickPulseDropdowns(document,window){
       if(opened===controller&&items[active]){trigger.setAttribute('aria-activedescendant',items[active].id);if(scroll)items[active].scrollIntoView({block:'nearest'});}
     }
     function sync(){
-      const rows=Array.from(select.options).filter(option=>!option.disabled&&!option.hidden);
-      const selected=rows.find(option=>option.value===select.value)||rows[0];
+      const available=Array.from(select.options).filter(option=>!option.disabled);
+      const rows=available.filter(option=>!option.hidden);
+      const selected=available.find(option=>option.value===select.value)||rows[0];
       label.replaceChildren();
       if(selected?.dataset.swatch){const dot=document.createElement('i');dot.className='theme-swatch';dot.style.backgroundColor=selected.dataset.swatch;label.append(dot);}
       const text=document.createElement('span');text.textContent=selected?.textContent||'';label.append(text);trigger.title=text.textContent;

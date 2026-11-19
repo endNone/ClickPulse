@@ -337,10 +337,9 @@ test('Pause acknowledges immediately while statistics are pending and stale repl
 test('the app starts and renders history without Safari 15.4 built-ins',()=>{
   const a=app('macos',true),s=snapshot();
   s.history_days=[{day:'2025-12-31',counts:{keyboard:3,mouse:1}},...s.history_days];
-  a.get('calendar-range-select').value='all';
   a.window.receive(s);
-  assert.equal(a.get('heatmap').children.length,2);
-  assert.equal(a.get('heatmap').children[1].children[0].children[1].textContent,'Jan 1 — Oct 7');
+  assert.equal(a.get('heatmap').children.length,1);
+  assert.match(a.get('heatmap').children[0].children[0].children[1].textContent,/Oct 8 .* Oct 7/);
   assert.equal(a.get('active-days').textContent,'2 active days');
   a.navigate('history');
   assert.equal(a.get('history-table').children[0].children[3].textContent,'120');
@@ -408,13 +407,13 @@ for(const platform of ['windows','linux'])test(`${platform} close prompt traps k
 test('calendar literary aside uses only selected keyboard history and follows range, live counts and language',()=>{
   const a=app(),s=snapshot();
   s.history_days=[{day:'2025-06-01',counts:{keyboard:700000,mouse:5000000}},{day:'2026-10-07',counts:{keyboard:1400000,mouse:9000000}}];
-  a.get('calendar-range-select').value='all';a.window.receive(s);
+  a.window.receive(s);
   const aside=a.get('calendar-aside');
-  assert.equal(aside.hidden,false);assert.match(aside.textContent,/About 3 copies of Pride and Prejudice/);
+  assert.equal(aside.hidden,false);assert.match(aside.textContent,/About 2 copies of Pride and Prejudice/);
   assert.equal(aside.title,messages.en['calendar.literary_basis']);
   const range=a.get('calendar-range-select');range.value='2025';range.fire('change');
   assert.match(aside.textContent,/About 1 copy of Pride and Prejudice/);
-  range.value='90';range.fire('change');assert.match(aside.textContent,/About 2 copies/);
+  range.value='2026';range.fire('change');assert.match(aside.textContent,/About 2 copies/);
   a.window.receiveView({locale:'zh-CN',language_preference:'system'});
   assert.equal(aside.textContent,'这些按键，约够写完 2 本《傲慢与偏见》。');
   a.window.receive({...s,history_days:[s.history_days[0],{day:'2026-10-07',counts:{keyboard:2100000,mouse:9000000}}]});
@@ -861,8 +860,16 @@ test('past-year calendar pads missing dates in one cross-year grid and retains a
   assert.equal(b.get('calendar-range-select').value,'365');assert.equal(b.get('heatmap').children.length,1);
   const select=a.get('calendar-range-select');select.value='2023';select.fire('change');
   assert.match(a.get('calendar-range').textContent,/709,000 events/);
-  select.value='all';select.fire('change');
-  assert.match(a.get('calendar-range').textContent,/709,120 events/);
+  assert.deepEqual(select.children.filter(option=>!option.hidden).map(option=>option.textContent),['2026','2023']);
+  assert.equal(a.get('calendar-range-reset').hidden,false);
+  a.get('calendar-range-reset').fire();
+  assert.equal(select.value,'365');
+  assert.equal(a.get('calendar-range-reset').hidden,true);
+  assert.match(a.get('calendar-range').textContent,/120 events/);
+  for(const legacy of ['90','all']){
+    b.window.restoreSessionState({...saved,calendar_range:legacy});b.window.receive(s);
+    assert.equal(b.get('calendar-range-select').value,'365');
+  }
 });
 test('the calendar advances at local midnight even when counters are unchanged',()=>{
   const a=app(),s=snapshot();a.window.receive(s);
@@ -1312,7 +1319,7 @@ test('recreation restores history, trend and keyboard choices and clamps removed
     assert.equal(a.get('history-range-select').value,'all');
     a.window.captureSessionState();
     assert.equal(sent.at(-1).state.trend_days,90);assert.equal(sent.at(-1).state.keyboard_view,'treemap');
-    assert.equal(sent.at(-1).state.calendar_range,'90');
+    assert.equal(sent.at(-1).state.calendar_range,'365');
     if(page==='history')assert.ok(sent.at(-1).state.history_page<100);
     const count=sent.length;a.window.receiveView({visible:false});a.get('main').scrollTop=0;a.window.captureSessionState();
     assert.equal(sent.length,count,'Hidden layout changes must not overwrite scroll state');

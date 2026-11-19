@@ -44,7 +44,7 @@ Sport stops sampling and animating when disabled, hidden, expanded into the full
 
 ## Activity calendar
 
-The calendar opens on **Past year**: the latest 365 days, ending today. Days without records appear as pale squares, including dates before your first recording. The grid continues across January without splitting into separate years. Choose **All history** or a year to see older records.
+The calendar opens on **Past year**: the latest 365 days, ending today. Days without records appear as pale squares, including dates before your first recording. The grid continues across January without splitting into separate years. The calendar menu lists years, newest first. Choose a year to view it, or use the reset arrow beside the year to return to the past 365 days.
 
 ## Themes and language
 

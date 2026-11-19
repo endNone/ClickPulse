@@ -78,6 +78,15 @@ test('option/locale refresh retains the selected year and updates local labels',
   assert.equal(h.trigger.children[0].textContent,'2026 年');assert.equal(h.trigger.getAttribute('aria-label'),'历史范围');
   h.open();assert.equal(h.menu.children.length,3);assert.equal(h.menu.children[1].classes.has('selected'),true);
 });
+test('a hidden default labels the trigger but only years appear in the list',()=>{
+  const {history,h,dropdowns}=fixture();
+  history.children[0].textContent='Past year';history.children[0].hidden=true;
+  dropdowns.sync(history);h.open();
+  assert.equal(h.trigger.children[0].textContent,'Past year');
+  assert.deepEqual(h.menu.children.map(item=>item.dataset.value),['2026']);
+  h.menu.children[0].fire('click');
+  assert.equal(h.trigger.children[0].textContent,'2026');
+});
 test('typing selects matching options while IME composition is ignored',()=>{
   const {themes,t}=fixture();t.trigger.fire('keydown',{key:'v',isComposing:true});assert.equal(t.menu.hidden,true);
   t.trigger.fire('keydown',{key:'v'});t.trigger.fire('keydown',{key:'Enter'});assert.equal(themes.value,'violet');
