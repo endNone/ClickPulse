@@ -18,12 +18,12 @@ use windows_sys::Win32::{
     },
     Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME},
     System::{Console::*, Registry::*, Threading::*},
-    UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW},
 };
 
 fn wide(value: impl AsRef<OsStr>) -> Vec<u16> {
     value.as_ref().encode_wide().chain(Some(0)).collect()
 }
+const NOTIFICATION_KEY: &str = "Software\\Classes\\AppUserModelId\\app.clickpulse.desktop";
 const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const RUN_VALUE: &str = "ClickPulse";
 
@@ -34,7 +34,7 @@ pub fn notification_app_id() -> Result<&'static str> {
     let result = unsafe {
         RegCreateKeyExW(
             HKEY_CURRENT_USER,
-            wide(format!("Software\\Classes\\AppUserModelId\\{ID}")).as_ptr(),
+            wide(NOTIFICATION_KEY).as_ptr(),
             0,
             null(),
             0,
@@ -293,23 +293,35 @@ pub fn attach_parent_console() {
         }
     }
 }
-pub fn show_startup_error(error: &anyhow::Error) {
+pub fn show_error(error: &anyhow::Error, key: &str) {
     let locale = crate::presentation::Preferences::locale_for_error();
-    let message = format!("{}\n\n{error:#}", locale.text("error.startup"));
-    unsafe {
-        MessageBoxW(
-            null_mut(),
-            wide(message).as_ptr(),
-            wide("ClickPulse").as_ptr(),
-            MB_OK | MB_ICONERROR,
-        );
-    }
+    rfd::MessageDialog::new()
+        .set_title("ClickPulse")
+        .set_description(format!("{}\n\n{error:#}", locale.text(key)))
+        .set_level(rfd::MessageLevel::Error)
+        .show();
+}
+
+/// Package managers do not remove this per-user notification registration.
+pub fn remove_notification_identity() -> Result<()> {
+    remove_notification_at(NOTIFICATION_KEY)
+}
+fn remove_notification_at(key: &str) -> Result<()> {
+    let result = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, wide(key).as_ptr()) };
+    ensure!(
+        result == ERROR_SUCCESS
+            || result == ERROR_FILE_NOT_FOUND
+            || result == windows_sys::Win32::Foundation::ERROR_PATH_NOT_FOUND,
+        "Notification registration remains at HKCU\\{key}: Windows error {result}"
+    );
+    Ok(())
 }
 
 /// Relaunching the executable signals the existing window rather than starting
 /// another sensor. The signal survives startup while the WebView is loading.
 pub struct SingleInstance {
     handle: HANDLE,
+    legacy_handle: HANDLE,
     running_marker: HANDLE,
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
@@ -340,48 +352,76 @@ impl SingleInstance {
         let identity = parent
             .canonicalize()?
             .join(path.file_name().context("Invalid data path")?);
-        let mut hash = std::collections::hash_map::DefaultHasher::new();
-        identity.to_string_lossy().to_lowercase().hash(&mut hash);
-        let name = wide(format!("Local\\ClickPulse.Open.{:016x}", hash.finish()));
-        let handle = unsafe { CreateEventW(null(), 0, 0, name.as_ptr()) };
-        ensure!(
-            !handle.is_null(),
-            "Create App activation event: {}",
-            std::io::Error::last_os_error()
+        use sha2::{Digest, Sha256};
+        let identity = identity.to_string_lossy().to_lowercase();
+        let stable = format!(
+            "Local\\ClickPulse.Open.v2.{:x}",
+            Sha256::digest(identity.as_bytes())
         );
-        if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
-            unsafe {
-                SetEvent(handle);
-                CloseHandle(handle);
+        // Listen on the previous event too, so 0.3.1 can still activate us.
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        identity.hash(&mut hash);
+        let legacy = format!("Local\\ClickPulse.Open.{:016x}", hash.finish());
+        let mut handles = Vec::new();
+        for name in [stable, legacy] {
+            let handle = unsafe { CreateEventW(null(), 0, 0, wide(name).as_ptr()) };
+            if handle.is_null() {
+                let error = std::io::Error::last_os_error();
+                for previous in handles {
+                    unsafe {
+                        CloseHandle(previous);
+                    }
+                }
+                return Err(error.into());
             }
-            return Ok(None);
+            if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+                unsafe {
+                    SetEvent(handle);
+                    CloseHandle(handle);
+                }
+                for previous in handles {
+                    unsafe {
+                        CloseHandle(previous);
+                    }
+                }
+                return Ok(None);
+            }
+            handles.push(handle);
         }
+        let handle = handles[0];
+        let legacy_handle = handles[1];
         let running_marker =
             unsafe { CreateMutexW(null(), 0, wide("Local\\ClickPulse.Running").as_ptr()) };
         if running_marker.is_null() {
             unsafe {
                 CloseHandle(handle);
+                CloseHandle(legacy_handle);
             }
             anyhow::bail!("Create running marker: {}", std::io::Error::last_os_error());
         }
         Ok(Some(Self {
             handle,
+            legacy_handle,
             running_marker,
             stop: Arc::new(AtomicBool::new(false)),
             worker: None,
         }))
     }
     pub fn listen(&mut self, activate: impl Fn() + Send + 'static) -> Result<()> {
-        let handle = self.handle as usize;
+        let handles = [self.handle as usize, self.legacy_handle as usize];
         let stop = self.stop.clone();
         self.worker = Some(
             thread::Builder::new()
                 .name("clickpulse-activate".into())
                 .spawn(move || {
+                    let handles = handles.map(|handle| handle as HANDLE);
                     while !stop.load(Ordering::Relaxed) {
-                        if unsafe { WaitForSingleObject(handle as HANDLE, 200) } == WAIT_OBJECT_0
-                            && !stop.load(Ordering::Relaxed)
-                        {
+                        let result =
+                            unsafe { WaitForMultipleObjects(2, handles.as_ptr(), 0, INFINITE) };
+                        if result != WAIT_OBJECT_0 && result != WAIT_OBJECT_0 + 1 {
+                            break;
+                        }
+                        if !stop.load(Ordering::Relaxed) {
                             activate();
                         }
                     }
@@ -401,9 +441,35 @@ impl Drop for SingleInstance {
         }
         unsafe {
             CloseHandle(self.handle);
+            CloseHandle(self.legacy_handle);
             CloseHandle(self.running_marker);
         }
     }
+}
+
+/// Remove only the login command that still resolves to this installation.
+pub fn remove_matching_startup(executable: &Path) -> Result<()> {
+    if read_run()?
+        .and_then(|v| startup_executable(&v))
+        .is_some_and(|path| crate::windows_installation::same_program(&path, executable))
+    {
+        write_run_at(RUN_KEY, None)?;
+    }
+    Ok(())
+}
+
+/// Shell launchers do not consistently accept extended-length path syntax.
+pub(crate) fn shell_path(path: &std::path::Path) -> std::borrow::Cow<'_, str> {
+    let value = path.to_string_lossy();
+    if let Some(tail) = value.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{tail}").into();
+    }
+    if let Some(tail) = value.strip_prefix(r"\\?\")
+        && tail.as_bytes().get(1) == Some(&b':')
+    {
+        return tail.to_owned().into();
+    }
+    value
 }
 
 #[cfg(test)]
@@ -443,6 +509,39 @@ mod startup_tests {
         assert!(repaired_run(Some(&custom), &exe, &stable).is_none());
         assert_eq!(startup_executable(&run_command(&exe)), Some(exe.clone()));
         assert!(repaired_run(Some(&run_command(&exe)), &exe, &exe).is_none());
+    }
+
+    #[test]
+    fn notification_identity_removal_is_recursive_idempotent_and_keeps_other_keys() {
+        struct TestKey(String);
+        impl Drop for TestKey {
+            fn drop(&mut self) {
+                unsafe {
+                    RegDeleteTreeW(HKEY_CURRENT_USER, wide(&self.0).as_ptr());
+                }
+            }
+        }
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = TestKey(format!(
+            "Software\\ClickPulse\\Tests\\Notification-{}-{unique}",
+            std::process::id()
+        ));
+        let target = format!("{}\\AppUserModelId\\app.clickpulse.desktop", root.0);
+        let nested = format!("{target}\\Nested");
+        let other = format!("{}\\AppUserModelId\\other.app", root.0);
+        let value = wide("test-only");
+        for key in [&target, &nested, &other] {
+            write_run_at(key, Some(&value)).unwrap();
+        }
+        assert!(read_run_at(&target).unwrap().is_some());
+        remove_notification_at(&target).unwrap();
+        remove_notification_at(&target).unwrap();
+        assert!(read_run_at(&target).unwrap().is_none());
+        assert!(read_run_at(&nested).unwrap().is_none());
+        assert_eq!(read_run_at(&other).unwrap(), Some(value));
     }
 
     #[test]

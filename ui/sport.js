@@ -41,6 +41,7 @@ const ClickPulseSport=(() => {
     const motion=win.matchMedia?.('(prefers-reduced-motion: reduce)');
     const colors={C:'#58c9ed',B:'#5a9bff',A:'#b59aff',S:'#ffd479',SS:'#ff676f'};
     let active=false,enabled=false,shown=true,paused=false,available=false,poll=null,frame=null;
+    let lastReadout='',lastRank='',lastSpeed='';
     let marks=[],width=320,height=208,lastFrame=0,lastHit=-Infinity,phase=0,sequence=0;
     function resize(){
       if(!ctx)return;
@@ -99,13 +100,15 @@ const ClickPulseSport=(() => {
       widget.style.setProperty('--sport-energy',String(Math.min(s.cps/16,1)));
       widget.classList.toggle('sport-hit',moving&&now-lastHit<160);
       widget.style.setProperty('--sport-strike',String(moving?Math.max(0,1-(now-lastHit)/220):0));
-      el('mini-sport-grade').textContent=rank;el('mini-sport-cps').textContent=formatSpeed(s.cps);
-      el('mini-sport-readout').setAttribute('aria-label',t('sport.mini_readout',{rank,speed:formatSpeed(s.cps)}));
+      const speed=formatSpeed(s.cps),readout=t('sport.mini_readout',{rank,speed});
+      if(rank!==lastRank){el('mini-sport-grade').textContent=rank;lastRank=rank;}
+      if(speed!==lastSpeed){el('mini-sport-cps').textContent=speed;lastSpeed=speed;}
+      if(readout!==lastReadout){el('mini-sport-readout').setAttribute('aria-label',readout);lastReadout=readout;}
       return s;
     }
     function tick(now){
       frame=null;if(!active)return;
-      const s=render(now);resize();paint(Math.min((now-(lastFrame||now))/1000,.05),now,s);lastFrame=now;
+      const s=render(now);paint(Math.min((now-(lastFrame||now))/1000,.05),now,s);lastFrame=now;
       if(s.cps>0||marks.length)wake();
     }
     function wake(){if(active&&!motion?.matches&&frame===null&&win.requestAnimationFrame)frame=win.requestAnimationFrame(tick);}

@@ -7,6 +7,24 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+pub mod startup;
+
+/// Helpers can observe the shutdown signal just before the OS releases the lock.
+/// Retry contention only, never hide a permissions or filesystem error.
+pub fn lock_profile_for_helper(file: &std::fs::File, timeout: Duration) -> Result<()> {
+    let started = Instant::now();
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(()),
+            Err(std::fs::TryLockError::WouldBlock) if started.elapsed() < timeout => {
+                std::thread::sleep(
+                    Duration::from_millis(50).min(timeout.saturating_sub(started.elapsed())),
+                );
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -182,21 +200,14 @@ pub(crate) fn backup_file(source: &Path, output: &Path) -> Result<()> {
 fn save_location(config: &Path, database: &Path) -> Result<()> {
     let parent = config.parent().context("Invalid storage settings path")?;
     std::fs::create_dir_all(parent)?;
-    let staged = config.with_extension(format!("{}.tmp", std::process::id()));
-    let result = (|| {
-        let mut file = std::fs::File::create_new(&staged)?;
-        file.write_all(&serde_json::to_vec_pretty(&Location {
-            version: 1,
-            database: database.to_owned(),
-        })?)?;
-        file.sync_all()?;
-        std::fs::rename(&staged, config)?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_file(&staged);
-    }
-    result
+    let mut file = tempfile::NamedTempFile::new_in(parent)?;
+    file.write_all(&serde_json::to_vec_pretty(&Location {
+        version: 1,
+        database: database.to_owned(),
+    })?)?;
+    file.as_file().sync_all()?;
+    file.persist(config)?;
+    Ok(())
 }
 
 /// Caller holds both database locks and has flushed accepted input. Keep the old
@@ -221,6 +232,30 @@ pub(crate) fn relocate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn helper_lock_waits_for_shutdown_and_bounds_contention() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("profile.lock");
+        let first = std::fs::File::create(&path).unwrap();
+        first.lock().unwrap();
+        let next = std::fs::File::options()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .unwrap();
+        let error = lock_profile_for_helper(&next, Duration::ZERO).unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<std::fs::TryLockError>(),
+            Some(std::fs::TryLockError::WouldBlock)
+        ));
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            drop(first);
+        });
+        lock_profile_for_helper(&next, Duration::from_secs(2)).unwrap();
+        release.join().unwrap();
+    }
     use crate::{
         collector::CollectorDb,
         input::{Device, InputEvent},
@@ -251,6 +286,7 @@ mod tests {
         let source = temp.path().join("original.sqlite3");
         let mut old = CollectorDb::open(&source).unwrap();
         old.insert(&[InputEvent {
+            shortcut: None,
             ts_ms: chrono::Local::now().timestamp_millis(),
             device: Device::Keyboard,
             code: 0,
@@ -300,5 +336,85 @@ mod tests {
             resolve(temp.path()).unwrap(),
             temp.path().join("events.sqlite3")
         );
+    }
+}
+
+/// Separate databases with different extensions need separate exclusive locks.
+/// Retain a shared legacy lock so an older recorder's exclusive lock still blocks
+/// us, without making two new recorders (a.db / a.sqlite3) conflict with each other.
+#[derive(Debug)]
+pub struct DatabaseLock {
+    _current: std::fs::File,
+    _legacy: Option<std::fs::File>,
+}
+impl From<std::fs::File> for DatabaseLock {
+    fn from(file: std::fs::File) -> Self {
+        Self {
+            _current: file,
+            _legacy: None,
+        }
+    }
+}
+pub fn lock_database(path: &Path) -> Result<DatabaseLock> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let resolved = if path.try_exists()? {
+        path.canonicalize()?
+    } else {
+        parent
+            .canonicalize()?
+            .join(path.file_name().context("Database filename is missing")?)
+    };
+    let open = |p| {
+        std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(p)
+    };
+    let legacy_path = resolved.with_extension("lock");
+    let legacy = if legacy_path != resolved {
+        let file = open(legacy_path)?;
+        file.try_lock_shared()?;
+        Some(file)
+    } else {
+        None
+    }; // A database named *.lock must never be used as its own lock file.
+    let mut name = resolved.into_os_string();
+    name.push(".lock");
+    let file = open(PathBuf::from(name))?;
+    file.try_lock()?;
+    Ok(DatabaseLock {
+        _current: file,
+        _legacy: legacy,
+    })
+}
+
+#[cfg(test)]
+mod lock_tests {
+    use super::*;
+    #[test]
+    fn appended_names_distinguish_extensions_and_retain_legacy_exclusion() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a.sqlite3");
+        let b = dir.path().join("a.db");
+        let first = lock_database(&a).unwrap();
+        let second = lock_database(&b).unwrap();
+        assert!(lock_database(&a).is_err());
+        let legacy = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(dir.path().join("a.lock"))
+            .unwrap();
+        assert!(legacy.try_lock().is_err());
+        drop((first, second));
+        legacy.try_lock().unwrap();
+        assert!(lock_database(&a).is_err());
+        drop(legacy);
+        assert!(lock_database(&a).is_ok());
     }
 }

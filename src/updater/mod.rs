@@ -12,6 +12,8 @@ use std::{
 };
 
 mod install;
+#[cfg(windows)]
+pub(crate) use install::package_manager;
 pub use install::{
     ApplyGuard, Installation, Notice, apply_update, installation, launch_installer,
     package_update_command, take_notice,
@@ -31,7 +33,7 @@ pub fn daily_check_due(last_attempt: Option<i64>, now: i64) -> bool {
 
 /// Persist a deferred in-app reminder and the newest version already shown.
 /// A hidden window or restart must not consume the user's one-time reminder.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateNotifications {
     pending: Option<String>,
@@ -255,9 +257,16 @@ fn read_limited(reader: impl Read, limit: u64) -> Result<Vec<u8>> {
 }
 fn fetch_small(client: &ureq::Agent, asset: &Asset) -> Result<Vec<u8>> {
     let mut response = client.get(&asset.browser_download_url).call()?;
-    let bytes = read_limited(response.body_mut().as_reader(), asset.size)?;
+    let limit = if asset.size > 0 {
+        asset.size
+    } else if asset.name == "SHA256SUMS.txt" {
+        65536
+    } else {
+        1024 * 1024
+    };
+    let bytes = read_limited(response.body_mut().as_reader(), limit)?;
     ensure!(
-        bytes.len() as u64 == asset.size,
+        asset.size == 0 || bytes.len() as u64 == asset.size,
         "Incomplete update metadata"
     );
     if let Some(hash) = &asset.digest {
@@ -269,11 +278,89 @@ fn fetch_small(client: &ureq::Agent, asset: &Asset) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 pub fn check(current: &str, target: Target) -> Result<Option<Candidate>> {
-    let client = agent(Duration::from_secs(30));
-    let mut response = client
-        .get(API)
+    let client: ureq::Agent = ureq::Agent::config_builder()
+        .https_only(true)
+        .max_redirects(0)
+        .timeout_global(Some(Duration::from_secs(30)))
+        .user_agent(format!("ClickPulse/{}", crate::version::PUBLIC))
+        .build()
+        .into();
+    check_with_client(&client, API, &format!("{RELEASES}/latest"), current, target)
+}
+
+pub const RATE_LIMITED: &str = "Update check temporarily limited";
+
+fn candidate_from_redirect(
+    location: &str,
+    current: &str,
+    target: Target,
+) -> Result<Option<Candidate>> {
+    let absolute = if location.starts_with('/') {
+        format!("https://github.com{location}")
+    } else {
+        location.to_owned()
+    };
+    let version = absolute
+        .strip_prefix(&format!("{RELEASES}/tag/v"))
+        .context("Unexpected release redirect")?;
+    let parsed = stable_version(version)?;
+    ensure!(
+        parsed.to_string() == version,
+        "Noncanonical release version"
+    );
+    if parsed <= stable_version(current)? {
+        return Ok(None);
+    }
+    let stem = format!("ClickPulse-{version}-{}", target.platform());
+    let asset = |name: String| Asset {
+        browser_download_url: format!("{RELEASES}/download/v{version}/{name}"),
+        name,
+        size: 0,
+        digest: None,
+    };
+    // Size is unknown without the API. Downloads remain capped and verified
+    // against both the versioned checksums and the package's internal manifest.
+    Ok(Some(Candidate {
+        version: version.into(),
+        release_url: absolute.clone(),
+        target,
+        archive: asset(format!("{stem}.zip")),
+        manifest: asset(format!("{stem}.manifest.json")),
+        sums: asset("SHA256SUMS.txt".into()),
+    }))
+}
+
+fn check_with_client(
+    client: &ureq::Agent,
+    api: &str,
+    latest: &str,
+    current: &str,
+    target: Target,
+) -> Result<Option<Candidate>> {
+    let response = client
+        .get(api)
         .header("Accept", "application/vnd.github+json")
-        .call()?;
+        .call();
+    let mut response = match response {
+        Ok(response) => response,
+        Err(ureq::Error::StatusCode(403 | 429)) => {
+            let fallback = (|| -> Result<Option<Candidate>> {
+                let response = client.get(latest).call()?;
+                ensure!(
+                    response.status().is_redirection(),
+                    "Latest release did not redirect"
+                );
+                let location = response
+                    .headers()
+                    .get("Location")
+                    .context("Missing release redirect")?
+                    .to_str()?;
+                candidate_from_redirect(location, current, target)
+            })();
+            return fallback.context(RATE_LIMITED);
+        }
+        Err(error) => return Err(error.into()),
+    };
     let bytes = read_limited(response.body_mut().as_reader(), 1024 * 1024)?;
     Candidate::from_release(serde_json::from_slice(&bytes)?, current, target)
 }
@@ -320,6 +407,17 @@ pub fn stage(candidate: &Candidate, progress: impl Fn(u64, u64)) -> Result<Stage
     }
     let archive_path = directory.path().join("package.zip");
     let mut response = client.get(&candidate.archive.browser_download_url).call()?;
+    let total = if candidate.archive.size > 0 {
+        candidate.archive.size
+    } else {
+        response
+            .headers()
+            .get("content-length")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .filter(|size| *size <= MAX_ARCHIVE)
+            .unwrap_or(0)
+    };
     let mut reader = response.body_mut().as_reader();
     let mut file = File::create_new(&archive_path)?;
     let mut hash = Sha256::new();
@@ -332,19 +430,26 @@ pub fn stage(candidate: &Candidate, progress: impl Fn(u64, u64)) -> Result<Stage
         }
         bytes += n as u64;
         ensure!(
-            bytes <= candidate.archive.size,
+            bytes
+                <= if candidate.archive.size == 0 {
+                    MAX_ARCHIVE
+                } else {
+                    candidate.archive.size
+                },
             "Package exceeds declared size"
         );
         file.write_all(&chunk[..n])?;
         hash.update(&chunk[..n]);
-        progress(bytes, candidate.archive.size);
+        progress(bytes, total);
     }
     file.sync_all()?;
     drop(file);
     ensure!(
-        bytes == candidate.archive.size && format!("{:x}", hash.finalize()) == *expected,
+        (candidate.archive.size == 0 || bytes == candidate.archive.size)
+            && format!("{:x}", hash.finalize()) == *expected,
         "Package checksum mismatch or incomplete download"
     );
+    progress(bytes, bytes);
     let manifest = unpack(&archive_path, directory.path(), candidate, &external)?;
     Ok(StagedUpdate {
         directory,
@@ -569,7 +674,13 @@ fn unpack(
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(
                 &dest,
-                fs::Permissions::from_mode(member.unix_mode().unwrap_or(0o644) & 0o777),
+                fs::Permissions::from_mode(
+                    member
+                        .unix_mode()
+                        .map(|mode| mode & 0o777)
+                        .filter(|mode| *mode != 0)
+                        .unwrap_or(0o644),
+                ),
             )?;
         }
     }
@@ -618,3 +729,156 @@ pub fn cache_dir() -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod rate_limit_tests {
+    use super::*;
+    #[test]
+    fn unknown_size_metadata_is_still_bounded_and_digest_checked() {
+        use std::net::TcpListener;
+        for (name, length, digest, succeeds) in [
+            ("SHA256SUMS.txt", 65536, None, true),
+            ("SHA256SUMS.txt", 65537, None, false),
+            ("release.manifest.json", 1024 * 1024 + 1, None, false),
+            (
+                "SHA256SUMS.txt",
+                32,
+                Some(format!("sha256:{}", "0".repeat(64))),
+                false,
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let url = format!("http://{}", listener.local_addr().unwrap());
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut request = [0; 4096];
+                assert!(stream.read(&mut request).unwrap() > 0);
+                let header = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n"
+                );
+                stream.write_all(header.as_bytes()).unwrap();
+                // The client may close early when it reaches the size bound.
+                let _ = stream.write_all(&vec![b'x'; length]);
+            });
+            let client: ureq::Agent = ureq::Agent::config_builder()
+                .timeout_global(Some(Duration::from_secs(3)))
+                .build()
+                .into();
+            let asset = Asset {
+                name: name.into(),
+                browser_download_url: url,
+                size: 0,
+                digest,
+            };
+            assert_eq!(
+                fetch_small(&client, &asset).is_ok(),
+                succeeds,
+                "{name}: {length}"
+            );
+            server.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn fallback_accepts_only_this_repository_and_stable_numeric_versions() {
+        for bad in [
+            "https://evil.invalid/endNone/ClickPulse/releases/tag/v0.4.0",
+            "//evil.invalid/tag/v0.4.0",
+            "/endNone/Other/releases/tag/v0.4.0",
+            "/endNone/ClickPulse/releases/tag/v0.4.0-rc1",
+            "/endNone/ClickPulse/releases/tag/v0.4.0?x=1",
+        ] {
+            assert!(candidate_from_redirect(bad, "0.3.1", Target::WindowsX64).is_err());
+        }
+        for target in [
+            Target::MacArm64,
+            Target::MacX64,
+            Target::WindowsX64,
+            Target::LinuxArm64,
+            Target::LinuxX64,
+        ] {
+            let candidate =
+                candidate_from_redirect("/endNone/ClickPulse/releases/tag/v0.4.0", "0.3.1", target)
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(candidate.archive.size, 0);
+            assert_eq!(
+                candidate.archive.browser_download_url,
+                format!(
+                    "{RELEASES}/download/v0.4.0/ClickPulse-0.4.0-{}.zip",
+                    target.platform()
+                )
+            );
+            assert!(
+                candidate_from_redirect("/endNone/ClickPulse/releases/tag/v0.3.0", "0.3.1", target)
+                    .unwrap()
+                    .is_none()
+            );
+        }
+    }
+    #[test]
+    fn rate_limited_api_uses_a_single_unfollowed_latest_redirect() {
+        use std::net::TcpListener;
+        for status in [403, 429] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let base = format!("http://{}", listener.local_addr().unwrap());
+            listener.set_nonblocking(true).unwrap();
+            let server = std::thread::spawn(move || {
+                let deadline = std::time::Instant::now() + Duration::from_secs(5);
+                let mut paths = Vec::new();
+                while paths.len() < 2 && std::time::Instant::now() < deadline {
+                    let Ok((mut stream, _)) = listener.accept() else {
+                        std::thread::sleep(Duration::from_millis(5));
+                        continue;
+                    };
+                    // Windows can inherit the listener's nonblocking mode. Only
+                    // accept needs polling; wait for the request on this stream.
+                    stream.set_nonblocking(false).unwrap();
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(2)))
+                        .unwrap();
+                    let mut buffer = [0; 4096];
+                    let n = stream.read(&mut buffer).unwrap();
+                    paths.push(
+                        String::from_utf8_lossy(&buffer[..n])
+                            .lines()
+                            .next()
+                            .unwrap()
+                            .to_owned(),
+                    );
+                    let response = if paths.len() == 1 {
+                        format!(
+                            "HTTP/1.1 {status} Limited\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        )
+                    } else {
+                        "HTTP/1.1 302 Found\r\nLocation: https://github.com/endNone/ClickPulse/releases/tag/v0.4.0\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into()
+                    };
+                    stream.write_all(response.as_bytes()).unwrap();
+                }
+                paths
+            });
+            let client: ureq::Agent = ureq::Agent::config_builder()
+                .max_redirects(0)
+                .timeout_global(Some(Duration::from_secs(3)))
+                .build()
+                .into();
+            let candidate = check_with_client(
+                &client,
+                &format!("{base}/api"),
+                &format!("{base}/latest"),
+                "0.3.1",
+                Target::WindowsX64,
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(candidate.version, "0.4.0");
+            assert_eq!(
+                server.join().unwrap(),
+                ["GET /api HTTP/1.1", "GET /latest HTTP/1.1"]
+            );
+        }
+    }
+}

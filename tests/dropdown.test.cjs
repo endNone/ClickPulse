@@ -20,9 +20,16 @@ class Element{
   removeAttribute(name){delete this.attributes[name];}
   addEventListener(name,fn){(this.listeners[name]||=[]).push(fn);}
   dispatchEvent(event){event.target??=this;for(const fn of this.listeners[event.type]||[])fn(event);return !event.defaultPrevented;}
+  closest(selector){return selector==='.settings-card'&&this.classes.has('settings-card')?this:this.parentNode?.closest(selector)||null;}
   contains(node){return this===node||this.children.some(child=>child.contains(node));}
   focus(){this.document.activeElement=this;this.document.fire('focusin',{target:this});}
-  getBoundingClientRect(){return this.rect;}
+  getBoundingClientRect(){
+    if(this.className==='dropdown-menu'){
+      const width=Math.min(parseFloat(this.style.maxWidth)||Infinity,Math.max(parseFloat(this.style.minWidth)||0,this.naturalWidth||156));
+      return {width,height:Math.min(this.scrollHeight+2,parseFloat(this.style.maxHeight)||Infinity)};
+    }
+    return this.rect;
+  }
   scrollIntoView(){this.scrolled=true;this.scrolls=(this.scrolls||0)+1;}
   fire(type,values={}){const event={type,target:this,preventDefault(){this.defaultPrevented=true;},...values};this.dispatchEvent(event);return event;}
 }
@@ -96,6 +103,25 @@ test('menus flip above controls near the bottom and stay inside the viewport',()
   const {h,window}=fixture();h.trigger.rect={left:750,top:465,bottom:497,width:108};h.open();
   assert.ok(parseFloat(h.menu.style.top)<465);assert.ok(parseFloat(h.menu.style.left)+parseFloat(h.menu.style.width)<=window.innerWidth-8);
   assert.equal(h.menu.children[0].scrolled,true);
+});
+
+test('short menus keep their borders and both options visible on every reopen',()=>{
+  const {h}=fixture();
+  for(const top of [465,50]){
+    h.trigger.rect={left:400,top,bottom:top+32,width:108};h.open();
+    assert.ok(parseFloat(h.menu.style.maxHeight)>=h.menu.scrollHeight+2,'two options must not scroll because borders were left out');
+    h.close();
+  }
+});
+
+test('long labels widen only the menu and reflow after an open locale refresh',()=>{
+  const {h,history,dropdowns,window}=fixture();
+  h.trigger.rect={left:600,top:50,bottom:82,width:108};h.menu.naturalWidth=220;h.open();
+  assert.equal(parseFloat(h.menu.style.width),220);assert.equal(h.trigger.rect.width,108);
+  assert.equal(parseFloat(h.menu.style.left)+220,708,'menu aligns with the right edge of the control');
+  history.children[0].textContent='A much longer translated label';h.menu.naturalWidth=500;dropdowns.sync(history);
+  assert.equal(parseFloat(h.menu.style.width),360,'very long labels are bounded and can wrap');
+  assert.ok(parseFloat(h.menu.style.left)+360<=window.innerWidth-8);
 });
 
 test('long timezone menus fit the height reserved by placement above or below the trigger',()=>{

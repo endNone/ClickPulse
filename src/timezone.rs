@@ -18,6 +18,50 @@ pub enum TimeZonePreference {
     Named(Tz),
 }
 
+fn system_cache_key() -> String {
+    use std::{
+        sync::{Mutex, OnceLock},
+        time::{Duration, Instant},
+    };
+    struct CachedZone {
+        checked: Instant,
+        environment: String,
+        offset: i32,
+        name: String,
+    }
+    static CACHE: OnceLock<Mutex<Option<CachedZone>>> = OnceLock::new();
+    let environment = std::env::var("TZ").unwrap_or_default();
+    let offset = Local::now().offset().local_minus_utc();
+    let mut cache = CACHE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if cache.as_ref().is_none_or(|last| {
+        last.environment != environment
+            || last.offset != offset
+            || last.checked.elapsed() >= Duration::from_secs(60)
+    }) {
+        // CFTimeZoneCopySystem caches its first answer until explicitly reset.
+        #[cfg(target_os = "macos")]
+        unsafe {
+            core_foundation::timezone::CFTimeZoneResetSystem();
+        }
+        let name = iana_time_zone::get_timezone().unwrap_or_else(|_| offset.to_string());
+        *cache = Some(CachedZone {
+            checked: Instant::now(),
+            environment: environment.clone(),
+            offset,
+            name,
+        });
+    }
+    format!(
+        "system:{}:{}:{}",
+        environment,
+        offset,
+        cache.as_ref().unwrap().name
+    )
+}
+
 impl TimeZonePreference {
     pub fn code(self) -> &'static str {
         match self {
@@ -36,24 +80,24 @@ impl TimeZonePreference {
     // A paused read-only view may be reprojected after the system zone changes.
     pub(crate) fn cache_key(self) -> String {
         match self {
-            Self::System => format!(
-                "system:{}:{}",
-                std::env::var("TZ").unwrap_or_default(),
-                iana_time_zone::get_timezone()
-                    .unwrap_or_else(|_| Local::now().offset().to_string())
-            ),
+            Self::System => system_cache_key(),
             Self::Named(_) => self.code().to_owned(),
         }
     }
 
-    pub fn choices() -> Vec<&'static str> {
-        let mut names: Vec<_> = chrono_tz::TZ_VARIANTS
-            .iter()
-            .copied()
-            .map(Tz::name)
-            .collect();
-        names.sort_unstable();
-        names
+    pub fn choices() -> &'static [&'static str] {
+        static NAMES: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+        NAMES
+            .get_or_init(|| {
+                let mut names: Vec<_> = chrono_tz::TZ_VARIANTS
+                    .iter()
+                    .copied()
+                    .map(Tz::name)
+                    .collect();
+                names.sort_unstable();
+                names
+            })
+            .as_slice()
     }
 }
 
@@ -409,6 +453,7 @@ mod tests {
         let end = instant("2026-11-02T07:59:30Z");
         let events: Vec<_> = (0..72)
             .map(|h| InputEvent {
+                shortcut: None,
                 ts_ms: (end - chrono::Duration::hours(h)).timestamp_millis(),
                 device: if h % 2 == 0 {
                     Device::Keyboard
@@ -451,6 +496,7 @@ mod tests {
         .into_iter()
         .flat_map(|(at, device, count)| {
             (0..count).map(move |_| InputEvent {
+                shortcut: None,
                 ts_ms: instant(at).timestamp_millis(),
                 device,
                 code: 1,
@@ -535,6 +581,7 @@ mod tests {
         let mut db = EventDb::open(&temp.path().join("events.sqlite3")).unwrap();
         db.insert(
             &["2026-11-01T08:15:00Z", "2026-11-01T09:15:00Z"].map(|stamp| InputEvent {
+                shortcut: None,
                 ts_ms: instant(stamp).timestamp_millis(),
                 device: Device::Keyboard,
                 code: 1,
@@ -640,6 +687,7 @@ mod tests {
         let warm = std::time::Instant::now();
         owned
             .insert(&[InputEvent {
+                shortcut: None,
                 ts_ms: now.timestamp_millis(),
                 device: Device::Mouse,
                 code: 1,
@@ -688,6 +736,7 @@ mod tests {
             ("2026-10-01T23:59:00Z", "2026-11-02T09:30:00Z"),
         ] {
             let event = InputEvent {
+                shortcut: None,
                 ts_ms: instant(at).timestamp_millis(),
                 device: Device::Keyboard,
                 code: 1,
@@ -765,6 +814,7 @@ mod tests {
         let mut write = |at: &str, device| {
             writer
                 .insert(&[InputEvent {
+                    shortcut: None,
                     ts_ms: instant(at).timestamp_millis(),
                     device,
                     code: 1,
@@ -832,6 +882,7 @@ mod tests {
         let now = instant("2026-11-05T12:00:00Z");
         let at = instant("2020-01-01T12:00:00Z").timestamp_millis();
         let event = InputEvent {
+            shortcut: None,
             ts_ms: at,
             device: Device::Mouse,
             code: 1,

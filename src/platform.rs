@@ -1,6 +1,10 @@
 //! Platform paths and shell integration. Never select a checkout or backup as data.
-use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
+#[cfg(any(not(target_os = "linux"), test))]
+use anyhow::Context;
+use anyhow::Result;
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+use std::path::Path;
+use std::path::PathBuf;
 
 pub fn name() -> &'static str {
     if cfg!(target_os = "windows") {
@@ -69,6 +73,31 @@ pub fn auto_start_enabled() -> bool {
     false
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+pub(crate) fn same_executable(saved: &Path, current: &Path) -> bool {
+    matches!((saved.canonicalize(), current.canonicalize()), (Ok(a), Ok(b)) if a == b)
+}
+
+pub fn repair_auto_start() -> Result<bool> {
+    #[cfg(target_os = "macos")]
+    return crate::handoff::repair_auto_start();
+    #[cfg(target_os = "windows")]
+    return windows::repair_auto_start();
+    #[cfg(target_os = "linux")]
+    return linux::repair_auto_start();
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    Ok(false)
+}
+
+#[derive(Debug)]
+pub struct TemporaryAppLocation;
+impl std::fmt::Display for TemporaryAppLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Move ClickPulse to Applications before enabling login startup")
+    }
+}
+impl std::error::Error for TemporaryAppLocation {}
+
 pub fn set_auto_start(enabled: bool) -> Result<()> {
     #[cfg(target_os = "macos")]
     return crate::handoff::set_auto_start(enabled);
@@ -83,28 +112,18 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
     }
 }
 
-pub fn reveal(path: &Path) -> Result<()> {
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg("-R")
-        .arg(path)
-        .spawn()?;
-    #[cfg(target_os = "windows")]
-    std::process::Command::new("explorer.exe")
-        .arg(path.parent().context("Data directory is unavailable")?)
-        .spawn()?;
-    #[cfg(target_os = "linux")]
-    std::process::Command::new("xdg-open")
-        .arg(path.parent().context("Data directory is unavailable")?)
-        .spawn()?;
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    {
-        let _ = path;
-        anyhow::bail!("Desktop file browser is unsupported on this platform")
-    }
-    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-    Ok(())
+pub fn open_project_home() -> Result<()> {
+    open_web_page("https://github.com/endNone/ClickPulse")
 }
+
+pub fn open_feedback() -> Result<()> {
+    open_web_page("https://github.com/endNone/ClickPulse/issues/new/choose")
+}
+
+pub(crate) mod launch;
+#[cfg(target_os = "macos")]
+pub use launch::open_input_monitoring_settings;
+pub use launch::{open_web_page, reveal};
 
 #[cfg(target_os = "windows")]
 #[path = "platform_windows.rs"]

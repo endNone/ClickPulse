@@ -1,6 +1,9 @@
 //! Normalize physical PC scan codes to the shared keyboard identities. This
 //! never converts input to characters and is testable without native capture.
-use std::collections::HashSet;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 // RAWKEYBOARD flags and virtual keys, kept platform independent so packet
 // normalization can be tested without starting a Windows input listener.
@@ -8,12 +11,74 @@ const RI_KEY_BREAK: u16 = 1;
 const VK_SHIFT: u16 = 0x10;
 const VK_PAUSE: u16 = 0x13;
 const VK_NUMLOCK: u16 = 0x90;
+const MODIFIER_GRACE: Duration = Duration::from_millis(1500);
+
+fn modifier_vk(key: u32) -> Option<u16> {
+    match key {
+        59 => Some(0xa2), // Left Control
+        62 => Some(0xa3), // Right Control
+        58 => Some(0xa4), // Left Alt
+        61 => Some(0xa5), // Right Alt / AltGr
+        56 => Some(0xa0), // Left Shift
+        60 => Some(0xa1), // Right Shift
+        55 => Some(0x5b), // Left Windows
+        54 => Some(0x5c), // Right Windows
+        _ => None,
+    }
+}
 
 #[derive(Default)]
 pub struct WindowsKeyboard {
-    held: HashSet<(usize, u16)>,
+    // Last make time, refreshed by repeats even when they do not add a count.
+    held: HashMap<(usize, u16), Instant>,
+    virtual_keys: HashMap<(usize, u16), u16>,
 }
 impl WindowsKeyboard {
+    pub fn reset(&mut self) {
+        self.held.clear();
+        self.virtual_keys.clear();
+    }
+
+    pub fn reconcile_foreground(&mut self, mut is_down: impl FnMut(u16) -> bool) {
+        self.held.retain(|identity, _| {
+            let vk = modifier_vk(canonical_code(identity.1))
+                .or_else(|| self.virtual_keys.get(identity).copied());
+            vk.is_some_and(&mut is_down)
+        });
+        self.virtual_keys
+            .retain(|identity, _| self.held.contains_key(identity));
+    }
+
+    /// Preserve Raw Input packet order for recent modifiers: a fast chord may
+    /// already be physically released when its queued packets are processed.
+    /// Only reconcile older state after a grace period; both time and the live
+    /// query are injected so boundary cases do not require a Windows desktop.
+    pub fn shortcut(
+        &mut self,
+        device: usize,
+        key: u32,
+        now: Instant,
+        mut is_down: impl FnMut(u16) -> bool,
+    ) -> Option<crate::shortcuts::Chord> {
+        if modifier_vk(key).is_some() {
+            return None;
+        }
+        self.held.retain(|(held_device, scan), last_make| {
+            (*held_device == 0) != (device == 0)
+                || now.saturating_duration_since(*last_make) <= MODIFIER_GRACE
+                || modifier_vk(canonical_code(*scan)).is_none_or(&mut is_down)
+        });
+        let keys = self
+            .held
+            .keys()
+            .filter(|(d, _)| (*d == 0) == (device == 0))
+            .map(|(_, scan)| canonical_code(*scan));
+        // Right Alt can produce AltGr characters. Do not classify these as shortcuts.
+        if keys.clone().any(|key| key == 61) {
+            return None;
+        }
+        crate::shortcuts::Chord::new(key, crate::shortcuts::modifiers(keys), "windows")
+    }
     /// Missing keyboard device identity is treated as software input only when
     /// opted in. Never apply this rule to mouse packets: Precision Touchpads
     /// legitimately use a null device handle too.
@@ -29,6 +94,17 @@ impl WindowsKeyboard {
         if ignore && device == 0 { None } else { event }
     }
     pub fn event(&mut self, device: usize, make: u16, flags: u16, vk: u16) -> Option<u32> {
+        self.event_at(device, make, flags, vk, Instant::now())
+    }
+
+    fn event_at(
+        &mut self,
+        device: usize,
+        make: u16,
+        flags: u16,
+        vk: u16,
+        now: Instant,
+    ) -> Option<u32> {
         if vk >= 255 || make == 0xff {
             return None;
         }
@@ -53,7 +129,7 @@ impl WindowsKeyboard {
                 self.held.remove(&(device, 0x245));
                 return None;
             }
-            return (!self.held.contains(&(device, 0x245))).then_some(canonical_code(0x245));
+            return (!self.held.contains_key(&(device, 0x245))).then_some(canonical_code(0x245));
         }
         let identity = if vk == VK_NUMLOCK {
             // Drivers differ on the E0 flag for NumLock; use one identity for
@@ -71,22 +147,32 @@ impl WindowsKeyboard {
                 _ => identity,
             }
         };
+        if flags & RI_KEY_BREAK == 0 {
+            self.virtual_keys.insert((device, identity), vk);
+        } else {
+            self.virtual_keys.remove(&(device, identity));
+        }
         if flags & RI_KEY_BREAK != 0 {
             self.held.remove(&(device, identity));
             None
-        } else if self.held.insert((device, identity)) {
+        } else if self.held.insert((device, identity), now).is_none() {
             Some(canonical_code(identity))
         } else {
             None // Repeated make packets during a hold count once.
         }
     }
     pub fn remove_device(&mut self, device: usize) {
-        self.held.retain(|(held, _)| *held != device);
+        self.held.retain(|(held, _), _| *held != device);
+        self.virtual_keys.retain(|(held, _), _| *held != device);
     }
 }
 
 pub fn canonical_code(scan: u16) -> u32 {
     match scan {
+        0x56 => 10,
+        0x120 => 74,
+        0x12e => 73,
+        0x130 => 72,
         0x01 => 53,
         0x02 => 18,
         0x03 => 19,
@@ -172,6 +258,14 @@ pub fn canonical_code(scan: u16) -> u32 {
         0x53 => 65,
         0x57 => 103,
         0x58 => 111,
+        0x64 => 105, // F13
+        0x65 => 107,
+        0x66 => 113,
+        0x67 => 106,
+        0x68 => 64,
+        0x69 => 79,
+        0x6a => 80,
+        0x6b => 90, // F20
         0x11c => 76,
         0x11d => 62,
         0x135 => 75,
@@ -204,6 +298,254 @@ pub fn mouse_buttons(flags: u16) -> impl Iterator<Item = u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn foreground_reconciliation_preserves_held_chords_and_repeat_suppression() {
+        let mut keys = WindowsKeyboard::default();
+        keys.event(1, 0x38, 0, 0x12); // Alt
+        keys.event(1, 0x2e, 0, 0x43); // C, held through the focus change
+        keys.event(1, 0x1d, 0, 0x11); // Ctrl, release lost in another process
+        keys.reconcile_foreground(|vk| matches!(vk, 0xa4 | 0x43));
+        assert_eq!(keys.held.len(), 2);
+        assert!(keys.event(1, 0x2e, 0, 0x43).is_none());
+        let tab = keys.event(1, 0x0f, 0, 0x09).unwrap();
+        assert_eq!(
+            keys.shortcut(1, tab, Instant::now(), |_| true)
+                .unwrap()
+                .modifiers,
+            crate::shortcuts::ALT
+        );
+        keys.reset();
+        assert!(keys.held.is_empty());
+        assert!(keys.virtual_keys.is_empty());
+    }
+
+    #[test]
+    fn extended_function_keys_have_shared_identities() {
+        for (scan, code) in (0x64..=0x6b).zip([105, 107, 113, 106, 64, 79, 80, 90]) {
+            assert_eq!(canonical_code(scan), code);
+        }
+    }
+
+    #[test]
+    fn recent_control_c_never_queries_live_state_even_at_grace_boundary() {
+        let start = Instant::now();
+        for age in [0, 100, 1499, 1500] {
+            for device in [0, 1] {
+                let mut keys = WindowsKeyboard::default();
+                keys.event_at(device, 0x1d, 0, 0x11, start);
+                let now = start + Duration::from_millis(age);
+                let c = keys.event_at(device, 0x2e, 0, 0x43, now).unwrap();
+                // Ctrl is physically up already, but its break packet is still queued.
+                let mut queries = 0;
+                let chord = keys.shortcut(device, c, now, |_| {
+                    queries += 1;
+                    false
+                });
+                assert_eq!(chord.unwrap().modifiers, crate::shortcuts::CONTROL);
+                assert_eq!(queries, 0, "live state queried at {age} ms");
+            }
+        }
+    }
+
+    #[test]
+    fn control_held_for_three_seconds_still_forms_paste() {
+        let start = Instant::now();
+        let mut keys = WindowsKeyboard::default();
+        keys.event_at(1, 0x1d, 0, 0x11, start);
+        let now = start + Duration::from_secs(3);
+        let v = keys.event_at(1, 0x2f, 0, 0x56, now).unwrap();
+        let mut queries = Vec::new();
+        let chord = keys.shortcut(1, v, now, |vk| {
+            queries.push(vk);
+            true
+        });
+        assert_eq!(queries, vec![0xa2]);
+        assert_eq!(chord.unwrap().modifiers, crate::shortcuts::CONTROL);
+        assert!(keys.held.contains_key(&(1, 0x1d)));
+    }
+
+    #[test]
+    fn stale_released_alt_is_removed_before_forming_a_chord() {
+        let start = Instant::now();
+        let mut keys = WindowsKeyboard::default();
+        keys.event_at(1, 0x38, 0, 0x12, start);
+        let now = start + Duration::from_millis(1501);
+        let c = keys.event_at(1, 0x2e, 0, 0x43, now).unwrap();
+        let mut queries = Vec::new();
+        assert!(
+            keys.shortcut(1, c, now, |vk| {
+                queries.push(vk);
+                false
+            })
+            .is_none()
+        );
+        assert_eq!(queries, vec![0xa4]);
+        assert!(!keys.held.contains_key(&(1, 0x38)));
+        assert!(
+            keys.held.contains_key(&(1, 0x2e)),
+            "ordinary held keys remain tracked"
+        );
+        // A new physical Alt press is counted once after stale state is removed.
+        assert_eq!(keys.event_at(1, 0x38, 0, 0x12, now), Some(58));
+        assert_eq!(keys.event_at(1, 0x38, 0, 0x12, now), None);
+        assert_eq!(
+            keys.shortcut(1, c, now, |_| panic!("recent modifier"))
+                .unwrap()
+                .modifiers,
+            crate::shortcuts::ALT
+        );
+    }
+
+    #[test]
+    fn repeated_modifier_make_refreshes_grace_without_adding_a_press() {
+        let start = Instant::now();
+        let mut keys = WindowsKeyboard::default();
+        assert_eq!(keys.event_at(1, 0x1d, 0, 0x11, start), Some(59));
+        let repeated = start + Duration::from_millis(2900);
+        assert_eq!(keys.event_at(1, 0x1d, 0, 0x11, repeated), None);
+        let now = start + Duration::from_secs(3);
+        let c = keys.event_at(1, 0x2e, 0, 0x43, now).unwrap();
+        assert_eq!(
+            keys.shortcut(1, c, now, |_| panic!("repeat refreshed grace"))
+                .unwrap()
+                .modifiers,
+            crate::shortcuts::CONTROL
+        );
+    }
+
+    #[test]
+    fn reconciliation_checks_each_side_and_skips_modifier_only_presses() {
+        let start = Instant::now();
+        let now = start + Duration::from_secs(3);
+        for (make, flags, vk, state_vk) in [
+            (0x1d, 0, 0x11, 0xa2),
+            (0x1d, 2, 0x11, 0xa3),
+            (0x38, 0, 0x12, 0xa4),
+            (0x38, 2, 0x12, 0xa5),
+            (0x2a, 0, 0x10, 0xa0),
+            (0x36, 0, 0x10, 0xa1),
+            (0x5b, 2, 0x5b, 0x5b),
+            (0x5c, 2, 0x5c, 0x5c),
+        ] {
+            let mut keys = WindowsKeyboard::default();
+            let modifier = keys.event_at(1, make, flags, vk, start).unwrap();
+            assert!(
+                keys.shortcut(1, modifier, now, |_| panic!("modifier-only packet"))
+                    .is_none()
+            );
+            let tab = keys.event_at(1, 0x0f, 0, 0x09, now).unwrap();
+            let mut queried = Vec::new();
+            assert!(
+                keys.shortcut(1, tab, now, |key| {
+                    queried.push(key);
+                    false
+                })
+                .is_none()
+            );
+            assert_eq!(queried, vec![state_vk]);
+            assert_eq!(keys.held.len(), 1);
+        }
+    }
+
+    #[test]
+    fn stale_checks_keep_software_and_physical_input_domains_separate() {
+        let start = Instant::now();
+        let now = start + Duration::from_secs(3);
+        let mut keys = WindowsKeyboard::default();
+        keys.event_at(0, 0x38, 0, 0x12, start);
+        let c = keys.event_at(1, 0x2e, 0, 0x43, now).unwrap();
+        assert!(
+            keys.shortcut(1, c, now, |_| panic!("unrelated device domain"))
+                .is_none()
+        );
+        assert!(keys.held.contains_key(&(0, 0x38)));
+        assert!(keys.shortcut(0, c, now, |_| false).is_none());
+        assert!(!keys.held.contains_key(&(0, 0x38)));
+    }
+
+    #[test]
+    fn foreground_discontinuity_discards_swallowed_releases() {
+        let mut keys = WindowsKeyboard::default();
+        for (scan, vk) in [(0x1d, 0x11), (0x38, 0x12)] {
+            keys.event(1, scan, 0, vk);
+        }
+        // Foreground changed into an elevated window; its break packets are absent.
+        keys.reset();
+        for (scan, vk) in [(0x2e, 0x43), (0x1e, 0x41)] {
+            let key = keys.event(1, scan, 0, vk).unwrap();
+            assert!(keys.shortcut(1, key, Instant::now(), |_| true).is_none());
+            keys.event(1, scan, RI_KEY_BREAK, vk);
+        }
+        // The next physical modifier/chord is counted normally, once.
+        assert_eq!(keys.event(1, 0x1d, 0, 0x11), Some(59));
+        assert_eq!(keys.event(1, 0x1d, 0, 0x11), None);
+        let c = keys.event(1, 0x2e, 0, 0x43).unwrap();
+        assert_eq!(
+            keys.shortcut(1, c, Instant::now(), |_| true)
+                .unwrap()
+                .modifiers,
+            crate::shortcuts::CONTROL
+        );
+    }
+    #[test]
+    fn queued_fast_chord_keeps_modifiers_until_its_break_packet() {
+        for device in [0, 1] {
+            let mut keys = WindowsKeyboard::default();
+            keys.event(device, 0x1d, 0, 0x11);
+            let c = keys.event(device, 0x2e, 0, 0x43).unwrap();
+            // No live-state lookup: the physical chord may already be released.
+            assert_eq!(
+                keys.shortcut(device, c, Instant::now(), |_| true)
+                    .unwrap()
+                    .modifiers,
+                1
+            );
+            keys.event(device, 0x2e, RI_KEY_BREAK, 0x43);
+            keys.event(device, 0x1d, RI_KEY_BREAK, 0x11);
+            assert!(keys.shortcut(device, c, Instant::now(), |_| true).is_none());
+        }
+    }
+    #[test]
+    fn desktop_and_session_reset_remove_swallowed_modifier_releases() {
+        for (make, flags, vk) in [(0x5b, 2, 0x5b), (0x1d, 0, 0xa2), (0x38, 0, 0xa4)] {
+            let mut keys = WindowsKeyboard::default();
+            keys.event(1, make, flags, vk);
+            keys.reset();
+            assert_eq!(keys.event(1, 0x2e, 0, 0x43), Some(8));
+            assert!(keys.shortcut(1, 8, Instant::now(), |_| true).is_none());
+            assert!(keys.event(1, make, flags, vk).is_some());
+            assert!(keys.event(1, make, flags, vk).is_none());
+        }
+    }
+    #[test]
+    fn shortcuts_follow_modifiers_releases_and_ignore_altgr() {
+        let mut keys = WindowsKeyboard::default();
+        keys.event(1, 0x1d, 0, 0x11);
+        assert_eq!(keys.event(1, 0x2e, 0, 0x43), Some(8));
+        assert_eq!(
+            keys.shortcut(1, 8, Instant::now(), |_| true)
+                .unwrap()
+                .modifiers,
+            1
+        );
+        assert!(keys.event(1, 0x2e, 0, 0x43).is_none());
+        assert!(keys.shortcut(0, 8, Instant::now(), |_| true).is_none());
+        keys.event(1, 0x1d, RI_KEY_BREAK, 0x11);
+        assert!(keys.shortcut(1, 8, Instant::now(), |_| true).is_none());
+        keys.event(1, 0x1d, 0, 0x11);
+        keys.event(1, 0x38, 2, 0x12);
+        assert!(keys.shortcut(1, 8, Instant::now(), |_| true).is_none());
+    }
+
+    #[test]
+    fn alternate_print_screen_packet_keeps_its_alt_chord() {
+        let mut keys = WindowsKeyboard::default();
+        keys.event(1, 0x38, 0, 0x12);
+        let code = keys.event(1, 0x54, 0, 0x2c).unwrap();
+        let chord = keys.shortcut(1, code, Instant::now(), |_| true).unwrap();
+        assert_eq!(chord.key, crate::shortcuts::PRINT_SCREEN);
+        assert_eq!(chord.modifiers, crate::shortcuts::ALT);
+    }
 
     #[test]
     fn software_filter_is_optional_and_preserves_physical_keys_and_release_state() {
@@ -369,5 +711,16 @@ mod tests {
             mouse_buttons(2 | 8 | 32 | 128 | 512 | 1024 | 2048).count(),
             0
         );
+    }
+}
+
+#[cfg(test)]
+mod supplemental_mapping_tests {
+    use super::*;
+    #[test]
+    fn iso_and_audio_scan_codes_share_cross_platform_identities() {
+        for (scan, code) in [(0x56, 10), (0x120, 74), (0x12e, 73), (0x130, 72)] {
+            assert_eq!(canonical_code(scan), code);
+        }
     }
 }

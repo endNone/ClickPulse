@@ -11,18 +11,24 @@ use clickpulse::{
     localization::Locale,
     runtime::{AppSnapshot, CaptureStatus, DatabaseMode, Runtime},
 };
+mod confirmation;
 mod data_settings;
 #[cfg(target_os = "macos")]
 mod edit_menu;
 mod ipc;
 mod refresh;
 mod session;
+mod share;
+mod storage_recovery;
 mod storage_status;
 mod updates;
+mod view_state;
 mod webview;
 mod window;
 use ipc::Request;
 use refresh::SnapshotGate;
+#[cfg(target_os = "macos")]
+use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS, EventLoopWindowTargetExtMacOS};
 use tao::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
@@ -51,6 +57,8 @@ enum UiEvent {
     Snapshot {
         id: u64,
         compact: bool,
+        shortcuts: bool,
+        share_day: Option<chrono::NaiveDate>,
         result: std::result::Result<String, String>,
     },
     SportSample {
@@ -111,7 +119,7 @@ pub fn run(
             None => return Ok(()),
         }
     };
-    let profile_lock = if options.owned && !demo {
+    let mut profile_lock = if options.owned && !demo {
         let profile = clickpulse::platform::data_dir()?;
         std::fs::create_dir_all(&profile)?;
         let lock = std::fs::OpenOptions::new()
@@ -135,6 +143,10 @@ pub fn run(
         let loaded = clickpulse::presentation::Preferences::load()?;
         (loaded.preferences, loaded.recovered_from)
     };
+    let mut persisted_preferences = view_state::PreferencePersistence::new(&preferences);
+    let mut published_view = view_state::Published::default();
+    let mut published_paused = view_state::Published::default();
+    let mut timezones_pending = true;
     let mut locale = preferences.language.resolve();
     if options.mini {
         preferences.compact = true;
@@ -143,6 +155,10 @@ pub fn run(
     }
     #[allow(unused_mut)]
     let mut event_builder = EventLoopBuilder::<UiEvent>::with_user_event();
+    #[cfg(target_os = "macos")]
+    if profile_lock.is_some() {
+        clickpulse::handoff::recover_pending()?;
+    }
     #[cfg(target_os = "linux")]
     if profile_lock.is_some() {
         use tao::platform::unix::EventLoopBuilderExtUnix;
@@ -150,12 +166,26 @@ pub fn run(
     }
     #[allow(unused_mut)]
     let mut event_loop = event_builder.build();
+    #[cfg(target_os = "macos")]
+    if options.background {
+        event_loop.set_activation_policy(ActivationPolicy::Accessory);
+    }
     #[cfg(target_os = "windows")]
     event_loop.set_device_event_filter(tao::event_loop::DeviceEventFilter::Always);
     #[cfg(target_os = "windows")]
     if wry::webview_version().is_err() {
         anyhow::bail!("{}", locale.text("error.webview_runtime"));
     }
+    let owned_path;
+    let path = if options.owned && !demo && !setup_pending && !source_mode {
+        let Some(recovered) = storage_recovery::resolve(locale)? else {
+            return Ok(());
+        };
+        owned_path = recovered;
+        owned_path.as_path()
+    } else {
+        path
+    };
     // Tao also registers raw input on Windows. Build it first, then register
     // our dedicated background listener last so the collector owns delivery.
     let mut runtime = if demo {
@@ -174,19 +204,30 @@ pub fn run(
         runtime.set_ignore_software_input(preferences.ignore_software_input);
     }
 
+    let available = event_loop
+        .primary_monitor()
+        .as_ref()
+        .map(window::available_size)
+        .unwrap_or(LogicalSize::new(1200.0, 880.0));
+    let (initial_size, minimum_size) =
+        window::full_window_bounds(available, LogicalSize::new(1160.0, 840.0));
     let builder = WindowBuilder::new()
         .with_title(locale.text("native.full_title"))
         .with_transparent(cfg!(any(target_os = "macos", target_os = "linux")))
-        .with_inner_size(LogicalSize::new(1160.0, 840.0))
-        .with_min_inner_size(LogicalSize::new(900.0, 680.0))
+        .with_inner_size(initial_size)
+        .with_min_inner_size(minimum_size)
         .with_visible(false);
     #[cfg(target_os = "macos")]
     let builder = {
         use tao::platform::macos::WindowBuilderExtMacOS;
-        builder
-            .with_titlebar_transparent(true)
-            .with_title_hidden(true)
-            .with_fullsize_content_view(true)
+        if window::integrated_titlebar() {
+            builder
+                .with_titlebar_transparent(true)
+                .with_title_hidden(true)
+                .with_fullsize_content_view(true)
+        } else {
+            builder
+        }
     };
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     let builder = builder.with_decorations(false);
@@ -197,6 +238,9 @@ pub fn run(
         clickpulse::branding::TRAY_SIZE,
     )?));
     let window = Arc::new(builder.build(&event_loop)?);
+    window::fit_full_window(&window, initial_size, None);
+    #[cfg(target_os = "windows")]
+    window::disable_keyboard_menu(&window)?;
     let mut layout = WindowLayout {
         full_size: window.inner_size().to_logical(window.scale_factor()),
         full_position: window
@@ -224,6 +268,11 @@ pub fn run(
     // Share one proxy so idle checks and snapshot replies cannot wake themselves.
     let ui_proxy = Arc::new(event_loop.create_proxy());
     let mut webview = VisibleWebView::default();
+    #[cfg(target_os = "macos")]
+    let mut fullscreen_sent = None;
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    let mut maximized_sent = None;
+    let mut tray_status_sent = None;
     if !options.background {
         webview.ensure(&window, ui_proxy.clone(), locale, &preferences)?;
     }
@@ -293,29 +342,33 @@ pub fn run(
     let mut session_state = session::SessionState::default();
     let mut demo_paused = false;
     let mut visible = !options.background;
+    #[cfg(target_os = "macos")]
+    let mut dock_visible = visible;
+    let mut close_requested = false;
     let mut pending_presentation = visible.then(|| Instant::now() + Duration::from_millis(1500));
     let snapshot_proxy = ui_proxy;
     let mut snapshots = SnapshotGate::default();
     let mut sport_samples = SnapshotGate::default();
-    let mut last_sport_sample = Instant::now() - Duration::from_secs(1);
+    let mut last_sport_sample: Option<Instant> = None;
     let mut data_job: Option<u64> = None;
     let mut next_data_job = 0u64;
     let mut quit_after_data = false;
     let mut data_notice: Option<DataNotice> = None;
     let mut updates =
         updates::Controller::new(options.owned && !demo && !source_mode && !setup_pending);
-    #[cfg(windows)]
     if options.owned
         && !demo
         && !source_mode
         && !setup_pending
-        && let Err(error) = clickpulse::platform::windows::repair_auto_start()
+        && let Err(error) = clickpulse::platform::repair_auto_start()
     {
         clickpulse::logging::error(
             clickpulse::platform::log_path().ok().as_deref(),
             &format!("Repair startup entry: {error:#}"),
         );
     }
+    #[cfg(windows)]
+    let mut uninstall_after_save = false;
     let handle_event = move |event: Event<'_, UiEvent>,
                              _target: &EventLoopWindowTarget<UiEvent>,
                              flow: &mut ControlFlow| {
@@ -325,13 +378,15 @@ pub fn run(
         }
         let previous_compact = preferences.compact;
         let previously_active = webview.is_active();
-        webview.set_active(
-            visible
-                && (window.is_visible() || pending_presentation.is_some())
-                && !window.is_minimized(),
-        );
+        webview.set_active(view_state::renderer_active(
+            visible,
+            window.is_visible(),
+            window.is_minimized(),
+            pending_presentation.is_some(),
+        ));
         let mut refresh = !previously_active && webview.is_active();
         let mut view_changed = refresh;
+        let mut window_close_requested = false;
         match event {
             Event::UserEvent(UiEvent::Update(event)) => {
                 if updates.receive(event) {
@@ -394,11 +449,19 @@ pub fn run(
             Event::UserEvent(UiEvent::Snapshot {
                 id,
                 compact,
+                shortcuts,
+                share_day,
                 result,
             }) => {
                 if let Some(rerun) = snapshots.complete(id) {
                     refresh = rerun;
-                    if compact != preferences.compact {
+                    if compact != preferences.compact
+                        || shortcuts != (!preferences.compact && session_state.wants_shortcuts())
+                        || share_day
+                            != (!preferences.compact)
+                                .then(|| session_state.share_day(preferences.timezone))
+                                .flatten()
+                    {
                         refresh = true;
                     } else if ready && webview.is_active() {
                         match result {
@@ -440,6 +503,14 @@ pub fn run(
                 event: WindowEvent::Resized(size),
                 ..
             } => {
+                if !layout.compact
+                    && window.fullscreen().is_none()
+                    && !window.is_maximized()
+                    && size.width > 0
+                    && size.height > 0
+                {
+                    layout.full_size = size.to_logical(window.scale_factor());
+                }
                 // Native decoration changes and display transitions may emit
                 // a second resize. Reapply client-area limits after they settle.
                 if layout.compact && size != COMPACT_SIZE.to_physical(window.scale_factor()) {
@@ -448,42 +519,39 @@ pub fn run(
                 #[cfg(target_os = "windows")]
                 update_windows_region(&window, &mut layout);
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
+                if ready && webview.is_ready() {
+                    let maximized = window.is_maximized();
+                    if maximized_sent != Some(maximized)
+                        && webview
+                            .evaluate_script(&format!(
+                                "window.receiveView({{maximized:{maximized}}});"
+                            ))
+                            .is_ok()
+                    {
+                        maximized_sent = Some(maximized);
+                    }
+                }
+                #[cfg(target_os = "macos")]
                 if ready {
-                    let _ = webview.evaluate_script(&format!(
-                        "window.receiveView({{maximized:{}}});",
-                        window.is_maximized()
-                    ));
+                    // Native fullscreen emits a resize on entry and exit. Only
+                    // publish transitions, not every pixel of a window drag.
+                    let fullscreen = window.fullscreen().is_some();
+                    if fullscreen_sent != Some(fullscreen)
+                        && webview.is_ready()
+                        && webview
+                            .evaluate_script(&format!(
+                                "window.receiveView({{fullscreen:{fullscreen}}});"
+                            ))
+                            .is_ok()
+                    {
+                        fullscreen_sent = Some(fullscreen);
+                    }
                 }
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
-            } => {
-                if demo {
-                    *flow = ControlFlow::Exit;
-                } else {
-                    #[cfg(any(target_os = "windows", target_os = "linux"))]
-                    match preferences.close_action {
-                        clickpulse::presentation::CloseAction::Ask => {
-                            let _ = webview.evaluate_script("window.requestClose();");
-                        }
-                        clickpulse::presentation::CloseAction::Quit => *flow = ControlFlow::Exit,
-                        clickpulse::presentation::CloseAction::Hide => {
-                            webview.suspend();
-                            window.set_visible(false);
-                            visible = false;
-                            view_changed = true;
-                        }
-                    }
-                    #[cfg(target_os = "macos")]
-                    {
-                        webview.suspend();
-                        window.set_visible(false);
-                        visible = false;
-                        view_changed = true;
-                    }
-                }
-            }
+            } => window_close_requested = true,
             Event::Reopen { .. } => {
                 present_window(
                     &window,
@@ -554,6 +622,13 @@ pub fn run(
                     match request {
                         Request::SessionState { state } => {
                             if state.valid() {
+                                if state.wants_shortcuts() != session_state.wants_shortcuts()
+                                    || state.share_day(preferences.timezone)
+                                        != session_state.share_day(preferences.timezone)
+                                {
+                                    snapshots.invalidate();
+                                    refresh = true;
+                                }
                                 session_state = state;
                             }
                         }
@@ -577,6 +652,16 @@ pub fn run(
                         }
                         Request::Theme { theme } => {
                             preferences.theme = theme;
+                            view_changed = true;
+                            refresh = true;
+                        }
+                        Request::KeyboardLayout { layout } => {
+                            preferences.keyboard_layout = layout;
+                            view_changed = true;
+                            refresh = true;
+                        }
+                        Request::UiScale { scale } => {
+                            preferences.ui_scale = scale;
                             view_changed = true;
                             refresh = true;
                         }
@@ -617,9 +702,49 @@ pub fn run(
                                 report_error(&webview, locale, "update.failed", &error);
                             }
                         }
+                        Request::ShortcutReference { source } => {
+                            if let Err(error) = share::open_reference(&source) {
+                                eprintln!("Cannot open shortcut reference: {error}");
+                                toast(&webview, &locale.text("message.invalid_request"));
+                            }
+                        }
+                        Request::ProjectHome {} => {
+                            if let Err(error) = clickpulse::platform::open_project_home() {
+                                eprintln!("Cannot open project home: {error}");
+                                toast(&webview, &locale.text("message.project_home_failed"));
+                            }
+                        }
+                        Request::SendFeedback {} => {
+                            if let Err(error) = clickpulse::platform::open_feedback() {
+                                eprintln!("Cannot open feedback page: {error}");
+                                toast(&webview, &locale.text("message.feedback_failed"));
+                            }
+                        }
+                        #[cfg(any(target_os = "macos", target_os = "windows"))]
+                        Request::CopyShareCard { png, day } => match share::copy(&png, &day) {
+                            Ok(()) => toast(&webview, &locale.text("share.copied")),
+                            Err(error) => {
+                                eprintln!("Card copy failed: {error}");
+                                toast(&webview, &locale.text("share.copy_failed"));
+                            }
+                        },
+                        Request::SaveShareCard { png, day } => {
+                            match share::save(&window, &png, &day, &locale.text("share.save")) {
+                                Ok(true) => toast(&webview, &locale.text("share.saved")),
+                                Ok(false) => {}
+                                Err(error) => {
+                                    eprintln!("Card export failed: {error}");
+                                    toast(&webview, &locale.text("share.failed"));
+                                }
+                            }
+                        }
                         Request::Ready {} => {
                             ready = true;
                             webview.mark_ready();
+                            timezones_pending = true;
+                            published_view.reset();
+                            published_paused.reset();
+                            storage_alert.reset_view();
                             restore_pending = true;
                             updates.publish(&webview);
                             view_changed = true;
@@ -642,6 +767,7 @@ pub fn run(
                         }
                         #[cfg(any(target_os = "windows", target_os = "linux"))]
                         Request::Minimize {} => {
+                            pending_presentation = None;
                             webview.suspend();
                             window.set_minimized(true);
                         }
@@ -667,7 +793,10 @@ pub fn run(
                             if action != clickpulse::presentation::CloseAction::Ask {
                                 if remember && !demo {
                                     preferences.close_action = action;
-                                    if let Err(error) = preferences.save() {
+                                    if let Err(error) = persisted_preferences.save_if_changed(
+                                        &preferences,
+                                        clickpulse::presentation::Preferences::save,
+                                    ) {
                                         report_error(
                                             &webview,
                                             locale,
@@ -723,9 +852,10 @@ pub fn run(
                                 && preferences.compact
                                 && preferences.sport_enabled
                                 && preferences.sport_visible
-                                && last_sport_sample.elapsed() >= Duration::from_millis(180)
+                                && last_sport_sample
+                                    .is_none_or(|last| last.elapsed() >= Duration::from_millis(180))
                             {
-                                last_sport_sample = Instant::now();
+                                last_sport_sample = Some(Instant::now());
                                 if let Some(rt) = &runtime {
                                     if let Some(id) = sport_samples.begin() {
                                         let proxy = snapshot_proxy.clone();
@@ -763,7 +893,8 @@ pub fn run(
                         Request::Permission {} => {
                             #[cfg(target_os = "linux")]
                             if !demo && !source_mode {
-                                rfd::MessageDialog::new()
+                                clickpulse::dialogs::MessageDialog::new()
+                                    .set_parent(&window)
                                     .set_title("ClickPulse")
                                     .set_description(locale.text("settings.permission_description"))
                                     .set_level(rfd::MessageLevel::Info)
@@ -772,7 +903,11 @@ pub fn run(
                             #[cfg(target_os = "macos")]
                             if !demo && (!source_mode || setup_pending) {
                                 clickpulse::capture::request_permission();
-                                let _=std::process::Command::new("open").arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent").spawn();
+                                if let Err(error) =
+                                    clickpulse::platform::open_input_monitoring_settings()
+                                {
+                                    report_error(&webview, locale, "error.recording", &error);
+                                }
                             }
                         }
                         #[cfg(target_os = "macos")]
@@ -805,12 +940,10 @@ pub fn run(
                                                 }
                                                 Err(e) => {
                                                     clickpulse::handoff::rollback(&new_path).ok();
-                                                    runtime = Some(
-                                                        Runtime::prepare_handoff(
-                                                            &original_path,
-                                                            false,
-                                                        )
-                                                        .expect("Cannot restore the previous statistics view"),
+                                                    runtime = restore_handoff(
+                                                        &original_path,
+                                                        &webview,
+                                                        locale,
                                                     );
                                                     report_error(
                                                         &webview,
@@ -822,10 +955,8 @@ pub fn run(
                                             }
                                         }
                                         Err(e) => {
-                                            runtime = Some(
-                                                Runtime::prepare_handoff(&original_path, false)
-                                                    .expect("Cannot restore the previous statistics view"),
-                                            );
+                                            runtime =
+                                                restore_handoff(&original_path, &webview, locale);
                                             report_error(
                                                 &webview,
                                                 locale,
@@ -851,6 +982,24 @@ pub fn run(
                                         &e,
                                     ),
                                 }
+                            }
+                        }
+                        #[cfg(windows)]
+                        Request::Uninstall {} => {
+                            if options.owned
+                                && !demo
+                                && !source_mode
+                                && data_job.is_none()
+                                && !updates.busy()
+                                && confirmation::confirm(
+                                    Some(&window),
+                                    locale,
+                                    &locale.text("removal.title"),
+                                    &locale.text("removal.start"),
+                                )
+                            {
+                                uninstall_after_save = true;
+                                *flow = ControlFlow::Exit;
                             }
                         }
                         Request::Reveal {} => {
@@ -919,25 +1068,8 @@ pub fn run(
                                 refresh = true;
                             }
                         }
-                        Request::Quit {} | Request::Close {} => {
-                            #[cfg(any(target_os = "windows", target_os = "linux"))]
-                            match preferences.close_action {
-                                clickpulse::presentation::CloseAction::Ask if !demo => {
-                                    let _ = webview.evaluate_script("window.requestClose();");
-                                }
-                                clickpulse::presentation::CloseAction::Hide if !demo => {
-                                    webview.suspend();
-                                    window.set_visible(false);
-                                    visible = false;
-                                    view_changed = true;
-                                }
-                                _ => *flow = ControlFlow::Exit,
-                            }
-                            #[cfg(target_os = "macos")]
-                            {
-                                *flow = ControlFlow::Exit;
-                            }
-                        }
+                        Request::Quit {} => *flow = ControlFlow::Exit,
+                        Request::Close {} => window_close_requested = true,
                     }
                 } else {
                     toast(&webview, &locale.text("message.invalid_request"));
@@ -963,8 +1095,6 @@ pub fn run(
                 }
             }
             Event::LoopDestroyed => {
-                #[cfg(target_os = "windows")]
-                drop(activation.take());
                 let was_paused = runtime.as_ref().is_some_and(|rt| rt.is_paused());
                 let saved = match runtime.take() {
                     Some(mut rt) => match rt.shutdown() {
@@ -976,15 +1106,61 @@ pub fn run(
                     },
                     None => true,
                 };
+                // Release the writer's profile before signalling helpers to proceed.
+                drop(profile_lock.take());
                 if let Some(guard) = &updates.guard
                     && let Err(error) = guard.finish_shutdown(saved, was_paused)
                 {
                     eprintln!("Update handoff failed: {error:#}");
                 }
                 webview.dispose();
+                #[cfg(target_os = "windows")]
+                drop(activation.take());
+                #[cfg(windows)]
+                if uninstall_after_save {
+                    if saved {
+                        if let Err(error) = clickpulse::removal::launch() {
+                            clickpulse::platform::windows::show_error(&error, "error.removal");
+                        }
+                    } else {
+                        clickpulse::platform::windows::show_error(
+                            &anyhow::anyhow!(locale.text("removal.save_failed")),
+                            "error.removal",
+                        );
+                    }
+                }
                 return;
             }
             _ => {}
+        }
+        if window_close_requested {
+            use clickpulse::presentation::CloseAction;
+            match view_state::close_action(
+                demo,
+                cfg!(target_os = "macos"),
+                preferences.close_action,
+            ) {
+                CloseAction::Quit => *flow = ControlFlow::Exit,
+                CloseAction::Hide => {
+                    webview.suspend();
+                    window.set_visible(false);
+                    visible = false;
+                    view_changed = true;
+                }
+                CloseAction::Ask => {
+                    close_requested = true;
+                    present_window(
+                        &window,
+                        &mut layout,
+                        &mut preferences,
+                        false,
+                        &mut pending_presentation,
+                    );
+                    visible = true;
+                    view_changed = true;
+                    refresh = true;
+                }
+            }
         }
         // Reopening restores the latest state once, including results received hidden.
         if data_job.is_none()
@@ -994,10 +1170,16 @@ pub fn run(
         {
             updates.publish(&webview);
         }
-        let active = visible
-            && (window.is_visible() || pending_presentation.is_some())
-            && !window.is_minimized();
+        let active = view_state::renderer_active(
+            visible,
+            window.is_visible(),
+            window.is_minimized(),
+            pending_presentation.is_some(),
+        );
         if active && !webview.is_active() {
+            // suspend() delivered visible=false directly. A resumed renderer
+            // needs visible=true even if the last published payload is identical.
+            published_view.reset();
             view_changed = true;
             refresh = true;
         }
@@ -1014,7 +1196,7 @@ pub fn run(
                     eprintln!("Unable to create interface: {error:#}");
                     window.set_visible(false);
                     visible = false;
-                    rfd::MessageDialog::new()
+                    clickpulse::dialogs::MessageDialog::new()
                         .set_title("ClickPulse")
                         .set_description(locale.text("error.stats"))
                         .show();
@@ -1094,10 +1276,21 @@ pub fn run(
             preferences.update_notifications.mark_shown();
             view_changed = true;
         }
+        webview.set_zoom(&window, &preferences);
+        #[cfg(target_os = "macos")]
+        webview.sync_titlebar(
+            &window,
+            preferences.compact,
+            session_state.sidebar_collapsed.unwrap_or(false),
+        );
+        if view_changed
+            && !demo
+            && let Err(e) = persisted_preferences
+                .save_if_changed(&preferences, clickpulse::presentation::Preferences::save)
+        {
+            report_error(&webview, locale, "message.preferences_failed", &e);
+        }
         if view_changed {
-            if !demo && let Err(e) = preferences.save() {
-                report_error(&webview, locale, "message.preferences_failed", &e);
-            }
             window.set_title(&locale.text(if preferences.compact {
                 "native.mini_title"
             } else {
@@ -1107,12 +1300,29 @@ pub fn run(
             mini.set_text(locale.text("action.mini"));
             hide.set_text(locale.text("native.hide"));
             quit.set_text(locale.text("native.quit"));
-            let view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"today_period":preferences.today_period,"timezones":clickpulse::timezone::TimeZonePreference::choices(),"theme":preferences.theme,"maximized":window.is_maximized(),"close_action":preferences.close_action,"ignore_software_input":preferences.ignore_software_input,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
+            let mut view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"today_period":preferences.today_period,"keyboard_layout":preferences.keyboard_layout,"ui_scale":preferences.ui_scale,"theme":preferences.theme,"maximized":window.is_maximized(),"fullscreen":window.fullscreen().is_some(),"close_action":preferences.close_action,"ignore_software_input":preferences.ignore_software_input,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
             if webview.is_ready() {
-                let _ = webview.evaluate_script(&format!(
-                    "window.receiveView({view});window.receiveDataBusy?.({});",
-                    data_job.is_some()
-                ));
+                if timezones_pending {
+                    view["timezones"] =
+                        serde_json::json!(clickpulse::timezone::TimeZonePreference::choices());
+                }
+                view["data_busy"] = serde_json::json!(data_job.is_some());
+                published_view.send(view, |view| {
+                    webview.evaluate_script(&format!(
+                        "window.receiveView({view});window.receiveDataBusy?.({});",
+                        data_job.is_some()
+                    ))?;
+                    timezones_pending = false;
+                    #[cfg(any(target_os = "windows", target_os = "linux"))]
+                    {
+                        maximized_sent = Some(window.is_maximized());
+                    }
+                    #[cfg(target_os = "macos")]
+                    {
+                        fullscreen_sent = Some(window.fullscreen().is_some());
+                    }
+                    Ok(())
+                });
                 updates.publish(&webview);
                 // Launch-at-login can finish loading while hidden. Keep the
                 // recovery notice until the user actually opens a window.
@@ -1126,14 +1336,34 @@ pub fn run(
                 }
             }
         }
+        if close_requested
+            && webview.is_ready()
+            && visible
+            && !preferences.compact
+            && webview.evaluate_script("window.requestClose();").is_ok()
+        {
+            close_requested = false;
+        }
         if refresh {
             // A history query must not delay acknowledgement of Pause/Resume.
             let paused = runtime.as_ref().map_or(demo_paused, Runtime::is_paused);
-            let _ = webview.evaluate_script(&format!("window.receivePaused({paused});"));
+            if webview.is_ready() {
+                published_paused.send(paused, |paused| {
+                    webview.evaluate_script(&format!("window.receivePaused({paused});"))
+                });
+            }
             if let Some(rt) = &runtime
                 && let Ok(capture) = rt.capture_status()
             {
-                update_status(&tray, &pause, locale, source_mode, rt.is_paused(), &capture);
+                update_status(
+                    &tray,
+                    &pause,
+                    &mut tray_status_sent,
+                    locale,
+                    source_mode,
+                    rt.is_paused(),
+                    &capture,
+                );
                 storage_alert.update(&tray, &webview, locale, &capture);
             }
             if ready && webview.is_active() && data_job.is_none() {
@@ -1141,10 +1371,16 @@ pub fn run(
                     if let Some(id) = snapshots.begin() {
                         let proxy = snapshot_proxy.clone();
                         let compact = preferences.compact;
+                        let shortcuts = !compact && session_state.wants_shortcuts();
+                        let share_day = (!compact)
+                            .then(|| session_state.share_day(preferences.timezone))
+                            .flatten();
                         let reply = move |result: anyhow::Result<String>| {
                             let _ = proxy.send_event(UiEvent::Snapshot {
                                 id,
                                 compact,
+                                shortcuts,
+                                share_day,
                                 result: result.map_err(|error| format!("{error:#}")),
                             });
                         };
@@ -1154,8 +1390,10 @@ pub fn run(
                                 preferences.today_period,
                                 reply,
                             )
+                        } else if let Some(day) = share_day {
+                            rt.request_share_snapshot(preferences.timezone, day, reply)
                         } else {
-                            rt.request_snapshot_in_timezone(preferences.timezone, reply)
+                            rt.request_snapshot_for_view(preferences.timezone, shortcuts, reply)
                         };
                         match result {
                             Ok(()) => {}
@@ -1165,11 +1403,32 @@ pub fn run(
                             }
                         }
                     }
-                } else {
-                    let snapshot = demo_snapshot_in_timezone(demo_paused, preferences.timezone);
+                } else if demo {
+                    let mut snapshot = demo_snapshot_in_timezone(demo_paused, preferences.timezone);
+                    if let Some(day) = session_state.share_day(preferences.timezone) {
+                        snapshot.stats.share_shortcut = Some(clickpulse::shortcuts::DailyTop {
+                            day: day.to_string(),
+                            top: snapshot
+                                .stats
+                                .history_days
+                                .iter()
+                                .find(|row| row.day == day.to_string())
+                                .filter(|row| row.counts.keyboard > 0)
+                                .map(|row| clickpulse::shortcuts::ShortcutCount {
+                                    platform: std::env::consts::OS.into(),
+                                    modifiers: if cfg!(target_os = "macos") { 8 } else { 1 },
+                                    key: 8,
+                                    count: (row.counts.keyboard / 80).max(1),
+                                }),
+                        });
+                    }
+                    if !session_state.wants_shortcuts() {
+                        snapshot.stats.shortcuts = None;
+                    }
                     update_status(
                         &tray,
                         &pause,
+                        &mut tray_status_sent,
                         locale,
                         false,
                         snapshot.paused,
@@ -1181,10 +1440,17 @@ pub fn run(
                 }
             }
         }
-        if !visible || window.is_minimized() {
+        if !visible {
             pending_presentation = None;
         }
         if !matches!(*flow, ControlFlow::ExitWithCode(_)) {
+            // Closing or hiding keeps the recorder and menu-bar icon alive.
+            // Native minimization keeps `visible` true, and retains its Dock entry.
+            #[cfg(target_os = "macos")]
+            if !visible && dock_visible {
+                _target.set_activation_policy_at_runtime(ActivationPolicy::Accessory);
+                dock_visible = false;
+            }
             if pending_presentation
                 .is_some_and(|deadline| webview.is_ready() || Instant::now() >= deadline)
             {
@@ -1192,10 +1458,15 @@ pub fn run(
                 // the new renderer. A failed Ready cannot hide the app forever.
                 #[cfg(target_os = "macos")]
                 {
-                    use tao::platform::macos::EventLoopWindowTargetExtMacOS;
+                    if !dock_visible {
+                        _target.set_activation_policy_at_runtime(ActivationPolicy::Regular);
+                        dock_visible = true;
+                    }
                     _target.show_application();
                 }
                 window.set_visible(true);
+                // GTK may ignore deiconify while hidden. Repeat after mapping.
+                window.set_minimized(false);
                 window.set_focus();
                 pending_presentation = None;
             }
@@ -1219,12 +1490,13 @@ pub fn run(
 fn update_status(
     tray: &tray_icon::TrayIcon,
     pause: &MenuItem,
+    sent: &mut Option<(String, String)>,
     locale: Locale,
     source_mode: bool,
     paused: bool,
     capture: &CaptureStatus,
 ) {
-    pause.set_text(pause_label(locale, source_mode, paused));
+    let label = pause_label(locale, source_mode, paused);
     let status = if capture.error.is_some() {
         if source_mode {
             "status.read_error"
@@ -1240,8 +1512,13 @@ fn update_status(
     } else {
         "status.permission"
     };
-    tray.set_tooltip(Some(format!("ClickPulse · {}", locale.text(status))))
-        .ok();
+    let value = (label, format!("ClickPulse · {}", locale.text(status)));
+    if sent.as_ref() != Some(&value) {
+        pause.set_text(&value.0);
+        if tray.set_tooltip(Some(&value.1)).is_ok() {
+            *sent = Some(value);
+        }
+    }
 }
 
 fn pause_label(locale: Locale, source_mode: bool, paused: bool) -> String {
@@ -1259,6 +1536,11 @@ fn pause_label(locale: Locale, source_mode: bool, paused: bool) -> String {
 }
 fn report_error(webview: &VisibleWebView, locale: Locale, key: &str, error: &anyhow::Error) {
     eprintln!("{key}: {error:#}");
+    let key = if error.is::<clickpulse::platform::TemporaryAppLocation>() {
+        "autostart.move_app"
+    } else {
+        key
+    };
     toast(webview, &locale.text(key));
 }
 
@@ -1393,10 +1675,35 @@ fn demo_snapshot_in_timezone(
         auto_start: false,
         demo: true,
         stats: Snapshot {
+            share_shortcut: None,
+            shortcuts: Some(vec![
+                clickpulse::shortcuts::ShortcutCount {
+                    platform: std::env::consts::OS.into(),
+                    modifiers: if cfg!(target_os = "macos") { 8 } else { 1 },
+                    key: 8,
+                    count: 342,
+                },
+                clickpulse::shortcuts::ShortcutCount {
+                    platform: std::env::consts::OS.into(),
+                    modifiers: if cfg!(target_os = "macos") { 8 } else { 1 },
+                    key: 9,
+                    count: 298,
+                },
+            ]),
             now: now.to_rfc3339(),
             today,
             week,
             lifetime,
+            mouse_buttons: clickpulse::db::MouseCounts {
+                left: lifetime.mouse * 85 / 100,
+                right: lifetime.mouse * 12 / 100,
+                middle: lifetime.mouse * 2 / 100,
+                side: lifetime.mouse
+                    - lifetime.mouse * 85 / 100
+                    - lifetime.mouse * 12 / 100
+                    - lifetime.mouse * 2 / 100,
+                other: 0,
+            },
             windows: [60, 600, 3600, 86400]
                 .into_iter()
                 .map(|seconds| WindowCount {
@@ -1427,6 +1734,24 @@ fn demo_snapshot_in_timezone(
         database_path: "Demo data · no database".into(),
         database_mode: DatabaseMode::Demo,
         source_mode: false,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn restore_handoff(
+    path: &std::path::Path,
+    view: &VisibleWebView,
+    locale: Locale,
+) -> Option<Runtime> {
+    match Runtime::prepare_handoff(path, false) {
+        Ok(runtime) => Some(runtime),
+        Err(error) => {
+            report_error(view, locale, "message.migration_incomplete", &error);
+            // Retain the last real statistics. Never substitute demo data after
+            // recovery fails, and keep the recording failure visible.
+            let _ = view.evaluate_script("window.receiveCapture?.({listening:false,error:'recovery failed',error_code:'message.migration_incomplete'});");
+            None
+        }
     }
 }
 

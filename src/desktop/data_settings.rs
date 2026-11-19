@@ -1,6 +1,6 @@
 use anyhow::Result;
+use clickpulse::dialogs::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use clickpulse::{history_import::ImportReport, localization::Locale};
-use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use std::path::{Path, PathBuf};
 
 fn confirm(
@@ -49,6 +49,17 @@ pub(super) fn select_directory(
         return Ok(None);
     };
     if same_database(&directory.join("events.sqlite3"), current) {
+        return Ok(None);
+    }
+    if clickpulse::storage::startup::inside_program_directory(
+        &directory,
+        &std::env::current_exe()?,
+    )? && !super::confirmation::confirm(
+        Some(window),
+        locale,
+        &locale.text("storage.choose_title"),
+        &locale.text("storage.program_directory_warning"),
+    ) {
         return Ok(None);
     }
     if directory.join("events.sqlite3").exists() {

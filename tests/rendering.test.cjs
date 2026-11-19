@@ -26,8 +26,10 @@ class Element {
   fire(event='click'){this.listeners[event]?.({target:this,button:0,preventDefault(){}});}
   scrollIntoView(options){this.scrolled=options;}
   focus(){if(this.ownerDocument)this.ownerDocument.activeElement=this;}
+  closest(){return null;}
+  contains(node){return this===node||this.children.some(child=>child.contains?.(node));}
 }
-function app(platform='macos',legacyWebKit=false,reducedMotion=false){
+function app(platform='macos',legacyWebKit=false,reducedMotion=false,random=()=>0){
   let document,now=0;
   const intervals=new Map();let timerId=0;
   const nodes=new Map(),get=id=>{
@@ -40,17 +42,18 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false){
   for(const id of ['handoff-settings','capture-settings'])get(id).hidden=true;
   const ranges=[14,30,90].map(days=>{const button=new Element();button.dataset.range=String(days);return button;});
   get('calendar-range-select').value='365';
-  get('status').append(new Element());
   get('keyboard-layout').parentElement=new Element();
   get('keyboard-treemap').clientWidth=640;get('keyboard-treemap').clientHeight=279;
   const root=new Element('root');root.lang='en';
-  document={documentElement:root,body:new Element(),getElementById:id=>['today-scope','legacy-note','export','history-export','settings-pause','recording-description','quit','sport-open-mini','refresh-time','calendar-description'].includes(id)?null:get(id),
+  document={listeners:{},addEventListener(event,handler){const previous=this.listeners[event];this.listeners[event]=previous?event=>{previous(event);handler(event);}:handler;},documentElement:root,body:new Element(),getElementById:id=>['page-description','date','status','today-scope','legacy-note','export','history-export','settings-pause','recording-description','quit','sport-open-mini','refresh-time','calendar-description'].includes(id)?null:get(id),
     querySelector(selector){return get(selector==='header'?'header':selector==='.sidebar'?'sidebar':'main');},
     querySelectorAll(selector){return selector==='nav button[data-page]'?nav:selector==='[data-settings-section]'?settingsLinks:selector==='.page'?pages:selector==='[data-range]'?ranges:[];},
     createElement(){const node=new Element();node.ownerDocument=document;return node;},createElementNS(){const node=new Element();node.ownerDocument=document;return node;}};
   const window={ipc:{postMessage(){}},presentationView:{compact:false},clickpulsePlatform:platform,clickpulseMessages:messages,clickpulseLocale:'en'};
   Object.assign(window,{matchMedia:()=>({matches:reducedMotion,addEventListener(){}}),performance:{now:()=>now},setInterval(handler,ms){const id=++timerId;intervals.set(id,{handler,ms});return id;},clearInterval(id){intervals.delete(id);}});
-  const context=vm.createContext({document,window,setTimeout,clearTimeout,...(legacyWebKit?{}:{ClickPulseSport:Sport,ClickPulseThemes:Themes,ClickPulseDropdowns:Dropdowns,ClickPulseI18n:createI18n(messages,'en',platform),ClickPulseHistory:H,ClickPulseKeyboard:K.create(platform)})});
+  const context=vm.createContext({Element,document,window,setTimeout,clearTimeout,createClickPulseI18n:createI18n,...(legacyWebKit?{}:{ClickPulseSport:Sport,ClickPulseThemes:Themes,ClickPulseDropdowns:Dropdowns,ClickPulseI18n:createI18n(messages,'en',platform),ClickPulseHistory:H,ClickPulseKeyboard:K.create(platform)})});
+  context.literaryRandom=random;
+  vm.runInContext('Math.random=literaryRandom;',context);
   if(legacyWebKit){
     // Load the real modules in this realm: injected Node functions would keep
     // Node's newer built-ins and conceal a minimum-WebKit startup failure.
@@ -111,12 +114,12 @@ test('counter period switches Overview and Mini together without changing calend
     assert.equal(a.get('mini-today').textContent,'≈ 310');
     assert.equal(a.get('mini-keyboard').textContent,'≈ 260');
     a.window.receiveView({locale:'zh-CN',compact:false});
-    assert.equal(a.get('today-label').textContent,'最近24小时');
+    assert.equal(a.get('today-label').textContent,'最近 24 小时');
     assert.equal(a.get('today-period-select').value,'rolling_24h');
     a.window.receiveView({today_period:'calendar_day'});
     assert.equal(a.get('timezone-row').hidden,false);
     assert.equal(a.get('timezone-select').value,'America/Los_Angeles');
-    assert.equal(a.get('today').textContent,'120');assert.equal(a.get('today-label').textContent,'时区当天');
+    assert.equal(a.get('today').textContent,'120');assert.equal(a.get('today-label').textContent,'今天');
     assert.equal(a.get('mini-today').textContent,'120');
   }
 });
@@ -196,9 +199,117 @@ function snapshot(){
     capture:{listening:true,permission_needed:false,error:null},paused:false,source_mode:false,setup_pending:false,auto_start:true,auto_start_available:true,database_mode:'default',database_path:'/current/events.sqlite3'};
 }
 function keyCells(a){
-  const visit=node=>node.dataset.key?[node]:node.children.flatMap(visit);
-  return visit(a.get('keyboard-layout'));
+  const walk=node=>node.dataset?.key?[node]:node.children.flatMap(walk);
+  return walk(a.get('keyboard-layout'));
 }
+
+test('Heatmap navigation preserves manual sidebar state instead of expanding automatically',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));a.window.receive(snapshot());
+    const collapsed=()=>a.context.document.body.dataset.sidebarCollapsed;
+    assert.equal(collapsed(),'false');a.navigate('keys');assert.equal(collapsed(),'false');
+    assert.equal(a.get('sidebar-toggle').attributes['aria-expanded'],'true');
+    a.window.receive(snapshot());assert.equal(collapsed(),'false');
+    a.get('sidebar-toggle').fire();assert.equal(collapsed(),'true');
+    a.window.receive(snapshot());assert.equal(collapsed(),'true');
+    const state=sent.filter(m=>m.action==='session_state').at(-1).state;
+    const b=app(platform);b.window.restoreSessionState(state);b.window.receive(snapshot());
+    assert.equal(b.context.document.body.dataset.sidebarCollapsed,'true');
+    a.get('sidebar-toggle').fire();a.navigate('settings');assert.equal(collapsed(),'false');
+    a.get('sidebar-toggle').fire();assert.equal(a.get('settings-subnav').hidden,true);
+    a.get('sidebar-toggle').fire();assert.equal(a.get('settings-subnav').hidden,false);
+    a.navigate('keys');assert.equal(collapsed(),'false');
+    a.window.receiveView({compact:true});a.window.receiveView({compact:false});assert.equal(collapsed(),'false');
+    a.get('sidebar-toggle').fire();
+    for(const locale of Object.keys(messages)){
+      a.window.setInterfaceLanguage(locale,locale);
+      assert.equal(a.get('sidebar-toggle').attributes['aria-label'],messages[locale]['nav.expand']);
+      assert.equal(a.get('toolbar-title').textContent,messages[locale]['page.heatmap']);
+      const keys=a.context.document.querySelectorAll('nav button[data-page]').find(n=>n.dataset.page==='keys');
+      assert.equal(keys.attributes['aria-label'],messages[locale]['page.heatmap']);
+      assert.equal(keys.title,messages[locale]['page.heatmap']);
+    }
+    a.navigate('history');assert.equal(collapsed(),'true','navigation keeps manual choice');
+    delete state.sidebar_collapsed;b.window.restoreSessionState(state);b.window.receive(snapshot());
+    assert.equal(b.context.document.body.dataset.sidebarCollapsed,'false','old state defaults to expanded on every page');
+    assert(!sent.some(m=>['maximize','compact'].includes(m.action)),'navigation never requests a window mode change');
+  }
+});
+
+test('Heatmap is one page and retains the keyboard view across navigation and recreation',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));a.window.receive(snapshot());
+    a.navigate('keys');assert.equal(a.get('toolbar-title').textContent,'Heatmap');
+    assert.equal(a.get('keys').hidden,false);
+    a.get('keyboard-view-toggle').fire();assert.equal(a.get('keyboard-treemap').hidden,false);
+    a.navigate('overview');assert.equal(a.get('keys').hidden,true);
+    const state=sent.filter(m=>m.action==='session_state').at(-1).state;
+    assert.equal(state.heatmap_page,undefined,'the removed device choice is no longer saved');
+    const b=app(platform);b.window.restoreSessionState(state);b.window.receive(snapshot());b.navigate('keys');
+    assert.equal(b.get('keys').hidden,false);assert.equal(b.get('keyboard-treemap').hidden,false);
+    a.navigate('keys');assert.equal(a.get('keyboard-treemap').hidden,false);
+    assert.equal(a.context.document.body.dataset.sidebarCollapsed,'false');
+  }
+});
+
+test('legacy mouse sessions reopen the combined Heatmap with translated headings',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+    a.window.restoreSessionState({page:'mouse',heatmap_page:'mouse',settings_section:'personalization-settings',trend_days:14,calendar_range:'365',history_range:'all',history_page:0,keyboard_view:'layout',scroll_top:0});a.window.receive(snapshot());
+    assert.equal(a.get('keys').hidden,false);
+    assert.equal(a.context.document.body.dataset.sidebarCollapsed,'false');
+    assert.equal(sent.filter(m=>m.action==='session_state').at(-1).state.page,'keys');
+    for(const locale of Object.keys(messages)){
+      a.window.setInterfaceLanguage(locale,locale);
+      assert.equal(a.get('toolbar-title').textContent,messages[locale]['page.heatmap']);
+      const entry=a.context.document.querySelectorAll('nav button[data-page]').find(b=>b.dataset.page==='keys');
+      assert.equal(entry.attributes['aria-label'],messages[locale]['page.heatmap']);
+    }
+  }
+});
+
+test('sidebar shortcut toggles once, saves its state and leaves editing and Mini alone',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));a.window.receive(snapshot());
+    const mac=platform==='macos',collapsed=()=>a.context.document.body.dataset.sidebarCollapsed;
+    const key=(overrides={})=>{
+      const event={key:'b',code:'KeyB',metaKey:mac,ctrlKey:!mac,target:a.context.document.body,
+        preventDefault(){this.defaultPrevented=true;},...overrides};
+      a.context.document.listeners.keydown(event);return event;
+    };
+    assert.equal(key().defaultPrevented,true);assert.equal(collapsed(),'true');
+    assert.equal(sent.filter(m=>m.action==='session_state').at(-1).state.sidebar_collapsed,true);
+    assert.equal(a.get('sidebar-toggle').attributes['aria-keyshortcuts'],mac?'Meta+B':'Control+B');
+    assert.match(a.get('sidebar-toggle').title,mac?/⌘B/:/Ctrl\+B/);
+    key({repeat:true});assert.equal(collapsed(),'true');
+    key({key:'и'});assert.equal(collapsed(),'false');
+    for(const overrides of [{metaKey:!mac,ctrlKey:mac},{shiftKey:true},{altKey:true},{isComposing:true},{defaultPrevented:true},{key:'c',code:'KeyC'}]){
+      key(overrides);assert.equal(collapsed(),'false');
+    }
+    const editable=new Element();editable.isContentEditable=true;
+    assert.equal(key({target:editable}).defaultPrevented,undefined);
+    for(const name of ['input','textarea','select']){
+      const input=new Element(name);input.closest=selector=>selector.split(',').includes(name)?input:null;
+      assert.equal(key({target:input}).defaultPrevented,undefined);
+    }
+    a.window.receiveView({compact:true});key();assert.equal(collapsed(),'false');
+    a.window.receiveView({compact:false,visible:false});key();assert.equal(collapsed(),'false');
+    a.window.receiveView({visible:true});a.get('close-overlay').hidden=false;
+    key();assert.equal(collapsed(),'false');
+    a.get('close-overlay').hidden=true;key();assert.equal(collapsed(),'true');
+  }
+});
+
+test('native fullscreen layout survives partial view updates and restores after exit or Mini',()=>{
+  const a=app(),fullscreen=()=>a.context.document.body.dataset.windowFullscreen;
+  a.window.receiveView({maximized:true,fullscreen:false});assert.equal(fullscreen(),'false');
+  a.window.receiveView({fullscreen:true});assert.equal(fullscreen(),'true');
+  a.window.receiveView({pinned:false});assert.equal(fullscreen(),'true');
+  a.get('sidebar-toggle').fire();assert.equal(fullscreen(),'true');
+  a.window.receiveView({compact:true});assert.equal(fullscreen(),'false');
+  a.window.receiveView({compact:false,fullscreen:false});assert.equal(fullscreen(),'false');
+  a.window.receiveView({fullscreen:true});a.window.receiveView({fullscreen:false});assert.equal(fullscreen(),'false');
+});
 
 test('Pause acknowledges immediately while statistics are pending and stale replies cannot undo it',()=>{
   for(const platform of ['macos','windows'])for(const compact of [false,true])for(const source_mode of [false,true]){
@@ -209,7 +320,6 @@ test('Pause acknowledges immediately while statistics are pending and stale repl
     a.window.receivePaused(true);
     assert.equal(a.get('pause').textContent,messages.en[source_mode?'action.resume_refresh':'action.resume']);
     assert.equal(a.get('mini-pause').attributes['aria-label'],messages.en[source_mode?'action.resume_refresh':'action.resume']);
-    assert.equal(a.get('status').lastElementChild.textContent,messages.en['status.paused']);
     assert.equal(a.get('mini-sport-cps').textContent,'0.0');
     a.window.receive(s);a.window.receiveSport({keyboard:20,mouse:0,available:true,paused:false});
     assert.equal(a.get('mini-pause-label').textContent,messages.en['mini.resume']);
@@ -286,7 +396,7 @@ for(const platform of ['windows','linux'])test(`${platform} controls and close c
 for(const platform of ['windows','linux'])test(`${platform} close prompt traps keyboard focus, cancels on Escape and ignores header control double clicks`,()=>{
   const a=app(platform),sent=[];a.window.ipc.postMessage=message=>sent.push(JSON.parse(message));
   a.get('close-overlay').hidden=true;a.window.requestClose();
-  const key=a.get('close-overlay').listeners.keydown;
+  const key=a.context.document.listeners.keydown;
   let prevented=0;key({key:'Tab',preventDefault(){prevented++;}});
   a.get('close-quit').fire();assert.equal(sent.at(-1).close_action,'quit');
   a.window.requestClose();key({key:'Escape',preventDefault(){prevented++;}});
@@ -314,11 +424,51 @@ test('calendar literary aside uses only selected keyboard history and follows ra
   a.window.receive({...s,history_days:[{day:'2026-10-07',counts:{keyboard:0,mouse:9000000}}]});
   assert.equal(aside.hidden,true);assert.equal(aside.textContent,'');
 });
+test('all100 independent book/phrase combinations use Chinese or English without changing the UI locale',()=>{
+  for(let index=0;index<H.books.length;index++)for(let style=0;style<H.phraseCount;style++){
+    let draws=0;
+    const a=app('macos',false,false,()=>++draws%2?(index+.5)/H.books.length:(style+.5)/H.phraseCount),s=snapshot();
+    const reference=H.books[index];
+    s.history_days=[{day:'2026-10-07',counts:{keyboard:reference.characters,mouse:9999999}}];
+    a.window.receive(s);
+    for(const locale of Object.keys(messages)){
+      a.window.receiveView({locale,language_preference:locale});
+      const phrase=a.get('calendar-aside').textContent,copyLocale=locale.startsWith('zh')?locale:'en';
+      assert.ok(phrase.includes(messages[copyLocale]['calendar.book_'+reference.id]),locale+': '+reference.id);
+      assert.equal(phrase,messages[copyLocale]['calendar.literary_'+style+'_one'].replace('{count}','1').replace('{book}',messages[copyLocale]['calendar.book_'+reference.id]));
+      assert.equal(a.get('calendar-aside').attributes.lang,copyLocale);
+      assert.equal(a.get('page-title').textContent,messages[locale]['page.overview']);
+      assert.doesNotMatch(phrase,/\{[^}]+\}/);
+      a.window.receive(s);assert.equal(a.get('calendar-aside').textContent,phrase);
+    }
+    assert.equal(draws,2);
+    a.navigate('overview');assert.equal(draws,2);
+    const previous=a.get('calendar-aside').textContent;
+    a.navigate('keys');a.navigate('overview');assert.equal(draws,4);
+    assert.notEqual(vm.runInContext('calendarBook',a.context),index);
+    assert.notEqual(vm.runInContext('calendarPhrase',a.context),style);
+    assert.notEqual(a.get('calendar-aside').textContent,previous);
+    const next=H.books[vm.runInContext('calendarBook',a.context)];
+    assert.ok(a.get('calendar-aside').textContent.includes(messages.en['calendar.book_'+next.id]));
+  }
+});
+test('English literary fallback also uses English decimal punctuation and the opening sentence',()=>{
+  const a=app(),s=snapshot();
+  s.history_days=[{day:'2026-10-07',counts:{keyboard:1750000,mouse:0}}];a.window.receive(s);
+  for(const locale of ['ja','ko','fr','de','es']){
+    a.window.receiveView({locale});
+    assert.equal(a.get('calendar-aside').textContent,'About 2.5 copies of Pride and Prejudice, one keystroke at a time.');
+    assert.equal(a.get('calendar-aside').title,messages.en['calendar.literary_basis']);
+    assert.equal(a.get('active-days').textContent,messages[locale]['calendar.recorded'].replace('{count}','1'));
+  }
+  a.window.receive({...s,history_days:[{day:'2026-10-07',counts:{keyboard:1,mouse:0}}]});
+  assert.equal(a.get('calendar-aside').textContent,messages.en['calendar.literary_opening']);
+});
 test('view toggle replaces the total, uses current proportional counts and restores the unchanged keyboard',()=>{
   for(const platform of ['macos','windows']){
     const a=app(platform),s=snapshot();
     s.keyboard_stats={physical:[{code:0,count:80},{code:1,count:20},{code:999,count:10},{code:115,count:2}]};
-    a.window.receive(s);a.navigate('keys');
+    a.window.receiveView({keyboard_layout:'compact'});a.window.receive(s);a.navigate('keys');
     const layout=a.get('keyboard-layout'),order=keyCells(a).filter(cell=>cell.dataset.key!=='home').map(cell=>cell.dataset.key);
     a.get('keyboard-view-toggle').fire();
     const blocks=a.get('keyboard-treemap');
@@ -326,7 +476,7 @@ test('view toggle replaces the total, uses current proportional counts and resto
     assert.equal(a.get('keyboard-view-toggle').attributes['aria-pressed'],'true');
     assert.equal(a.get('keyboard-view-label').textContent,'Keyboard layout');
     assert.equal(blocks.children.some(cell=>cell.dataset.key==='other'),false);
-    assert.equal(blocks.children.some(cell=>cell.dataset.key==='home'),false);
+    assert.equal(blocks.children.some(cell=>cell.dataset.key==='home'),true);
     const area=id=>{const cell=blocks.children.find(cell=>cell.dataset.key===id);return parseFloat(cell.style.width)*parseFloat(cell.style.height);};
     assert.ok(Math.abs(area('A')/area('S')-4)<1e-9);
     const first=blocks.children.find(cell=>cell.dataset.key==='A'),before=first.style.values['--key-bg'];
@@ -352,33 +502,69 @@ test('an empty treemap recovers when new counts arrive and follows locale change
   assert.equal(a.get('keyboard-treemap').children.length,1);
   assert.equal(a.get('keyboard-treemap').firstElementChild.dataset.key,'space');
 });
-test('both keyboard footers share visible used keys across hidden counts, live additions, locale and navigation',()=>{
-  for(const platform of ['macos','windows']){
-    const a=app(platform),s=snapshot(),count=0;
-    const next=physical=>({...s,keyboard_stats:{physical}});
-    const hidden=[{code:115,count:1000},{code:86,count:7},{code:999,count:3}];
-    a.window.receive(next(hidden));a.navigate('keys');
-    assert.equal(a.get('keyboard-coverage').textContent,`${count} keys used`);
+test('keyboard and treemap keep extended keys and show only unresolved counts in the footer',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),s=snapshot(),physical=[{code:115,count:1000},{code:86,count:7},{code:999,count:3}];
+    a.window.receive({...s,keyboard_stats:{physical}});a.navigate('keys');
+    assert.equal(a.get('keyboard-other').hidden,false);
+    assert.equal(a.get('keyboard-other').textContent,'Other keys: 3');
     a.get('keyboard-view-toggle').fire();
-    assert.equal(a.get('keyboard-coverage').textContent,`${count} keys used`);
-    assert.equal(a.get('keyboard-treemap').children.filter(key=>key.dataset.key).length,count);
-    a.window.receive(next([...hidden,{code:0,count:5}]));
-    assert.equal(a.get('keyboard-coverage').textContent,`${count+1} keys used`);
+    assert.equal(a.get('keyboard-treemap').children.filter(key=>key.dataset.key).length,2);
+    a.window.receive({...s,keyboard_stats:{physical:[...physical,{code:0,count:5}]}});
+    assert.equal(a.get('keyboard-treemap').children.filter(key=>key.dataset.key).length,3);
+    a.window.receiveView({locale:'zh-CN'});
+    assert.equal(a.get('keyboard-other').textContent,'其他按键：3 次');
     a.get('keyboard-view-toggle').fire();
-    assert.equal(a.get('keyboard-coverage').textContent,`${count+1} keys used`);
-    a.window.receiveView({theme:'teal',locale:'zh-CN',language_preference:'system'});
-    assert.equal(a.get('keyboard-coverage').textContent,`使用过 ${count+1} 个按键`);
-    a.navigate('overview');
-    a.window.receive(next([...hidden,{code:0,count:6},{code:49,count:1}]));
-    a.navigate('keys');a.get('keyboard-view-toggle').fire();
-    assert.equal(a.get('keyboard-coverage').textContent,`使用过 ${count+2} 个按键`);
+    assert.equal(keyCells(a).find(key=>key.dataset.key==='A').lastElementChild.textContent,'5');
+    a.window.receive({...s,keyboard_stats:{physical:[]}});
+    assert.equal(a.get('keyboard-other').hidden,true);
     a.get('keyboard-view-toggle').fire();
-    assert.equal(a.get('keyboard-coverage').textContent,`使用过 ${count+2} 个按键`);
-    assert.equal(keyCells(a).find(key=>key.dataset.key==='A').lastElementChild.textContent,'6');
-    a.window.receive(next([]));
-    assert.equal(a.get('keyboard-coverage').textContent,'使用过 0 个按键');
+    assert.equal(a.get('keyboard-other').textContent,'');
+  }
+});
+test('Mac full layout stops at F19 while additional keys stay available in treemap',()=>{
+  const a=app(),s=snapshot();a.window.receiveView({keyboard_layout:'full_size'});
+  a.window.receive({...s,keyboard_stats:{physical:[]}});a.navigate('keys');
+  for(let i=13;i<=19;i++)assert.equal(keyCells(a).find(k=>k.dataset.key==='f'+i).lastElementChild.textContent,'0');
+  a.window.receive({...s,keyboard_stats:{physical:[{code:105,count:10},{code:80,count:20},{code:90,count:5}]}});
+  for(const layout of ['compact','full_size']){
+    a.window.receiveView({keyboard_layout:layout});
+    const cells=keyCells(a);assert.equal(new Set(cells.map(k=>k.dataset.key)).size,cells.length);
+    if(layout==='compact'){
+      assert.equal(a.get('keyboard-layout').children.length,6);
+      assert.ok(!cells.some(k=>['f13','f19','f20'].includes(k.dataset.key)));
+    }else{
+      assert.equal(cells.find(k=>k.dataset.key==='f13').lastElementChild.textContent,'10');
+      assert.equal(cells.find(k=>k.dataset.key==='f19').lastElementChild.textContent,'20');
+      assert.ok(!cells.some(k=>k.dataset.key==='f20'));
+    }
+  }
+  a.get('keyboard-view-toggle').fire();
+  assert.deepEqual(a.get('keyboard-treemap').children.filter(k=>k.dataset.key).map(k=>k.dataset.key).sort(),['f13','f19','f20']);
+  a.get('keyboard-view-toggle').fire();
+  assert.equal(keyCells(a).filter(k=>k.dataset.key==='f13').length,1);
+});
+test('recorded extra keys never append a bottom row and retain their treemap counts',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),s=snapshot();
+    const physical=platform==='macos'?[{code:81,count:1},{code:104,count:3}]:[{code:72,count:1},{code:10,count:3}];
+    const extra=platform==='macos'?'jis-kana':'volume-up';
+    a.window.receive({...s,keyboard_stats:{physical}});a.navigate('keys');
+    for(const layout of ['compact','full_size']){
+      a.window.receiveView({keyboard_layout:layout});
+      assert.ok(!keyCells(a).some(k=>k.dataset.key===extra));
+      assert.ok(!a.get('keyboard-layout').children.some(row=>row.className.includes('supplemental-row')));
+      if(platform==='macos'){
+        const equals=keyCells(a).filter(k=>k.dataset.key==='numequals');
+        assert.equal(equals.length,layout==='full_size'?1:0);
+        if(equals.length){assert.equal(equals[0].style.gridColumn,'2 / span 1');assert.equal(equals[0].style.gridRow,'1 / span 1');assert.equal(equals[0].lastElementChild.textContent,'1');}
+      }
+    }
     a.get('keyboard-view-toggle').fire();
-    assert.equal(a.get('keyboard-coverage').textContent,'使用过 0 个按键');
+    const blocks=a.get('keyboard-treemap').children.filter(k=>k.dataset.key);
+    assert.equal(blocks.length,2);
+    assert.ok(blocks.some(k=>k.dataset.key===extra));
+    assert.equal(a.get('keyboard-other').hidden,true);
   }
 });
 test('Windows settings report native capture without offering macOS permission controls',()=>{
@@ -440,11 +626,12 @@ test('settings distinguish storage modes and only offer login startup for the de
     a.window.receive(s);
     assert.equal(a.get('autostart-row').hidden,mode!=='default');
     assert.equal(a.get('db-path').textContent,mode==='demo'?messages.en['demo.storage']:s.database_path);
-    assert.equal(a.get('db-description').textContent,messages.en[mode==='default'?'storage.directory_description':'settings.storage_'+mode]);
+    assert.equal(a.get('db-description').hidden,mode==='default');
+    assert.equal(a.get('db-description').textContent,mode==='default'?'':messages.en['settings.storage_'+mode]);
     assert.equal(a.get('storage-directory').hidden,mode!=='default');
     assert.equal(a.get('import-history-row').hidden,mode!=='default');
     a.window.receiveView({locale:'zh-CN',language_preference:'system'});
-    assert.equal(a.get('db-description').textContent,messages['zh-CN'][mode==='default'?'storage.directory_description':'settings.storage_'+mode]);
+    assert.equal(a.get('db-description').textContent,mode==='default'?'':messages['zh-CN']['settings.storage_'+mode]);
     a.window.receiveView({locale:'en',language_preference:'system'});
   }
 });
@@ -513,17 +700,49 @@ test('history processing stays visible across language switches and blocks overl
   assert.equal(a.get('takeover').disabled,true);
 });
 
-test('the Windows heatmap ends at the space row even after extended-key input arrives',()=>{
+test('the Windows heatmap automatically adds navigation and a number pad when used',()=>{
   const a=app('windows'),s=snapshot();a.navigate('keys');
-  for(const physical of [[],[{code:115,count:100},{code:86,count:40},{code:49,count:2}]]){
-    a.window.receive({...s,keyboard_stats:{physical}});
-    const rows=a.get('keyboard-layout').children.filter(row=>!row.className.includes('supplemental-row'));
-    assert.equal(rows.length,6);
-    assert.ok(rows[5].children.some(cell=>cell.dataset.key==='space'));
-    assert.ok(!rows.flatMap(row=>row.children).some(cell=>['home','num4'].includes(cell.dataset.key)));
-    assert.equal(a.get('keyboard-coverage').textContent,physical.length?'1 keys used':'0 keys used');
+  a.window.receive({...s,keyboard_stats:{physical:[]}});
+  assert.equal(a.get('keyboard-layout').children.length,6);
+  a.window.receive({...s,keyboard_stats:{physical:[{code:115,count:100},{code:86,count:40},{code:49,count:2},{code:999,count:3}]}});
+  assert.equal(a.get('keyboard-layout').children[0].className,'keyboard-main');
+  assert.ok(keyCells(a).some(cell=>cell.dataset.key==='home'));
+  assert.ok(keyCells(a).some(cell=>cell.dataset.key==='num4'));
+  assert.equal(a.get('keyboard-other').hidden,false);
+  assert.equal(a.get('keyboard-other').textContent,'Other keys: 3');
+  a.window.receiveView({keyboard_layout:'compact'});
+  assert.equal(a.get('keyboard-layout').children[0].className,'keyboard-row function-row');
+  assert.equal(keyCells(a).filter(cell=>cell.dataset.key==='num4').length,0);
+  assert.equal(a.get('keyboard-layout').children.length,6);
+});
+test('header layout choices use saved preferences and stay in sync with Settings and restored views',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),s=snapshot(),sent=[];
+    s.keyboard_stats={physical:[{code:0,count:25}]};
+    a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
+    a.window.receive(s);a.navigate('keys');
+    assert.equal(a.get('keyboard-compact').attributes['aria-pressed'],'true');
+    for(const [button,layout] of [['keyboard-full','full_size'],['keyboard-compact','compact']]){
+      a.get(button).fire();
+      assert.deepEqual(sent.at(-1),{action:'keyboard_layout',layout});
+      a.window.receiveView({keyboard_layout:layout});
+      assert.equal(a.get('keyboard-layout-select').value,layout);
+      assert.equal(a.get(button).attributes['aria-pressed'],'true');
+      assert.equal(keyCells(a).some(key=>key.dataset.key==='num0'),layout==='full_size');
+      a.window.receiveView({compact:true});a.window.receiveView({compact:false,locale:'zh-CN'});
+      a.navigate('overview');a.navigate('keys');
+      assert.equal(a.get(button).attributes['aria-pressed'],'true');
+      a.get('keyboard-view-toggle').fire();assert.equal(a.get('keyboard-layout-mode').hidden,true);
+      a.get('keyboard-view-toggle').fire();assert.equal(a.get('keyboard-layout-mode').hidden,false);
+      const restored=app(platform);restored.window.receiveView({keyboard_layout:layout});
+      restored.window.receive(s);restored.navigate('keys');
+      assert.equal(restored.get(button).attributes['aria-pressed'],'true');
+    }
+    a.get('keyboard-layout-select').value='full_size';a.get('keyboard-layout-select').fire('change');
+    assert.deepEqual(sent.at(-1),{action:'keyboard_layout',layout:'full_size'});
+    a.window.receiveView({keyboard_layout:'full_size'});
+    assert.equal(a.get('keyboard-full').attributes['aria-pressed'],'true');
   }
-  assert.match(readFileSync('ui/style.css','utf8'),/\.keyboard-row\.supplemental-row\s*\{display:none\}/);
 });
 test('refresh only draws the selected page and skips unchanged charts',()=>{
   const a=app(),s=snapshot();a.window.receive(s);
@@ -542,6 +761,31 @@ test('refresh only draws the selected page and skips unchanged charts',()=>{
   a.navigate('history');
   assert.equal(a.get('history-table').children[0].children[3].textContent,'133');
   assert.equal(a.get('history-chart').replacements,1);
+});
+
+test('activity mix separates mouse buttons, keeps unknown history, and has no center text',()=>{
+  const a=app(),s=snapshot();s.mouse_buttons={left:14,right:2,middle:2,side:1,other:1};
+  const legend=()=>a.get('composition-legend').children.map(node=>[node.children[1].children[1],node.children[0].textContent]);
+  a.window.receive(s);
+  assert.deepEqual(legend(),[['Keyboard','100'],['Left click','14'],['Right click','2'],['Middle click','2'],['Side buttons','1'],['Other mouse buttons','1']]);
+  const svg=a.get('donut').children[0];
+  assert.ok(svg.children.every(node=>node.attributes.cx==='85')); // circles, no SVG text
+  assert.equal(svg.children.filter(node=>node.attributes['stroke-dasharray']).length,6);
+  assert.match(svg.attributes['aria-label'],/Left click: 14/);
+  // Same lifetime total, different distribution must redraw the chart.
+  a.window.receive({...s,mouse_buttons:{left:13,right:5,other:2}});
+  assert.equal(a.get('donut').replacements,2);
+  assert.equal(legend()[1][1],'13');
+  a.window.receive({...s,mouse_buttons:{left:5,right:2,other:1}});
+  assert.deepEqual(legend().at(-1),['Unclassified clicks','12']);
+  for(const locale of Object.keys(messages)){
+    a.window.receiveView({locale});
+    assert.equal(legend()[1][0],messages[locale]['chart.mouse_left']);
+    assert.equal(legend()[2][0],messages[locale]['chart.mouse_right']);
+  }
+  a.window.receive({...s,lifetime:{keyboard:0,mouse:0},mouse_buttons:{left:0,right:0,other:0}});
+  assert.equal(a.get('donut').children[0].children.length,1);
+  assert.equal(legend().length,3);
 });
 test('a page visited after hidden updates receives the latest keyboard counts',()=>{
   const a=app(),s=snapshot();a.window.receive(s);a.navigate('settings');
@@ -669,6 +913,7 @@ test('storage health reaches full and mini views without a readable snapshot',()
 test('grouped arrows retain unique per-key counts through refresh, theme and language changes on both platforms',()=>{
   for(const platform of ['macos','windows']){
     const a=app(platform),s=snapshot();
+    a.window.receiveView({keyboard_layout:'compact'});
     s.keyboard_stats={physical:[{code:0,count:55},{code:123,count:11},{code:124,count:22},{code:125,count:33},{code:126,count:44}]};
     a.window.receive(s);a.navigate('keys');
     const layout=a.get('keyboard-layout'),cluster=layout.children[5].children.find(node=>node.className==='keyboard-arrow-cluster');
@@ -959,7 +1204,7 @@ test('daily update preference and last attempt survive UI refresh and language c
     a.get('automatic-updates').checked=true;a.get('automatic-updates').fire('change');
     assert.deepEqual(sent.pop(),{action:'automatic_updates',enabled:true});
     a.window.receiveView({auto_check_updates:true});a.window.receive(snapshot());
-    assert.equal(a.get('automatic-updates').checked,true);assert.equal(sent.length,0);
+    assert.equal(a.get('automatic-updates').checked,true);assert.ok(sent.every(message=>message.action==='session_state'));sent.length=0;
     a.window.receiveUpdateState({status:'checking'});assert.equal(a.get('automatic-updates').disabled,false);
     a.window.receiveUpdateState({status:'downloading'});assert.equal(a.get('automatic-updates').disabled,false);
     a.get('automatic-updates').checked=false;a.get('automatic-updates').fire('change');
@@ -1118,4 +1363,140 @@ test('local brand images are permitted without allowing remote image sources',()
   assert.ok(imageSources.includes("'self'"),'protocol-served brand images must be allowed');
   assert.ok(imageSources.includes('data:'),'offline documentation previews still embed images');
   assert.ok(!imageSources.some(source=>['*','http:','https:'].includes(source)),'remote images stay blocked');
+});
+
+
+test('uninstall is available only for owned Windows data and never during an update',()=>{
+  const a=app('windows'),s=snapshot(),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+  a.window.receive(s);a.navigate('settings');
+  assert.equal(a.get('uninstall-row').hidden,false);
+  a.get('uninstall').fire();assert.equal(sent.at(-1).action,'uninstall');
+  const before=sent.length;
+  a.window.receiveUpdateState({status:'downloading',automatic:true});a.get('uninstall').fire();
+  assert.equal(a.get('uninstall').disabled,true);
+  assert.equal(sent.length,before);
+  a.window.receiveUpdateState({status:'idle'});assert.equal(a.get('uninstall').disabled,false);
+  a.window.receiveDataBusy(true);a.get('uninstall').fire();assert.equal(sent.length,before);
+  assert.equal(a.get('uninstall').disabled,true);a.window.receiveDataBusy(false);
+  a.window.receiveUpdateState({status:'checking'});a.get('uninstall').fire();assert.equal(sent.length,before);
+  assert.equal(a.get('uninstall').disabled,true);a.window.receiveUpdateState({status:'idle'});
+  a.window.receive({...s,demo:true});assert.equal(a.get('uninstall-row').hidden,true);
+  for(const mode of ['custom','source']){
+    a.window.receive({...s,database_mode:mode});assert.equal(a.get('uninstall-row').hidden,true);
+    a.get('uninstall').fire();assert.equal(sent.length,before);
+  }
+  for(const platform of ['macos','linux']){
+    const b=app(platform);b.window.receive(s);b.navigate('settings');assert.equal(b.get('uninstall-row').hidden,true);
+  }
+});
+
+test('close confirmation closes the date popup and releases inert state on Hide or Mini',()=>{
+ for(const platform of ['windows','linux'])for(const next of [{visible:false},{compact:true}]){
+  const a=app(platform);let closed=0;a.context.ClickPulseDatePicker={closeAll(){closed++;}};
+  a.get('close-overlay').hidden=true;a.window.requestClose();
+  assert.equal(closed,1);assert.equal(a.get('close-overlay').hidden,false);assert.equal(a.get('main').inert,true);
+  a.window.receiveView(next);
+  assert.equal(a.get('close-overlay').hidden,true);assert.equal(a.get('main').inert,false);assert.equal(a.get('sidebar').inert,false);assert.equal(a.get('mini-widget').inert,false);
+ }
+});
+test('changing language retains paused and maximized accessible labels immediately',()=>{
+ const a=app('windows');a.window.receive(snapshot());a.window.receivePaused(true);a.window.receiveView({maximized:true});
+ for(const locale of ['zh-CN','fr','en']){
+  a.window.setInterfaceLanguage(locale,locale);
+  assert.equal(a.get('mini-pause').attributes['aria-label'],messages[locale]['action.resume']);
+  assert.equal(a.get('window-maximize').attributes['aria-label'],messages[locale]['window.restore']);
+ }
+});
+test('hourly details clear on keyboard focus leaving the chart, not when moving between bars',()=>{
+ const a=app();a.window.receive(hourlyFixture());const plot=a.get('hourly-chart').children[0],slot=plot.children[0];
+ slot.fire('focus');const before=a.get('hourly-detail').textContent;assert(before);
+ plot.listeners.focusout({relatedTarget:plot.children[1]});assert.equal(a.get('hourly-detail').textContent,before);
+ plot.listeners.focusout({relatedTarget:a.get('pause')});assert.equal(a.get('hourly-detail').textContent,'');
+});
+
+test('live input updates the existing charts and only one calendar tooltip',()=>{
+  const a=app(),s=snapshot();a.window.receive(s);
+  const countTooltips=()=>a.get('heatmap').children.flatMap(section=>section.children[2].children[1].children).filter(cell=>cell.dataset.day);
+  const cells=countTooltips(),oldTitles=cells.map(cell=>cell.title),trend=a.get('trend-chart').children[0],donut=a.get('donut').children[0],windows=a.get('windows').children[0];
+  let tooltipWrites=0;
+  for(const cell of cells){let title=cell.title;Object.defineProperty(cell,'title',{get:()=>title,set:value=>{tooltipWrites++;title=value;}});}
+  const change=rows=>rows.map((row,index)=>index===rows.length-1?{...row,counts:{...row.counts,keyboard:row.counts.keyboard+1}}:row);
+  a.window.receive({...s,history_days:change(s.history_days),days:change(s.days),lifetime:{...s.lifetime,keyboard:s.lifetime.keyboard+1},windows:s.windows.map(w=>({...w,counts:{...w.counts,keyboard:w.counts.keyboard+1}}))});
+  assert.equal(a.get('trend-chart').children[0],trend);assert.equal(a.get('donut').children[0],donut);assert.equal(a.get('windows').children[0],windows);
+  assert.equal(tooltipWrites,1);
+  assert.equal(cells.filter((cell,index)=>cell.title!==oldTitles[index]).length,1);
+});
+
+test('calendar rescaling updates all colors while unchanged day descriptions stay intact',()=>{
+  const a=app(),s=snapshot();s.history_days.unshift({day:'2026-10-06',counts:{keyboard:90,mouse:10}});a.window.receive(s);
+  const cells=()=>a.get('heatmap').children.flatMap(section=>section.children[2].children[1].children).filter(cell=>cell.dataset.day);
+  const prior=cells().map(cell=>[cell,cell.title,cell.className]);
+  const rows=s.history_days.map((row,index)=>index===s.history_days.length-1?{...row,counts:{keyboard:100000,mouse:0}}:row);
+  a.window.receive({...s,history_days:rows});
+  assert.ok(prior.some(([cell,,color])=>cell.className!==color));
+  for(const [cell,title] of prior)if(cell.dataset.day!==rows.at(-1).day)assert.equal(cell.title,title);
+  a.window.receiveView({locale:'de'});assert.ok(cells().some(cell=>cell.title.includes('100.000')));
+});
+
+test('only the visible platform page title is exposed to screen readers',()=>{
+ for(const platform of ['macos','windows','linux']){
+  const a=app(platform);
+  assert.equal(a.get('toolbar-title').attributes['aria-hidden'],String(platform!=='macos'));
+  assert.equal(a.get('page-title').attributes['aria-hidden'],String(platform==='macos'));
+ }
+});
+
+
+test('sidebar toggle and page navigation close the date popup',()=>{
+ const a=app();let closed=0;a.context.ClickPulseDatePicker={closeAll(){closed++;}};
+ a.get('sidebar-toggle').fire();assert.equal(closed,1);
+ a.navigate('settings');assert.equal(closed,2);
+});
+
+test('Mini pin labels follow current pin state when the language changes',()=>{
+ const a=app();
+ for(const pinned of [false,true]){
+  a.window.receiveView({pinned});
+  for(const locale of ['zh-CN','zh-TW','fr','en']){
+   a.window.setInterfaceLanguage(locale,locale);
+   const label=messages[locale][pinned?'mini.unpin':'mini.pin'];
+   assert.equal(a.get('mini-pin').title,label);assert.equal(a.get('mini-pin').attributes['aria-label'],label);
+  }
+ }
+});
+
+test('hour rollover keeps the selected hour and ignores removed plot events',()=>{
+ const a=app(),s=hourlyFixture();a.window.receive(s);
+ const old=a.get('hourly-chart').children[0],selected=old.children[10];selected.fire('mouseenter');
+ const hour=selected.dataset.hour;
+ for(const h of s.hourly){h.start_ms+=3600000;h.end_ms+=3600000;}
+ s.now=new Date(Date.parse(s.now)+3600000).toISOString();a.window.receive(s);
+ const plot=a.get('hourly-chart').children[0],current=plot.children.find(node=>node.dataset.hour===hour);
+ assert.notEqual(plot,old);assert(current);assert.equal(a.get('hourly-detail').textContent,current.attributes['aria-label']);
+ const detail=a.get('hourly-detail').textContent;
+ old.listeners.mouseleave();old.listeners.focusout({relatedTarget:a.get('pause')});old.children[0].fire('focus');
+ assert.equal(a.get('hourly-detail').textContent,detail);
+ plot.listeners.mouseleave();assert.equal(a.get('hourly-detail').textContent,'');
+});
+
+
+test('cold heading is visible and early navigation outranks queued restoration',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+    assert.equal(a.get('toolbar-title').textContent,messages.en['page.overview']);
+    a.window.restoreSessionState({page:'history',settings_section:'app-settings',trend_days:14,calendar_range:'365',history_range:'all',history_page:0,keyboard_view:'layout',sidebar_collapsed:false,scroll_top:400});
+    a.navigate('keys');
+    assert.equal(sent.at(-1).state.page,'keys');
+    a.get('sidebar-toggle').fire();
+    a.window.receive(snapshot());
+    const saved=sent.filter(m=>m.action==='session_state').at(-1).state;
+    assert.equal(saved.page,'keys');assert.equal(saved.sidebar_collapsed,true);
+    assert.equal(a.get('toolbar-title').textContent,messages.en['page.heatmap']);
+  }
+});
+
+test('language and timezone arriving together leave the new zone selected',()=>{
+  const a=app();a.window.receive(snapshot());
+  a.window.receiveView({locale:'zh-CN',language_preference:'zh-CN',timezone:'UTC',timezones:['UTC','Asia/Shanghai']});
+  assert.equal(a.get('timezone-select').value,'UTC');
 });

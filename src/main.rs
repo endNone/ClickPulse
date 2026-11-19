@@ -50,6 +50,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Remove ClickPulse on Windows, with an explicit choice about saved data
+    #[cfg(windows)]
+    Uninstall {
+        #[arg(long, hide = true)]
+        from: Option<PathBuf>,
+    },
     /// Show statistics without starting input capture
     Stats {
         #[arg(long)]
@@ -108,17 +114,31 @@ fn main() {
     let cli = Cli::parse();
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     let desktop_mode = cli.command.is_none() && cli.apply_update.is_none();
+    #[cfg(windows)]
+    let removal_mode = matches!(cli.command, Some(Commands::Uninstall { .. }));
+    #[cfg(windows)]
+    let desktop_mode = desktop_mode || removal_mode;
     if let Err(error) = run(cli) {
         eprintln!("ClickPulse: {error:#}");
         #[cfg(target_os = "windows")]
         if desktop_mode {
-            clickpulse::platform::windows::show_startup_error(&error);
+            clickpulse::platform::windows::show_error(
+                &error,
+                if removal_mode {
+                    "error.removal"
+                } else {
+                    "error.startup"
+                },
+            );
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         if desktop_mode {
-            rfd::MessageDialog::new()
+            clickpulse::dialogs::MessageDialog::new()
                 .set_title("ClickPulse")
-                .set_description(format!("{error:#}"))
+                .set_description(format!(
+                    "{}\n\n{error:#}",
+                    clickpulse::presentation::Preferences::locale_for_error().text("error.startup")
+                ))
                 .set_level(rfd::MessageLevel::Error)
                 .show();
         }
@@ -127,12 +147,19 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<()> {
+    #[cfg(windows)]
+    if let Some(Commands::Uninstall { from }) = &cli.command {
+        anyhow::ensure!(
+            cli.db.is_none() && cli.source_db.is_none() && !cli.demo && cli.apply_update.is_none(),
+            "Uninstall cannot be combined with database or update options"
+        );
+        return match from {
+            Some(original) => clickpulse::removal::run(original),
+            None => clickpulse::removal::launch(),
+        };
+    }
     if let Some(plan) = &cli.apply_update {
         return clickpulse::updater::apply_update(plan);
-    }
-    #[cfg(target_os = "macos")]
-    if cli.command.is_none() && !cli.demo {
-        clickpulse::handoff::recover_pending()?;
     }
     if let Some(Commands::Migrate {
         source,
@@ -158,7 +185,9 @@ fn run(cli: Cli) -> Result<()> {
     let setup_pending = false;
     let path = match cli.db.or(cli.source_db) {
         Some(path) => path,
-        None if cli.demo => PathBuf::new(),
+        // Desktop-owned storage is resolved only after acquiring the profile
+        // lock, so recovery cannot rename files beneath another running App.
+        None if cli.demo || cli.command.is_none() => PathBuf::new(),
         None => clickpulse::collector::data_path()?,
     };
     if let Some(command) = cli.command {
@@ -171,13 +200,31 @@ fn run(cli: Cli) -> Result<()> {
                     "Import requires an explicit --db destination; the default App database is managed by the desktop recorder"
                 );
             }
+            if owned
+                && !path.try_exists()?
+                && let Commands::Stats { json } = command
+            {
+                return print_stats(EventDb::empty_snapshot(Local::now())?, json);
+            }
             let source = LiveSource::open(&path)?;
             match command {
                 Commands::Stats { json } => print_stats(source.snapshot(Local::now())?, json)?,
                 Commands::Import { .. } => unreachable!(),
                 Commands::Migrate { .. } => unreachable!(),
+                #[cfg(windows)]
+                Commands::Uninstall { .. } => unreachable!(),
             }
         } else {
+            anyhow::ensure!(
+                !(matches!(command, Commands::Import { .. }) && cli.legacy_db.is_some()),
+                "Use either import or --legacy-db, not both"
+            );
+            let _write_lock =
+                if matches!(command, Commands::Import { .. }) || cli.legacy_db.is_some() {
+                    Some(clickpulse::storage::lock_database(&path)?)
+                } else {
+                    None
+                };
             let mut db = EventDb::open(&path)?;
             if let Some(legacy) = cli.legacy_db.as_deref() {
                 db.import_legacy(legacy)?;
@@ -195,6 +242,8 @@ fn run(cli: Cli) -> Result<()> {
                     );
                 }
                 Commands::Migrate { .. } => unreachable!(),
+                #[cfg(windows)]
+                Commands::Uninstall { .. } => unreachable!(),
             }
         }
         return Ok(());

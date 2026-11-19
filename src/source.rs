@@ -20,7 +20,29 @@ pub struct ActivityCounts {
     pub windows: Vec<WindowCount>,
 }
 
+/// A paused view owns a private on-disk SQLite snapshot. It does not hold a
+/// long-lived read transaction on the recorder (which would grow its WAL), or
+/// load the entire history into RAM. The temporary copy disappears on resume.
+pub(crate) struct FrozenSource {
+    pub source: LiveSource,
+    pub now: DateTime<Local>,
+    _directory: tempfile::TempDir,
+}
+
 impl LiveSource {
+    pub(crate) fn freeze(&self) -> Result<FrozenSource> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("paused.sqlite3");
+        let now = Local::now();
+        let mut destination = Connection::open(&path)?;
+        crate::storage::copy_snapshot(&self.conn, &mut destination)?;
+        drop(destination);
+        Ok(FrozenSource {
+            source: Self::open(&path)?,
+            now,
+            _directory: directory,
+        })
+    }
     /// Lightweight cumulative counts for feedback; never materialize history or keys.
     pub fn lifetime(&self) -> Result<Counts> {
         if aggregates_ready(&self.conn)? {
@@ -53,8 +75,9 @@ impl LiveSource {
             .with_context(|| format!("Cannot read live database: {}", path.display()))?;
         conn.busy_timeout(Duration::from_secs(5))?;
         conn.execute_batch("PRAGMA query_only=ON")?;
+        crate::storage_schema::require_supported(&conn)?;
         crate::storage_schema::require_key_encoding(&conn)?;
-        conn.prepare("SELECT bucket,dev,code,cnt FROM events LIMIT 0")?;
+        conn.prepare_cached("SELECT bucket,dev,code,cnt FROM events LIMIT 0")?;
         Ok(Self {
             conn,
             sealed: Default::default(),
@@ -65,7 +88,7 @@ impl LiveSource {
         // A short read transaction includes current WAL commits without freezing
         // the collector or mixing different versions across individual queries.
         let tx = self.conn.unchecked_transaction()?;
-        self.snapshot_from(&tx, now)
+        self.snapshot_from(&tx, now, true)
     }
 
     pub fn snapshot_in_timezone(
@@ -73,7 +96,25 @@ impl LiveSource {
         now: DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
     ) -> Result<Snapshot> {
-        self.snapshot_with_cache(now, zone, crate::timezone::Projection::Sealed(&self.sealed))
+        self.snapshot_for_view(now, zone, true)
+    }
+
+    pub fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
+        crate::shortcuts::read_top_for_day(&self.conn, day)
+    }
+
+    pub fn snapshot_for_view(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+        include_shortcuts: bool,
+    ) -> Result<Snapshot> {
+        self.snapshot_with_cache(
+            now,
+            zone,
+            crate::timezone::Projection::Sealed(&self.sealed),
+            include_shortcuts,
+        )
     }
 
     pub(crate) fn snapshot_with_cache(
@@ -81,9 +122,10 @@ impl LiveSource {
         now: DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
         cache: crate::timezone::Projection,
+        include_shortcuts: bool,
     ) -> Result<Snapshot> {
         let tx = self.conn.unchecked_transaction()?;
-        let mut snapshot = self.snapshot_from(&tx, now)?;
+        let mut snapshot = self.snapshot_base(&tx, now, include_shortcuts)?;
         let precise = aggregates_ready(&tx)?
             && metadata_int(&tx, "precise_since_ms")?
                 .is_some_and(|since| now.timestamp_millis() - 86_400_000 >= since);
@@ -106,60 +148,23 @@ impl LiveSource {
         Ok(snapshot)
     }
 
-    fn snapshot_from(&self, tx: &Connection, now: DateTime<Local>) -> Result<Snapshot> {
-        let today_s = now.date_naive().to_string();
-        let week_s = (now.date_naive() - Days::new(6)).to_string();
+    fn snapshot_base(
+        &self,
+        tx: &Connection,
+        now: DateTime<Local>,
+        include_shortcuts: bool,
+    ) -> Result<Snapshot> {
         let ready = aggregates_ready(tx)?;
         let activity = activity_counts(tx, now.timestamp_millis(), ready)?;
-        let lifetime = activity.lifetime;
-        let history = daily_counts(tx, ready, &today_s)?;
-        let today = history.get(&today_s).copied().unwrap_or_default();
-        let mut week = Counts::default();
-        for (day, c) in &history {
-            if day >= &week_s && day <= &today_s {
-                week.keyboard += c.keyboard;
-                week.mouse += c.mouse;
-            }
-        }
-        let days = (0..90)
-            .rev()
-            .map(|offset| {
-                let day = (now.date_naive() - Days::new(offset)).to_string();
-                DayCount {
-                    counts: history.get(&day).copied().unwrap_or_default(),
-                    day,
-                }
-            })
-            .collect();
         let coverage = if ready {
             metadata_int(tx, "precise_since_ms")?
         } else {
             None
         };
         let now_ms = now.timestamp_millis();
-        let windows = activity.windows;
-        let start =
-            crate::db::first_valid_local_instant(&Local, now.date_naive())?.timestamp_millis();
-        let mut hours = vec![Counts::default(); 24];
-        let mut stmt=tx.prepare("SELECT CAST(strftime('%H',bucket*60,'unixepoch','localtime') AS INTEGER),dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY 1,2")?;
-        for row in stmt.query_map(
-            params![start.div_euclid(60000), now_ms.div_euclid(60000)],
-            |r| {
-                Ok((
-                    r.get::<_, u32>(0)?,
-                    r.get::<_, i64>(1)?,
-                    r.get::<_, i64>(2)?,
-                ))
-            },
-        )? {
-            let (hour, dev, cnt) = row?;
-            if let Some(c) = hours.get_mut(hour as usize) {
-                c.add(dev, cnt);
-            }
-        }
         let physical = if table_exists(tx, "native_key_totals")? {
             let mut stmt =
-                tx.prepare("SELECT code,cnt FROM native_key_totals ORDER BY cnt DESC,code")?;
+                tx.prepare_cached("SELECT code,cnt FROM native_key_totals ORDER BY cnt DESC,code")?;
             stmt.query_map([], |r| {
                 Ok(KeyCount {
                     code: r.get(0)?,
@@ -176,7 +181,7 @@ impl LiveSource {
         let rows: Vec<(bool, EncodedKeyCount)> = if persistent {
             // Persistent eras do not depend on the current machine's timezone.
             let mut stmt =
-                tx.prepare("SELECT era,code,cnt FROM historical_key_totals ORDER BY code")?;
+                tx.prepare_cached("SELECT era,code,cnt FROM historical_key_totals ORDER BY code")?;
             stmt.query_map([], |r| {
                 Ok((
                     r.get(0)?,
@@ -189,7 +194,7 @@ impl LiveSource {
             .collect::<rusqlite::Result<_>>()?
         } else {
             let cutoff = crate::storage_schema::legacy_cutoff(tx)?;
-            let mut stmt = tx.prepare("SELECT CASE WHEN code>=?3 THEN 0 ELSE bucket<?1 END,code,SUM(cnt) FROM events WHERE dev=1 AND bucket<=?2 GROUP BY 1,code ORDER BY code")?;
+            let mut stmt = tx.prepare_cached("SELECT CASE WHEN code>=?3 THEN 0 ELSE bucket<?1 END,code,SUM(cnt) FROM events WHERE dev=1 AND bucket<=?2 GROUP BY 1,code ORDER BY code")?;
             stmt.query_map(
                 params![
                     cutoff,
@@ -225,6 +230,87 @@ impl LiveSource {
                 .and_then(|ms| Local.timestamp_millis_opt(ms).single())
                 .map(|date| date.to_rfc3339()),
         };
+        Ok(Snapshot {
+            now: now.to_rfc3339(),
+            shortcuts: include_shortcuts
+                .then(|| crate::shortcuts::read(tx))
+                .transpose()?,
+            lifetime: activity.lifetime,
+            windows: activity.windows,
+            mouse_buttons: crate::db::read_mouse_counts(
+                tx,
+                if table_exists(tx, "mouse_button_totals")? {
+                    "SELECT code,cnt FROM mouse_button_totals"
+                } else {
+                    "SELECT code,SUM(cnt) FROM events WHERE dev=0 GROUP BY code"
+                },
+            )?,
+            top_keys,
+            keyboard_stats,
+            legacy_imported: ready
+                && tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM clickpulse_metadata WHERE key='migrated_from')",
+                    [],
+                    |r| r.get(0),
+                )?,
+            ..Default::default()
+        })
+    }
+
+    fn snapshot_from(
+        &self,
+        tx: &Connection,
+        now: DateTime<Local>,
+        include_shortcuts: bool,
+    ) -> Result<Snapshot> {
+        let base = self.snapshot_base(tx, now, include_shortcuts)?;
+        let today_s = now.date_naive().to_string();
+        let week_s = (now.date_naive() - Days::new(6)).to_string();
+        let ready = aggregates_ready(tx)?;
+        let coverage = if ready {
+            metadata_int(tx, "precise_since_ms")?
+        } else {
+            None
+        };
+        let now_ms = now.timestamp_millis();
+        let history = daily_counts(tx, ready, &today_s)?;
+        let today = history.get(&today_s).copied().unwrap_or_default();
+        let mut week = Counts::default();
+        for (day, c) in &history {
+            if day >= &week_s && day <= &today_s {
+                week.keyboard += c.keyboard;
+                week.mouse += c.mouse;
+            }
+        }
+        let days = (0..90)
+            .rev()
+            .map(|offset| {
+                let day = (now.date_naive() - Days::new(offset)).to_string();
+                DayCount {
+                    counts: history.get(&day).copied().unwrap_or_default(),
+                    day,
+                }
+            })
+            .collect();
+        let start =
+            crate::db::first_valid_local_instant(&Local, now.date_naive())?.timestamp_millis();
+        let mut hours = vec![Counts::default(); 24];
+        let mut stmt=tx.prepare_cached("SELECT CAST(strftime('%H',bucket*60,'unixepoch','localtime') AS INTEGER),dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY 1,2")?;
+        for row in stmt.query_map(
+            params![start.div_euclid(60000), now_ms.div_euclid(60000)],
+            |r| {
+                Ok((
+                    r.get::<_, u32>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            },
+        )? {
+            let (hour, dev, cnt) = row?;
+            if let Some(c) = hours.get_mut(hour as usize) {
+                c.add(dev, cnt);
+            }
+        }
         let mut hourly = crate::hourly::empty(now);
         let precise = coverage.is_some_and(|since| now_ms - 86_400_000 >= since);
         crate::hourly::accumulate(
@@ -238,26 +324,16 @@ impl LiveSource {
             },
         )?;
         Ok(Snapshot {
-            now: now.to_rfc3339(),
             today,
             week,
-            lifetime,
-            windows,
             days,
+            hours,
+            hourly,
             history_days: history
                 .into_iter()
                 .map(|(day, counts)| DayCount { day, counts })
                 .collect(),
-            hours,
-            hourly,
-            top_keys,
-            keyboard_stats,
-            legacy_imported: ready
-                && tx.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM clickpulse_metadata WHERE key='migrated_from')",
-                    [],
-                    |r| r.get(0),
-                )?,
+            ..base
         })
     }
 
@@ -299,7 +375,7 @@ fn daily_counts(conn: &Connection, ready: bool, through: &str) -> Result<BTreeMa
         "SELECT date(bucket*60,'unixepoch','localtime') AS day,dev,SUM(cnt) FROM events GROUP BY day,dev HAVING day<=?1 ORDER BY day"
     };
     let mut history = BTreeMap::new();
-    let mut stmt = conn.prepare(sql)?;
+    let mut stmt = conn.prepare_cached(sql)?;
     for row in stmt.query_map([through], |r| {
         Ok((
             r.get::<_, String>(0)?,
@@ -395,7 +471,7 @@ fn metadata_int(conn: &Connection, name: &str) -> Result<Option<i64>> {
 
 fn counts(conn: &Connection, sql: &str, values: impl rusqlite::Params) -> Result<Counts> {
     let mut result = Counts::default();
-    let mut stmt = conn.prepare(sql)?;
+    let mut stmt = conn.prepare_cached(sql)?;
     for row in stmt.query_map(values, |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))? {
         let (dev, cnt) = row?;
         result.add(dev, cnt);
@@ -406,6 +482,19 @@ fn counts(conn: &Connection, sql: &str, values: impl rusqlite::Params) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_reader_rejects_newer_schemas_without_modifying_them() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("newer.sqlite3");
+        let conn = Connection::open(&path).unwrap();
+        conn.pragma_update(None, "user_version", crate::storage_schema::VERSION + 1)
+            .unwrap();
+        drop(conn);
+        let before = std::fs::read(&path).unwrap();
+        assert!(LiveSource::open(&path).is_err());
+        assert_eq!(before, std::fs::read(path).unwrap());
+    }
 
     #[test]
     fn recording_grace_covers_a_delayed_minute_heartbeat_but_expires() {
@@ -441,6 +530,7 @@ mod tests {
         ]
         .into_iter()
         .map(|(ts_ms, device, code)| InputEvent {
+            shortcut: None,
             ts_ms,
             device,
             code,
@@ -504,6 +594,7 @@ mod tests {
                 let mut writer = crate::collector::CollectorDb::open(&path).unwrap();
                 writer
                     .insert(&[InputEvent {
+                        shortcut: None,
                         ts_ms: end - 1,
                         device: Device::Mouse,
                         code: 1,
@@ -530,16 +621,19 @@ mod tests {
                 let mut db = crate::collector::CollectorDb::open(&path).unwrap();
                 db.insert(&[
                     InputEvent {
+                        shortcut: None,
                         ts_ms: now.timestamp_millis(),
                         device: Device::Keyboard,
                         code: 0,
                     },
                     InputEvent {
+                        shortcut: None,
                         ts_ms: future.timestamp_millis(),
                         device: Device::Mouse,
                         code: 1,
                     },
                     InputEvent {
+                        shortcut: None,
                         ts_ms: future.timestamp_millis(),
                         device: Device::Mouse,
                         code: 1,

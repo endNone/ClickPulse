@@ -102,7 +102,8 @@ impl CollectorDb {
                 dest.execute_batch("CREATE TABLE IF NOT EXISTS clickpulse_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL)")?;
                 dest.execute("INSERT OR REPLACE INTO clickpulse_metadata VALUES('legacy_key_cutoff_bucket',?1)", [cutoff.to_string()])?;
             }
-            let before = LiveSource::open(&staged)?.snapshot(Local::now())?;
+            let now = Local::now();
+            let before = LiveSource::open(&staged)?.snapshot(now)?;
             initialize(&mut dest)?;
             dest.execute(
                 "INSERT OR REPLACE INTO clickpulse_metadata VALUES('migrated_from',?1)",
@@ -110,7 +111,7 @@ impl CollectorDb {
             )?;
             dest.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;")?;
             drop(dest);
-            let after = LiveSource::open(&staged)?.snapshot(Local::now())?;
+            let after = LiveSource::open(&staged)?.snapshot(now)?;
             ensure!(
                 before.lifetime == after.lifetime
                     && before
@@ -170,6 +171,9 @@ impl CollectorDb {
                 daily.execute(params![time.date_naive().to_string(), dev])?;
                 recent.execute(params![event.ts_ms, dev])?;
                 if event.device == Device::Keyboard {
+                    if let Some(chord) = event.shortcut {
+                        crate::shortcuts::insert(&tx, chord, time.date_naive())?;
+                    }
                     native.execute([event.code])?;
                     historical.execute([code])?;
                 }
@@ -188,10 +192,24 @@ impl CollectorDb {
         now: DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
     ) -> Result<Snapshot> {
+        self.snapshot_for_view(now, zone, true)
+    }
+
+    pub fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
+        self.reader.share_shortcut(day)
+    }
+
+    pub fn snapshot_for_view(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+        include_shortcuts: bool,
+    ) -> Result<Snapshot> {
         self.reader.snapshot_with_cache(
             now,
             zone,
             crate::timezone::Projection::Writer(&self.projection),
+            include_shortcuts,
         )
     }
     pub fn today_in_timezone(
@@ -233,6 +251,7 @@ pub(crate) fn initialize(conn: &mut Connection) -> Result<()> {
     crate::storage_schema::require_supported(conn)?;
     crate::storage_schema::require_key_encoding(conn)?;
     let tx = conn.transaction()?;
+    crate::shortcuts::initialize(&tx)?;
     tx.execute_batch("
         CREATE TABLE IF NOT EXISTS events(bucket INTEGER NOT NULL,dev INTEGER NOT NULL,code INTEGER NOT NULL,cnt INTEGER NOT NULL,PRIMARY KEY(bucket,dev,code));
         CREATE TABLE IF NOT EXISTS clickpulse_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -241,6 +260,28 @@ pub(crate) fn initialize(conn: &mut Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS recent_counts(ts_ms INTEGER NOT NULL,dev INTEGER NOT NULL,cnt INTEGER NOT NULL,PRIMARY KEY(ts_ms,dev));
         CREATE TABLE IF NOT EXISTS native_key_totals(code INTEGER PRIMARY KEY,cnt INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS historical_key_totals(era INTEGER NOT NULL,code INTEGER NOT NULL,cnt INTEGER NOT NULL,PRIMARY KEY(era,code));")?;
+    // Keep button totals in step with raw history, including imports and older
+    // writers. A full snapshot then reads a few rows instead of years of clicks.
+    let mouse_totals: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='mouse_button_totals')",
+        [],
+        |r| r.get(0),
+    )?;
+    if !mouse_totals {
+        tx.execute_batch("CREATE TABLE mouse_button_totals(code INTEGER PRIMARY KEY,cnt INTEGER NOT NULL);
+            INSERT INTO mouse_button_totals SELECT code,SUM(cnt) FROM events WHERE dev=0 GROUP BY code;")?;
+    }
+    tx.execute_batch("CREATE TRIGGER IF NOT EXISTS mouse_totals_insert AFTER INSERT ON events WHEN NEW.dev=0 BEGIN
+            INSERT INTO mouse_button_totals VALUES(NEW.code,NEW.cnt) ON CONFLICT(code) DO UPDATE SET cnt=cnt+NEW.cnt;
+        END;
+        CREATE TRIGGER IF NOT EXISTS mouse_totals_delete AFTER DELETE ON events WHEN OLD.dev=0 BEGIN
+            UPDATE mouse_button_totals SET cnt=cnt-OLD.cnt WHERE code=OLD.code;
+        END;
+        CREATE TRIGGER IF NOT EXISTS mouse_totals_update AFTER UPDATE ON events WHEN OLD.dev=0 OR NEW.dev=0 BEGIN
+            UPDATE mouse_button_totals SET cnt=cnt-OLD.cnt WHERE OLD.dev=0 AND code=OLD.code;
+            INSERT INTO mouse_button_totals SELECT NEW.code,NEW.cnt WHERE NEW.dev=0
+                ON CONFLICT(code) DO UPDATE SET cnt=cnt+NEW.cnt;
+        END;")?;
     let bad: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM events WHERE dev NOT IN(0,1) OR cnt<0)",
         [],
@@ -297,6 +338,7 @@ pub(crate) fn initialize(conn: &mut Connection) -> Result<()> {
         [crate::storage_schema::KEY_ENCODING_VERSION.to_string()],
     )?;
     if !owned {
+        tx.execute("INSERT INTO native_key_totals SELECT code-?1,SUM(cnt) FROM events WHERE dev=1 AND code>=?1 GROUP BY code ON CONFLICT(code) DO UPDATE SET cnt=max(native_key_totals.cnt,excluded.cnt)", [PHYSICAL_CODE_BASE])?;
         tx.execute("INSERT INTO historical_key_totals SELECT CASE WHEN code>=?2 THEN 0 ELSE bucket<?1 END,code,SUM(cnt) FROM events WHERE dev=1 GROUP BY 1,2",params![cutoff,PHYSICAL_CODE_BASE])?;
         tx.execute(
             "INSERT INTO clickpulse_metadata VALUES('app_owned','1')",
@@ -314,6 +356,95 @@ pub(crate) fn initialize(conn: &mut Connection) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn legacy_physical_key_totals_are_backfilled_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("native.sqlite3");
+        let mut conn = Connection::open(&path).unwrap();
+        conn.execute_batch("CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER,PRIMARY KEY(bucket,dev,code));").unwrap();
+        conn.execute(
+            "INSERT INTO events VALUES(1,1,?1,3),(2,1,?1,4)",
+            [PHYSICAL_CODE_BASE + 8],
+        )
+        .unwrap();
+        initialize(&mut conn).unwrap();
+        initialize(&mut conn).unwrap();
+        let total: i64 = conn
+            .query_row("SELECT cnt FROM native_key_totals WHERE code=8", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(total, 7);
+    }
+
+    #[test]
+    fn mouse_button_totals_preserve_history_and_follow_all_event_mutations() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("mouse.sqlite3");
+        let mut conn = Connection::open(&path).unwrap();
+        conn.execute_batch("CREATE TABLE events(bucket INTEGER,dev INTEGER,code INTEGER,cnt INTEGER,PRIMARY KEY(bucket,dev,code));
+            INSERT INTO events VALUES(1,0,1,7),(1,0,2,3),(1,0,3,2),(1,0,5,1),(1,1,97,9);")
+            .unwrap();
+        let expected = crate::db::MouseCounts {
+            left: 7,
+            right: 3,
+            middle: 2,
+            side: 1,
+            other: 0,
+        };
+        // Read-only legacy sources have no derived button table.
+        assert_eq!(
+            LiveSource::open(&path)
+                .unwrap()
+                .snapshot(Local::now())
+                .unwrap()
+                .mouse_buttons,
+            expected
+        );
+        initialize(&mut conn).unwrap();
+        initialize(&mut conn).unwrap();
+        drop(conn);
+        let mut db = CollectorDb::open(&path).unwrap();
+        assert_eq!(db.snapshot(Local::now()).unwrap().mouse_buttons, expected);
+        let event = InputEvent {
+            shortcut: None,
+            ts_ms: Local::now().timestamp_millis(),
+            device: Device::Mouse,
+            code: 2,
+        };
+        db.insert(&[event.clone(), event.clone()]).unwrap();
+        // Imports merge an existing minute rather than only inserting new rows.
+        db.conn
+            .execute_batch(
+                "UPDATE events SET cnt=10 WHERE bucket=1 AND dev=0 AND code=1;
+            DELETE FROM events WHERE bucket=1 AND dev=0 AND code=3;
+            UPDATE events SET code=4 WHERE bucket=1 AND dev=0 AND code=5;
+            BEGIN; UPDATE events SET cnt=999 WHERE dev=0; ROLLBACK;",
+            )
+            .unwrap();
+        assert_eq!(
+            db.snapshot(Local::now()).unwrap().mouse_buttons,
+            crate::db::MouseCounts {
+                left: 10,
+                right: 5,
+                middle: 0,
+                side: 1,
+                other: 0
+            }
+        );
+        drop(db);
+        let db = CollectorDb::open(&path).unwrap();
+        assert_eq!(
+            db.snapshot(Local::now()).unwrap().mouse_buttons,
+            crate::db::MouseCounts {
+                left: 10,
+                right: 5,
+                middle: 0,
+                side: 1,
+                other: 0
+            }
+        );
+    }
     #[test]
     fn collector_uses_wal_with_normal_synchronization() {
         let temp = tempfile::tempdir().unwrap();
@@ -338,11 +469,13 @@ mod tests {
         let path = temp.path().join("cached.sqlite3");
         let mut db = CollectorDb::open(&path).unwrap();
         let key = InputEvent {
+            shortcut: None,
             ts_ms: Local::now().timestamp_millis(),
             device: Device::Keyboard,
             code: 57,
         };
         let mouse = InputEvent {
+            shortcut: None,
             device: Device::Mouse,
             code: 1,
             ..key
@@ -353,6 +486,7 @@ mod tests {
         }
         // An error after a successful statement must roll back every aggregate.
         let invalid = InputEvent {
+            shortcut: None,
             ts_ms: i64::MAX,
             ..key
         };
@@ -365,6 +499,7 @@ mod tests {
             ("recent_counts", 10),
             ("native_key_totals", 7),
             ("historical_key_totals", 7),
+            ("mouse_button_totals", 3),
         ] {
             let actual: i64 = db
                 .conn
@@ -417,6 +552,7 @@ mod tests {
         {
             let mut db = CollectorDb::open(&path).unwrap();
             db.insert(&[InputEvent {
+                shortcut: None,
                 ts_ms: Local::now().timestamp_millis(),
                 device: Device::Keyboard,
                 code: 0,
@@ -531,6 +667,7 @@ mod tests {
         let mut db = CollectorDb::open(&new).unwrap();
         let now = Local::now();
         db.insert(&[InputEvent {
+            shortcut: None,
             ts_ms: now.timestamp_millis(),
             device: Device::Keyboard,
             code: 0,
@@ -586,26 +723,31 @@ mod tests {
             .unwrap();
         db.insert(&[
             InputEvent {
+                shortcut: None,
                 ts_ms: 1_000,
                 device: Device::Keyboard,
                 code: 0,
             },
             InputEvent {
+                shortcut: None,
                 ts_ms: cutoff - 1,
                 device: Device::Mouse,
                 code: 1,
             },
             InputEvent {
+                shortcut: None,
                 ts_ms: cutoff,
                 device: Device::Keyboard,
                 code: 1,
             },
             InputEvent {
+                shortcut: None,
                 ts_ms: now - 1_000,
                 device: Device::Mouse,
                 code: 1,
             },
             InputEvent {
+                shortcut: None,
                 ts_ms: now + 1_000,
                 device: Device::Keyboard,
                 code: 2,

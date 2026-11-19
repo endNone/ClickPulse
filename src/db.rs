@@ -13,6 +13,31 @@ pub struct Counts {
     pub mouse: i64,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct MouseCounts {
+    pub left: i64,
+    pub right: i64,
+    pub middle: i64,
+    pub side: i64,
+    pub other: i64,
+}
+
+pub(crate) fn read_mouse_counts(conn: &Connection, sql: &str) -> Result<MouseCounts> {
+    let mut counts = MouseCounts::default();
+    let mut stmt = conn.prepare_cached(sql)?;
+    for row in stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))? {
+        let (code, count) = row?;
+        match code {
+            1 => counts.left += count,
+            2 => counts.right += count,
+            3 => counts.middle += count,
+            4 | 5 => counts.side += count,
+            _ => counts.other += count,
+        }
+    }
+    Ok(counts)
+}
+
 impl Counts {
     pub fn total(self) -> i64 {
         self.keyboard + self.mouse
@@ -62,12 +87,18 @@ pub struct KeyboardStats {
     pub physical_since: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct Snapshot {
+    /// None: not requested for this view. Some([]): loaded and genuinely empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shortcuts: Option<Vec<crate::shortcuts::ShortcutCount>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub share_shortcut: Option<crate::shortcuts::DailyTop>,
     pub now: String,
     pub today: Counts,
     pub week: Counts,
     pub lifetime: Counts,
+    pub mouse_buttons: MouseCounts,
     pub windows: Vec<WindowCount>,
     pub days: Vec<DayCount>,
     pub history_days: Vec<DayCount>,
@@ -84,6 +115,9 @@ pub struct EventDb {
 }
 
 impl EventDb {
+    pub fn empty_snapshot(now: DateTime<Local>) -> Result<Snapshot> {
+        Self::from_connection(Connection::open_in_memory()?)?.snapshot(now)
+    }
     pub fn open(path: &Path) -> Result<Self> {
         // Detect legacy storage before issuing any schema changes or write pragmas.
         if path.is_file() && path.metadata()?.len() > 0 {
@@ -118,9 +152,11 @@ impl EventDb {
              CREATE TABLE IF NOT EXISTS legacy_minutes(bucket INTEGER NOT NULL, dev INTEGER NOT NULL, cnt INTEGER NOT NULL, PRIMARY KEY(bucket,dev));
              CREATE TABLE IF NOT EXISTS recent(ts_ms INTEGER NOT NULL, dev INTEGER NOT NULL, cnt INTEGER NOT NULL, PRIMARY KEY(ts_ms,dev));
              CREATE TABLE IF NOT EXISTS keys(code INTEGER PRIMARY KEY, cnt INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS mouse_buttons(code INTEGER PRIMARY KEY, cnt INTEGER NOT NULL);
              INSERT OR IGNORE INTO totals VALUES(0,0),(1,0);",
         )?;
         tx.pragma_update(None, "user_version", crate::storage_schema::VERSION)?;
+        crate::shortcuts::initialize(&tx)?;
         tx.commit()?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
         Ok(Self {
@@ -147,7 +183,7 @@ impl EventDb {
         if invalid {
             bail!("The legacy database contains invalid devices or counts");
         }
-        let mut stmt = legacy.prepare(
+        let mut stmt = legacy.prepare_cached(
             "SELECT bucket, dev, SUM(cnt) FROM events GROUP BY bucket,dev ORDER BY bucket",
         )?;
         let rows = stmt.query_map([], |r| {
@@ -215,29 +251,46 @@ impl EventDb {
             return Ok(());
         }
         let tx = self.conn.transaction()?;
-        for event in events {
-            let ts = Local
-                .timestamp_millis_opt(event.ts_ms)
-                .single()
-                .context("Invalid event timestamp")?;
-            let dev = event.device as i64;
-            let day = ts.format("%Y-%m-%d").to_string();
-            let minute = event.ts_ms.div_euclid(60_000);
-            tx.execute("UPDATE totals SET cnt=cnt+1 WHERE dev=?1", [dev])?;
-            tx.execute(
+        {
+            let mut totals = tx.prepare_cached("UPDATE totals SET cnt=cnt+1 WHERE dev=?1")?;
+            let mut daily = tx.prepare_cached(
                 "INSERT INTO daily VALUES(?1,?2,1) ON CONFLICT(day,dev) DO UPDATE SET cnt=cnt+1",
-                params![day, dev],
             )?;
-            tx.execute("INSERT INTO minutes VALUES(?1,?2,1) ON CONFLICT(bucket,dev) DO UPDATE SET cnt=cnt+1", params![minute, dev])?;
-            tx.execute(
+            let mut minutes = tx.prepare_cached("INSERT INTO minutes VALUES(?1,?2,1) ON CONFLICT(bucket,dev) DO UPDATE SET cnt=cnt+1")?;
+            let mut recent = tx.prepare_cached(
                 "INSERT INTO recent VALUES(?1,?2,1) ON CONFLICT(ts_ms,dev) DO UPDATE SET cnt=cnt+1",
-                params![event.ts_ms, dev],
             )?;
-            if event.device == Device::Keyboard {
-                tx.execute(
-                    "INSERT INTO keys VALUES(?1,1) ON CONFLICT(code) DO UPDATE SET cnt=cnt+1",
-                    [event.code],
-                )?;
+            let mut keys = tx.prepare_cached(
+                "INSERT INTO keys VALUES(?1,1) ON CONFLICT(code) DO UPDATE SET cnt=cnt+1",
+            )?;
+            let mut mouse = tx.prepare_cached(
+                "INSERT INTO mouse_buttons VALUES(?1,1) ON CONFLICT(code) DO UPDATE SET cnt=cnt+1",
+            )?;
+            let mut last_date = None;
+            let mut day = String::new();
+            for event in events {
+                let date = Local
+                    .timestamp_millis_opt(event.ts_ms)
+                    .single()
+                    .context("Invalid event timestamp")?
+                    .date_naive();
+                if last_date != Some(date) {
+                    day = date.to_string();
+                    last_date = Some(date);
+                }
+                let dev = event.device as i64;
+                totals.execute([dev])?;
+                daily.execute(params![day, dev])?;
+                minutes.execute(params![event.ts_ms.div_euclid(60_000), dev])?;
+                recent.execute(params![event.ts_ms, dev])?;
+                if event.device == Device::Keyboard {
+                    if let Some(chord) = event.shortcut {
+                        crate::shortcuts::insert(&tx, chord, date)?;
+                    }
+                    keys.execute([event.code])?;
+                } else {
+                    mouse.execute([event.code])?;
+                }
             }
         }
         tx.commit()?;
@@ -251,7 +304,7 @@ impl EventDb {
 
     fn query_counts(&self, sql: &str, values: impl rusqlite::Params) -> Result<Counts> {
         let mut counts = Counts::default();
-        let mut stmt = self.conn.prepare(sql)?;
+        let mut stmt = self.conn.prepare_cached(sql)?;
         let rows = stmt.query_map(values, |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?;
         for row in rows {
             let (dev, cnt) = row?;
@@ -291,7 +344,7 @@ impl EventDb {
         )?;
         // Legacy counts lack sub-minute timestamps. Include intersecting buckets,
         // and explicitly tell callers that these particular windows are approximate.
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.conn.prepare_cached(
             "SELECT dev,SUM(cnt) FROM legacy_minutes WHERE bucket>=?1 AND bucket<=?2 GROUP BY dev",
         )?;
         let rows = stmt.query_map(
@@ -325,8 +378,21 @@ impl EventDb {
         now: DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
     ) -> Result<Snapshot> {
+        self.snapshot_for_view(now, zone, true)
+    }
+
+    pub fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
+        crate::shortcuts::read_top_for_day(&self.conn, day)
+    }
+
+    pub fn snapshot_for_view(
+        &self,
+        now: DateTime<Local>,
+        zone: crate::timezone::TimeZonePreference,
+        include_shortcuts: bool,
+    ) -> Result<Snapshot> {
         let _tx = self.conn.unchecked_transaction()?;
-        let mut snapshot = self.snapshot(now)?;
+        let mut snapshot = self.snapshot_base(now, include_shortcuts)?;
         crate::timezone::project(
             &self.conn,
             &mut snapshot,
@@ -343,6 +409,49 @@ impl EventDb {
     }
 
     pub fn snapshot(&self, now: DateTime<Local>) -> Result<Snapshot> {
+        self.snapshot_with_shortcuts(now, true)
+    }
+
+    fn snapshot_base(&self, now: DateTime<Local>, include_shortcuts: bool) -> Result<Snapshot> {
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT code,cnt FROM keys ORDER BY cnt DESC,code")?;
+        let physical_keys = stmt
+            .query_map([], |r| {
+                Ok(KeyCount {
+                    code: r.get(0)?,
+                    count: r.get(1)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let top_keys = physical_keys.iter().take(10).cloned().collect();
+        Ok(Snapshot {
+            now: now.to_rfc3339(),
+            shortcuts: include_shortcuts
+                .then(|| crate::shortcuts::read(&self.conn))
+                .transpose()?,
+            lifetime: self.lifetime()?,
+            mouse_buttons: read_mouse_counts(&self.conn, "SELECT code,cnt FROM mouse_buttons")?,
+            windows: [60, 600, 3600, 86400]
+                .into_iter()
+                .map(|s| self.rolling(s, now.timestamp_millis()))
+                .collect::<Result<_>>()?,
+            top_keys,
+            keyboard_stats: KeyboardStats {
+                physical: physical_keys,
+                ..Default::default()
+            },
+            legacy_imported: self.legacy_imported()?,
+            ..Default::default()
+        })
+    }
+
+    fn snapshot_with_shortcuts(
+        &self,
+        now: DateTime<Local>,
+        include_shortcuts: bool,
+    ) -> Result<Snapshot> {
+        let base = self.snapshot_base(now, include_shortcuts)?;
         let today_date = now.date_naive();
         let today_s = today_date.format("%Y-%m-%d").to_string();
         let week_s = (today_date - Days::new(6)).format("%Y-%m-%d").to_string();
@@ -363,7 +472,7 @@ impl EventDb {
         let first_day = days.keys().next().cloned().unwrap_or_default();
         let mut stmt = self
             .conn
-            .prepare("SELECT day,dev,cnt FROM daily WHERE day>=?1 AND day<=?2")?;
+            .prepare_cached("SELECT day,dev,cnt FROM daily WHERE day>=?1 AND day<=?2")?;
         let rows = stmt.query_map(params![first_day, today_s], |r| {
             Ok((
                 r.get::<_, String>(0)?,
@@ -380,7 +489,7 @@ impl EventDb {
         let mut hours = vec![Counts::default(); 24];
         // Native timezone boundaries handle DST's 23/25-hour days.
         let (start, end) = day_bounds(today_date)?;
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.conn.prepare_cached(
             "SELECT bucket,dev,cnt FROM minutes WHERE bucket>=?1 AND bucket<?2
              UNION ALL SELECT bucket,dev,cnt FROM legacy_minutes WHERE bucket>=?1 AND bucket<?2",
         )?;
@@ -400,25 +509,13 @@ impl EventDb {
                 hours[ts.hour() as usize].add(dev, cnt);
             }
         }
-        let mut stmt = self
-            .conn
-            .prepare("SELECT code,cnt FROM keys ORDER BY cnt DESC,code")?;
-        let physical_keys = stmt
-            .query_map([], |r| {
-                Ok(KeyCount {
-                    code: r.get(0)?,
-                    count: r.get(1)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        let top_keys = physical_keys.iter().take(10).cloned().collect();
         // History has a different contract from recent trends: return every recorded
         // day. A new event must never shift a 90-day cutoff past imported history.
         // Send sparse records; the UI fills zero-activity calendar days as needed.
         let mut history_days = BTreeMap::new();
         let mut stmt = self
             .conn
-            .prepare("SELECT day,dev,cnt FROM daily WHERE day<=?1 ORDER BY day")?;
+            .prepare_cached("SELECT day,dev,cnt FROM daily WHERE day<=?1 ORDER BY day")?;
         for row in stmt.query_map([&today_s], |r| {
             Ok((
                 r.get::<_, String>(0)?,
@@ -446,14 +543,10 @@ impl EventDb {
             crate::hourly::Resolution::Minute,
         )?;
         Ok(Snapshot {
-            now: now.to_rfc3339(),
             today,
             week,
-            lifetime: self.lifetime()?,
-            windows: [60, 600, 3600, 86400]
-                .into_iter()
-                .map(|s| self.rolling(s, now.timestamp_millis()))
-                .collect::<Result<_>>()?,
+            hours,
+            hourly,
             days: days
                 .into_iter()
                 .map(|(day, counts)| DayCount { day, counts })
@@ -462,14 +555,7 @@ impl EventDb {
                 .into_iter()
                 .map(|(day, counts)| DayCount { day, counts })
                 .collect(),
-            hours,
-            hourly,
-            top_keys,
-            keyboard_stats: KeyboardStats {
-                physical: physical_keys,
-                ..Default::default()
-            },
-            legacy_imported: self.legacy_imported()?,
+            ..base
         })
     }
 }
@@ -499,6 +585,39 @@ pub(crate) fn first_valid_local_instant<T: TimeZone>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn independent_mouse_buttons_survive_reopening_without_guessing_old_totals() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("buttons.sqlite3");
+        let mut db = EventDb::open(&path).unwrap();
+        // Old independent profiles have a total but did not store button codes.
+        db.conn
+            .execute("UPDATE totals SET cnt=20 WHERE dev=0", [])
+            .unwrap();
+        for code in [1, 1, 2, 3, 5] {
+            db.insert(&[InputEvent {
+                shortcut: None,
+                ts_ms: Local::now().timestamp_millis(),
+                device: Device::Mouse,
+                code,
+            }])
+            .unwrap();
+        }
+        drop(db);
+        let db = EventDb::open(&path).unwrap();
+        let snapshot = db.snapshot(Local::now()).unwrap();
+        assert_eq!(snapshot.lifetime.mouse, 25);
+        assert_eq!(
+            snapshot.mouse_buttons,
+            MouseCounts {
+                left: 2,
+                right: 1,
+                middle: 1,
+                side: 1,
+                other: 0
+            }
+        );
+    }
     use super::*;
     #[derive(Clone)]
     struct MidnightTransition {
@@ -560,6 +679,7 @@ mod tests {
         {
             let mut db = EventDb::open(&path).unwrap();
             db.insert(&[InputEvent {
+                shortcut: None,
                 ts_ms: Local::now().timestamp_millis(),
                 device: Device::Mouse,
                 code: 1,
@@ -602,6 +722,7 @@ mod tests {
             (end + 1, Device::Mouse),
         ] {
             db.insert(&[InputEvent {
+                shortcut: None,
                 ts_ms: stamp,
                 device,
                 code: 0,
@@ -639,6 +760,7 @@ mod tests {
     }
     fn event(ts_ms: i64) -> InputEvent {
         InputEvent {
+            shortcut: None,
             ts_ms,
             device: Device::Keyboard,
             code: 0,

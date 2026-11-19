@@ -92,15 +92,72 @@ const ClickPulseHistory = (() => {
     return Array.from({length: count}, (_, i) => count === 1 ? 0 : Math.round(i * (length - 1) / (count - 1)));
   }
 
-  // A playful keystroke-length comparison, never a measure of typed text.
-  // Pride and Prejudice's English novel body is rounded to700,000 characters;
-  // source and counting method are documented in docs/data-and-privacy.md.
-  function bookComparison(keyboard) {
+  // Approximate English-edition lengths, not a measure of written content.
+  // References and counting method: docs/literary-references.md.
+  const books=Object.freeze([
+    {id:'pride',characters:700000},
+    {id:'alice',characters:140000},
+    {id:'frankenstein',characters:420000},
+    {id:'sherlock',characters:560000},
+    {id:'two_cities',characters:750000},
+    {id:'expectations',characters:990000},
+    {id:'jane_eyre',characters:1020000},
+    {id:'wuthering',characters:640000},
+    {id:'dracula',characters:840000},
+    {id:'moby_dick',characters:1220000},
+    {id:'treasure',characters:360000},
+    {id:'dorian',characters:430000},
+    {id:'time_machine',characters:180000},
+    {id:'war_worlds',characters:340000},
+    {id:'oz',characters:210000},
+    {id:'secret_garden',characters:430000},
+    {id:'tom_sawyer',characters:390000},
+    {id:'huck_finn',characters:570000},
+    {id:'eighty_days',characters:370000},
+    {id:'monte_cristo',characters:2610000},
+  ].map(Object.freeze));
+
+  const phraseCount=5;
+
+  function nextChoice(length, previous, random) {
+    const skip=Number.isInteger(previous)&&previous>=0&&previous<length;
+    const unit=Number.isFinite(random)?Math.max(0,Math.min(random,1-Number.EPSILON)):0;
+    const index=Math.floor(unit*(length-(skip?1:0)));
+    return skip&&index>=previous?index+1:index;
+  }
+
+  function nextBook(previous=-1, random=Math.random()) {
+    return nextChoice(books.length,previous,random);
+  }
+
+  function nextPhrase(previous=-1, random=Math.random()) {
+    return nextChoice(phraseCount,previous,random);
+  }
+
+  function bookComparison(keyboard, index=0) {
     if(!Number.isFinite(keyboard)||keyboard<=0)return null;
-    const characters=700000;
+    const book=books[index]||books[0],characters=book.characters;
     return {characters,copies:Math.round(keyboard/characters*10)/10,opening:keyboard<characters/10};
   }
 
-  return { addDays, weekday, difference, bounds, recordedInRange, calendarDays, years, sections, trend, paginate, countScale, trendLabelIndices, bookComparison };
+  function monthMarkers(days, labelForMonth) {
+    if(!days.length)return [];
+    const first=days[0].day,padding=weekday(first),markers=[];
+    let previous='';
+    for(const {day} of days){
+      const month=day.slice(5,7);
+      if(month===previous)continue;
+      previous=month;
+      const label=labelForMonth(month),left=Math.floor((difference(first,day)+padding)/7)*15;
+      // Reserve enough room for Latin abbreviations and CJK month labels. When
+      // the range begins at month-end, omit that fragment's label, not the next month.
+      const width=Array.from(label).reduce((n,c)=>n+(c.codePointAt(0)>255?12:7),0)+7;
+      if(markers.length && left < markers[markers.length-1].left+markers[markers.length-1].width)markers.pop();
+      markers.push({label,left,width});
+    }
+    return markers;
+  }
+
+  return { addDays, weekday, difference, bounds, recordedInRange, calendarDays, monthMarkers, years, sections, trend, paginate, countScale, trendLabelIndices, books, phraseCount, nextBook, nextPhrase, bookComparison };
 })();
 if (typeof module !== 'undefined') module.exports = ClickPulseHistory;

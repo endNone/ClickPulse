@@ -10,6 +10,12 @@ static LOG_WRITE_LOCK: Mutex<()> = Mutex::new(());
 /// Keep desktop failures available after a normal GUI launch without stderr.
 /// An absent path deliberately keeps excluded/test sessions off the user's log.
 pub fn error(path: Option<&Path>, message: &str) {
+    write_diagnostic(path, "ERROR", message);
+}
+pub fn info(path: Option<&Path>, message: &str) {
+    write_diagnostic(path, "INFO", message);
+}
+fn write_diagnostic(path: Option<&Path>, level: &str, message: &str) {
     // External errors must remain a bounded, single-line record.
     let mut chars = message.chars();
     let mut message: String = chars
@@ -21,7 +27,7 @@ pub fn error(path: Option<&Path>, message: &str) {
         message.push_str("… [truncated]");
     }
     let line = format!(
-        "{} ERROR {message}\n",
+        "{} {level} {message}\n",
         chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
     );
     eprint!("{line}");

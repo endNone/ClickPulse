@@ -35,3 +35,10 @@ mod windows_installation;
 #[cfg_attr(test, allow(dead_code))]
 pub mod capture;
 pub mod linux_input;
+
+pub mod removal;
+
+pub mod shortcuts;
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+pub mod dialogs;

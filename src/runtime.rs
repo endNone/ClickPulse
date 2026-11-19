@@ -37,6 +37,7 @@ pub(crate) enum Command {
         Completion<crate::history_import::ImportReport>,
     ),
     Relocate(PathBuf, PathBuf, PathBuf, Completion<()>),
+    StateChanged,
     Stop,
 }
 
@@ -69,7 +70,7 @@ impl<T> Drop for Completion<T> {
 #[derive(Debug)]
 pub struct Relocation {
     path: PathBuf,
-    lock: std::fs::File,
+    lock: crate::storage::DatabaseLock,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -175,6 +176,8 @@ impl Drop for SportDelivery {
 }
 
 pub(crate) struct SnapshotDelivery {
+    share_day: Option<chrono::NaiveDate>,
+    include_shortcuts: bool,
     timezone: crate::timezone::TimeZonePreference,
     today_period: TodayPeriod,
     capture: Arc<Mutex<CaptureStatus>>,
@@ -251,7 +254,7 @@ impl Drop for SnapshotDelivery {
 }
 
 pub struct Runtime {
-    _instance_lock: std::fs::File,
+    _instance_lock: crate::storage::DatabaseLock,
     tx: Sender<Command>,
     writer: Option<JoinHandle<Result<()>>>,
     capture: Option<JoinHandle<()>>,
@@ -282,25 +285,9 @@ impl Runtime {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)?;
         }
-        let lock_path = if path.exists() {
-            std::fs::canonicalize(path)?
-        } else {
-            let parent = path
-                .parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .unwrap_or_else(|| Path::new("."));
-            std::fs::canonicalize(parent)?.join(path.file_name().unwrap_or_default())
-        }
-        .with_extension("lock");
-        let instance_lock = std::fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(lock_path)?;
-        instance_lock
-            .try_lock()
-            .map_err(|_| anyhow!("ClickPulse is already using this database; open its existing window from the menu bar"))?;
+        let instance_lock = crate::storage::lock_database(path).context(
+            "ClickPulse is already using this database; open its existing window from the menu bar",
+        )?;
         let mut db = if owned {
             Storage::App(CollectorDb::open(path)?)
         } else {
@@ -317,10 +304,15 @@ impl Runtime {
         let stop_capture = Arc::new(AtomicBool::new(false));
         let writer_status = status.clone();
         let writer_stop = stop_capture.clone();
+        let writer_paused = paused.clone();
+        #[cfg(test)]
+        {
+            status.lock().unwrap().listening = true;
+        }
         let writer = thread::Builder::new()
             .name("clickpulse-storage".into())
             .spawn(move || {
-                let result = storage_loop(db, rx, writer_status.clone());
+                let result = storage_loop(db, rx, writer_status.clone(), writer_paused);
                 if let Err(error) = &result {
                     writer_stop.store(true, Ordering::Relaxed);
                     if let Ok(mut status) = writer_status.lock() {
@@ -383,8 +375,17 @@ impl Runtime {
     }
 
     fn source_runtime(path: &Path, paused: bool, probe: bool) -> Result<Self> {
-        let source = LiveSource::open(path)?;
         let lock_path = crate::platform::data_dir()?.join("source-view.lock");
+        Self::source_runtime_with_lock(path, paused, probe, &lock_path)
+    }
+
+    fn source_runtime_with_lock(
+        path: &Path,
+        paused: bool,
+        probe: bool,
+        lock_path: &Path,
+    ) -> Result<Self> {
+        let source = LiveSource::open(path)?;
         std::fs::create_dir_all(lock_path.parent().unwrap())?;
         let instance_lock = std::fs::OpenOptions::new()
             .create(true)
@@ -418,7 +419,7 @@ impl Runtime {
         #[cfg(any(not(target_os = "macos"), test))]
         let capture = None;
         Ok(Self {
-            _instance_lock: instance_lock,
+            _instance_lock: instance_lock.into(),
             tx,
             writer: Some(writer),
             capture,
@@ -469,7 +470,26 @@ impl Runtime {
         timezone: crate::timezone::TimeZonePreference,
         reply: impl FnOnce(Result<String>) + Send + 'static,
     ) -> Result<()> {
-        self.queue_snapshot(timezone, None, reply)
+        self.request_snapshot_for_view(timezone, true, reply)
+    }
+
+    pub fn request_snapshot_for_view(
+        &self,
+        timezone: crate::timezone::TimeZonePreference,
+        include_shortcuts: bool,
+        reply: impl FnOnce(Result<String>) + Send + 'static,
+    ) -> Result<()> {
+        self.queue_snapshot(timezone, None, include_shortcuts, None, reply)
+    }
+
+    /// Share cards request only the selected day's leading chord, never the full ranking.
+    pub fn request_share_snapshot(
+        &self,
+        timezone: crate::timezone::TimeZonePreference,
+        day: chrono::NaiveDate,
+        reply: impl FnOnce(Result<String>) + Send + 'static,
+    ) -> Result<()> {
+        self.queue_snapshot(timezone, None, false, Some(day), reply)
     }
 
     pub fn request_mini_snapshot(
@@ -478,16 +498,20 @@ impl Runtime {
         period: TodayPeriod,
         reply: impl FnOnce(Result<String>) + Send + 'static,
     ) -> Result<()> {
-        self.queue_snapshot(timezone, Some(period), reply)
+        self.queue_snapshot(timezone, Some(period), false, None, reply)
     }
 
     fn queue_snapshot(
         &self,
         timezone: crate::timezone::TimeZonePreference,
         mini: Option<TodayPeriod>,
+        include_shortcuts: bool,
+        share_day: Option<chrono::NaiveDate>,
         reply: impl FnOnce(Result<String>) + Send + 'static,
     ) -> Result<()> {
         let delivery = SnapshotDelivery {
+            share_day,
+            include_shortcuts,
             timezone,
             today_period: mini.unwrap_or_default(),
             capture: self.status.clone(),
@@ -590,13 +614,7 @@ impl Runtime {
             !output.exists(),
             "Destination already contains events.sqlite3; select another folder or import that database"
         );
-        let lock = std::fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(output.with_extension("lock"))?;
-        lock.try_lock()
+        let lock = crate::storage::lock_database(&output)
             .context("Another ClickPulse instance is using the selected folder")?;
         self.tx
             .try_send(Command::Relocate(
@@ -633,6 +651,8 @@ impl Runtime {
 
     pub fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::Relaxed);
+        // Wake an idle source/recorder; entering pause must not wait for a UI refresh.
+        let _ = self.tx.try_send(Command::StateChanged);
     }
 
     pub fn set_ignore_software_input(&self, ignore: bool) {
@@ -704,95 +724,96 @@ fn source_loop_inner(
     status: Arc<Mutex<CaptureStatus>>,
     probe: bool,
 ) -> Result<()> {
-    let mut cached: Option<(String, Snapshot)> = None;
-    let mut mini_cached: Option<(String, TodayPeriod, MiniCounts)> = None;
+    let mut frozen: Option<Result<crate::source::FrozenSource, String>> = None;
+    let mut cached: Option<(String, bool, Snapshot)> = None;
     while let Ok(command) = rx.recv() {
+        if matches!(command, Command::Stop) {
+            break;
+        }
+        if paused.load(Ordering::Relaxed) {
+            if frozen.is_none() {
+                frozen = Some(source.freeze().map_err(|error| format!("{error:#}")));
+                cached = None;
+            }
+        } else {
+            frozen = None;
+            cached = None;
+        }
+        let now = frozen
+            .as_ref()
+            .and_then(|r| r.as_ref().ok())
+            .map_or_else(Local::now, |copy| copy.now);
+        let reader = || -> Result<&LiveSource> {
+            match &frozen {
+                Some(Ok(copy)) => Ok(&copy.source),
+                Some(Err(error)) => Err(anyhow!("Cannot freeze source: {error}")),
+                None => Ok(&source),
+            }
+        };
+        let update_status = |error: Option<&anyhow::Error>| -> Result<()> {
+            let mut current = status
+                .lock()
+                .map_err(|_| anyhow!("Source status is unavailable"))?;
+            if !probe {
+                current.listening = source
+                    .is_recording(Local::now().timestamp_millis())
+                    .unwrap_or(false);
+            }
+            if !probe || error.is_some() || current.error_code == Some("error.source") {
+                current.error_code = error.map(|_| "error.source");
+                current.error = error.map(|e| format!("Live data read failed: {e:#}"));
+            }
+            Ok(())
+        };
         match command {
-            Command::SportSample(delivery) => delivery.complete(source.lifetime()),
+            Command::StateChanged => {
+                update_status(reader().err().as_ref())?;
+            }
+            Command::SportSample(delivery) => {
+                delivery.complete(reader().and_then(LiveSource::lifetime))
+            }
             Command::MiniSnapshot(delivery) => {
-                let now = Local::now();
-                let key = delivery.timezone.cache_key();
-                let paused_counts = if paused.load(Ordering::Relaxed) {
-                    mini_cached
-                        .as_ref()
-                        .filter(|(zone, period, _)| {
-                            *zone == key && *period == delivery.today_period
-                        })
-                        .map(|(_, _, counts)| *counts)
-                } else {
-                    None
-                };
-                let result = paused_counts
-                    .map(Ok)
-                    .unwrap_or_else(|| match delivery.today_period {
-                        TodayPeriod::CalendarDay => source
-                            .today_in_timezone(now, delivery.timezone)
-                            .map(|counts| (counts, false)),
-                        TodayPeriod::Rolling24h => source
-                            .rolling_day(now)
-                            .map(|window| (window.counts, window.approximate)),
-                    });
-                if let Ok(counts) = result.as_ref() {
-                    mini_cached = Some((key, delivery.today_period, *counts));
-                    if !paused.load(Ordering::Relaxed) {
-                        cached = None;
-                    }
-                }
-                let mut current = status
-                    .lock()
-                    .map_err(|_| anyhow!("Source status is unavailable"))?;
-                if !probe {
-                    current.listening =
-                        source.is_recording(now.timestamp_millis()).unwrap_or(false);
-                }
-                if !probe || result.is_err() {
-                    current.error_code = result.as_ref().err().map(|_| "error.source");
-                    current.error = result
-                        .as_ref()
-                        .err()
-                        .map(|e| format!("Live data read failed: {e:#}"));
-                }
-                drop(current);
+                let result = reader().and_then(|source| match delivery.today_period {
+                    TodayPeriod::CalendarDay => source
+                        .today_in_timezone(now, delivery.timezone)
+                        .map(|counts| (counts, false)),
+                    TodayPeriod::Rolling24h => source
+                        .rolling_day(now)
+                        .map(|window| (window.counts, window.approximate)),
+                });
+                update_status(result.as_ref().err())?;
                 delivery.complete_mini(result);
             }
             Command::Snapshot(_) | Command::SnapshotAsync(_) => {
-                let now = Local::now();
-                let timezone = match &command {
-                    Command::SnapshotAsync(delivery) => delivery.timezone,
-                    _ => Default::default(),
+                let (timezone, include_shortcuts) = match &command {
+                    Command::SnapshotAsync(delivery) => {
+                        (delivery.timezone, delivery.include_shortcuts)
+                    }
+                    _ => (Default::default(), true),
                 };
                 let cache_key = timezone.cache_key();
-                let result = if paused.load(Ordering::Relaxed)
-                    && let Some((cached_zone, stats)) = &cached
-                    && *cached_zone == cache_key
+                let result = if let Some((zone, shortcuts, stats)) = &cached
+                    && *zone == cache_key
+                    && *shortcuts == include_shortcuts
                 {
                     Ok(stats.clone())
                 } else {
-                    source.snapshot_in_timezone(now, timezone)
+                    reader().and_then(|s| s.snapshot_for_view(now, timezone, include_shortcuts))
                 };
-                if let Ok(stats) = &result {
-                    mini_cached = Some((
-                        cache_key.clone(),
-                        TodayPeriod::CalendarDay,
-                        (stats.today, false),
-                    ));
-                    cached = Some((cache_key, stats.clone()));
+                if frozen.is_some()
+                    && let Ok(stats) = &result
+                {
+                    cached = Some((cache_key, include_shortcuts, stats.clone()));
                 }
-                let mut current = status
-                    .lock()
-                    .map_err(|_| anyhow!("Source status is unavailable"))?;
-                if !probe {
-                    current.listening =
-                        source.is_recording(now.timestamp_millis()).unwrap_or(false);
-                }
-                if !probe || result.is_err() {
-                    current.error_code = result.is_err().then_some("error.source");
-                    current.error = result
-                        .as_ref()
-                        .err()
-                        .map(|e| format!("Live data read failed: {e:#}"));
-                }
-                drop(current);
+                let result = result.and_then(|mut stats| {
+                    if let Command::SnapshotAsync(delivery) = &command
+                        && let Some(day) = delivery.share_day
+                    {
+                        stats.share_shortcut = Some(reader()?.share_shortcut(day)?);
+                    }
+                    Ok(stats)
+                });
+                update_status(result.as_ref().err())?;
                 match command {
                     Command::Snapshot(reply) => {
                         let _ = reply.send(result);
@@ -802,18 +823,18 @@ fn source_loop_inner(
                 }
             }
             Command::Import(_, _, reply) => {
-                reply.complete(Err(anyhow!("Read-only source cannot import history")));
+                reply.complete(Err(anyhow!("Read-only source cannot import history")))
             }
             Command::Relocate(_, _, _, reply) => {
-                reply.complete(Err(anyhow!("Read-only source cannot change storage")));
+                reply.complete(Err(anyhow!("Read-only source cannot change storage")))
             }
-            Command::Stop => break,
-            Command::Input(_) if probe => {} // Probe only: the old collector still owns persistence.
+            Command::Input(_) if probe => {}
             Command::Input(_) => {
                 return Err(anyhow!(
                     "Read-only source mode must not receive captured input events"
                 ));
             }
+            Command::Stop => unreachable!(),
         }
     }
     Ok(())
@@ -821,7 +842,12 @@ fn source_loop_inner(
 
 #[cfg(test)]
 fn writer_loop(db: EventDb, rx: Receiver<Command>) -> Result<()> {
-    storage_loop(Storage::Independent(db), rx, Default::default())
+    storage_loop(
+        Storage::Independent(db),
+        rx,
+        Default::default(),
+        Default::default(),
+    )
 }
 
 enum Storage {
@@ -872,14 +898,21 @@ impl Storage {
             Self::App(db) => db.snapshot(now),
         }
     }
-    fn snapshot_in_timezone(
+    fn snapshot_for_view(
         &self,
         now: chrono::DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
+        include_shortcuts: bool,
     ) -> Result<Snapshot> {
         match self {
-            Self::Independent(db) => db.snapshot_in_timezone(now, zone),
-            Self::App(db) => db.snapshot_in_timezone(now, zone),
+            Self::Independent(db) => db.snapshot_for_view(now, zone, include_shortcuts),
+            Self::App(db) => db.snapshot_for_view(now, zone, include_shortcuts),
+        }
+    }
+    fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
+        match self {
+            Self::Independent(db) => db.share_shortcut(day),
+            Self::App(db) => db.share_shortcut(day),
         }
     }
     fn prune_rolling_cache(&mut self, now: i64) -> Result<()> {
@@ -888,10 +921,13 @@ impl Storage {
             Self::App(db) => db.prune_rolling_cache(now),
         }
     }
-    fn log_status(&self, log: &mut StatusLog) -> Result<()> {
+    fn log_status(&self, log: &mut StatusLog, recording: bool) -> Result<()> {
         if let Self::App(db) = self {
             let now = Local::now();
-            db.heartbeat(now.timestamp_millis())?;
+            if recording || log.last_recording != Some(false) {
+                db.heartbeat(if recording { now.timestamp_millis() } else { 0 })?;
+                log.last_recording = Some(recording);
+            }
             let stats = db.activity_counts(now)?;
             let windows = stats
                 .windows
@@ -912,6 +948,7 @@ impl Storage {
 
 #[derive(Default)]
 struct StatusLog {
+    last_recording: Option<bool>,
     path: Option<PathBuf>,
     failure_reported: bool,
     last_written: Option<String>,
@@ -1007,6 +1044,7 @@ impl Drop for DataWorker {
 /// draining capture into memory, so a slow copy cannot fill the bounded input
 /// queue and stop recording. Other requests wait until the connection returns.
 struct StorageWorker {
+    flush_timeout: Duration,
     helper: DataWorker,
     db: Option<Storage>,
     job: Option<Receiver<FinishedJob>>,
@@ -1016,10 +1054,9 @@ struct StorageWorker {
 
 impl StorageWorker {
     fn flush(&mut self) -> Result<()> {
-        if let Some(db) = &mut self.db {
-            db.insert(&self.batch)?;
-            self.batch.clear();
-        }
+        let db = self.db.as_mut().context("Storage is unavailable")?;
+        db.insert(&self.batch)?;
+        self.batch.clear();
         Ok(())
     }
 
@@ -1027,15 +1064,23 @@ impl StorageWorker {
         &mut self,
         run: impl FnOnce(&mut Storage) -> Box<dyn FnOnce() + Send> + Send + 'static,
     ) -> Result<()> {
-        let db = self.db.take().context("Storage is unavailable")?;
-        db.busy_timeout(Duration::from_secs(5))?;
-        let (tx, rx) = bounded(1);
-        self.helper
+        let sender = self
+            .helper
             .tx
             .as_ref()
-            .context("Data worker is unavailable")?
-            .send((db, Box::new(run), tx))
-            .map_err(|_| anyhow!("Data worker stopped"))?;
+            .context("Data worker is unavailable")?;
+        self.db
+            .as_ref()
+            .context("Storage is unavailable")?
+            .busy_timeout(Duration::from_secs(5))?;
+        let db = self.db.take().context("Storage is unavailable")?;
+        let (tx, rx) = bounded(1);
+        if let Err(error) = sender.send((db, Box::new(run), tx)) {
+            // A failed handoff must not strand accepted input without a writer.
+            self.db = Some(error.0.0);
+            self.db.as_ref().unwrap().busy_timeout(self.flush_timeout)?;
+            return Err(anyhow!("Data worker stopped"));
+        }
         self.job = Some(rx);
         Ok(())
     }
@@ -1054,7 +1099,14 @@ impl StorageWorker {
             // Calendar regrouping may scan old minute buckets. Keep draining
             // accepted input while this read owns the database on a helper.
             Command::SnapshotAsync(delivery) => self.spawn_job(move |db| {
-                let result = db.snapshot_in_timezone(Local::now(), delivery.timezone);
+                let result = db
+                    .snapshot_for_view(Local::now(), delivery.timezone, delivery.include_shortcuts)
+                    .and_then(|mut stats| {
+                        if let Some(day) = delivery.share_day {
+                            stats.share_shortcut = Some(db.share_shortcut(day)?);
+                        }
+                        Ok(stats)
+                    });
                 Box::new(move || delivery.complete(result))
             })?,
             Command::MiniSnapshot(delivery) => self.spawn_job(move |db| {
@@ -1076,7 +1128,7 @@ impl StorageWorker {
                 Box::new(move || reply.complete(result))
             })?,
             Command::Input(event) => self.batch.push(event),
-            Command::Stop => {}
+            Command::StateChanged | Command::Stop => {}
         }
         Ok(())
     }
@@ -1086,11 +1138,12 @@ impl StorageWorker {
         let (db, reply) = finished;
         self.db = Some(db);
         self.job = None;
-        self.db
+        let input_result = self
+            .db
             .as_ref()
             .unwrap()
-            .busy_timeout(Duration::from_millis(100))?;
-        let input_result = self.flush();
+            .busy_timeout(self.flush_timeout)
+            .and_then(|()| self.flush());
         // The job has already committed or rolled back. An unrelated buffered
         // input write failure must not turn a committed import into "failed".
         reply();
@@ -1171,6 +1224,7 @@ fn reject_while_retrying(command: Command) {
         Command::SportSample(reply) => reply.complete(Err(error())),
         Command::Import(_, _, reply) => reply.complete(Err(error())),
         Command::Relocate(_, _, _, reply) => reply.complete(Err(error())),
+        Command::StateChanged => {}
         Command::Input(_) | Command::Stop => unreachable!(),
     }
 }
@@ -1179,11 +1233,13 @@ fn storage_loop(
     db: Storage,
     rx: Receiver<Command>,
     status: Arc<Mutex<CaptureStatus>>,
+    paused: Arc<AtomicBool>,
 ) -> Result<()> {
     // Short busy waits let the loop drain capture while another process holds a
     // write lock. User-requested data jobs restore their normal five-second wait.
     db.busy_timeout(Duration::from_millis(100))?;
     let mut worker = StorageWorker {
+        flush_timeout: Duration::from_millis(100),
         helper: DataWorker::new()?,
         db: Some(db),
         job: None,
@@ -1219,9 +1275,14 @@ fn storage_loop(
         match select.select_timeout(wait) {
             Ok(operation) if operation.index() == command_index => match operation.recv(&rx) {
                 Ok(Command::Input(event)) => worker.batch.push(event),
+                Ok(Command::StateChanged) => heartbeat_due = true,
                 Ok(Command::Stop) | Err(_) => {
                     // Requests queued before Stop still complete, as before.
+                    worker.flush_timeout = Duration::from_secs(5);
                     worker.wait_for_job()?;
+                    if let Some(db) = &worker.db {
+                        db.busy_timeout(worker.flush_timeout)?;
+                    }
                     worker.flush()?;
                     if let Some(Storage::App(db)) = &worker.db {
                         db.heartbeat(0)?;
@@ -1247,6 +1308,7 @@ fn storage_loop(
         }
         // Periodic database work waits while a job owns the connection.
         if worker.db.is_none() {
+            anyhow::ensure!(worker.job.is_some(), "Storage connection was lost");
             continue;
         }
         retry.limit_buffer(&status, worker.batch.len());
@@ -1267,8 +1329,16 @@ fn storage_loop(
                 db.prune_rolling_cache(Local::now().timestamp_millis())?;
                 cache_cleanup = Instant::now();
             }
-            if heartbeat_due || log.elapsed() >= crate::collector::HEARTBEAT_INTERVAL {
-                db.log_status(&mut status_log)?;
+            let recording = !paused.load(Ordering::Relaxed)
+                && status
+                    .lock()
+                    .map(|s| s.listening && !s.storage_blocked.load(Ordering::Relaxed))
+                    .unwrap_or(false);
+            if heartbeat_due
+                || status_log.last_recording != Some(recording)
+                || log.elapsed() >= crate::collector::HEARTBEAT_INTERVAL
+            {
+                db.log_status(&mut status_log, recording)?;
                 heartbeat_due = false;
                 log = Instant::now();
             }
@@ -1307,6 +1377,7 @@ mod tests {
             runtime
                 .tx
                 .send(Command::Input(InputEvent {
+                    shortcut: None,
                     ts_ms: Local::now().timestamp_millis(),
                     device: crate::input::Device::Keyboard,
                     code: 4,
@@ -1397,6 +1468,7 @@ mod tests {
             runtime
                 .tx
                 .send(Command::Input(InputEvent {
+                    shortcut: None,
                     ts_ms: Local::now().timestamp_millis(),
                     device: crate::input::Device::Keyboard,
                     code: 4,
@@ -1430,6 +1502,7 @@ mod tests {
         runtime
             .tx
             .send(Command::Input(InputEvent {
+                shortcut: None,
                 ts_ms: now.timestamp_millis(),
                 device: crate::input::Device::Keyboard,
                 code: 4,
@@ -1496,6 +1569,7 @@ mod tests {
                 db.insert(
                     &(0..28)
                         .map(|h| InputEvent {
+                            shortcut: None,
                             ts_ms: (now - chrono::Duration::hours(h)).timestamp_millis(),
                             device: Device::Keyboard,
                             code: 4,
@@ -1507,7 +1581,7 @@ mod tests {
                     zone,
                     crate::timezone::TimeZonePreference::Named("Asia/Shanghai".parse().unwrap()),
                 ] {
-                    let full = db.snapshot_in_timezone(now, zone).unwrap();
+                    let full = db.snapshot_for_view(now, zone, true).unwrap();
                     let day = db.mini_counts(now, zone, TodayPeriod::CalendarDay).unwrap();
                     assert_eq!(day.0, full.today);
                     let rolling = db.mini_counts(now, zone, TodayPeriod::Rolling24h).unwrap();
@@ -1553,13 +1627,20 @@ mod tests {
             .unwrap();
         let events = [now.timestamp_millis(), midnight.timestamp_millis() - 60_000].map(|ts_ms| {
             InputEvent {
+                shortcut: None,
                 ts_ms,
                 device: Device::Keyboard,
                 code: 4,
             }
         });
         writer.insert(&events).unwrap();
-        let mut runtime = Runtime::start_source(&path, true).unwrap();
+        let mut runtime = Runtime::source_runtime_with_lock(
+            &path,
+            true,
+            false,
+            &temp.path().join("source-view.lock"),
+        )
+        .unwrap();
         let read = |period| {
             let (tx, rx) = bounded(1);
             runtime
@@ -1576,14 +1657,92 @@ mod tests {
         assert_eq!(read(TodayPeriod::Rolling24h), 2);
         writer.insert(&events[..1]).unwrap();
         assert_eq!(read(TodayPeriod::Rolling24h), 2);
+        assert_eq!(read(TodayPeriod::CalendarDay), 1);
+        runtime.set_paused(false);
         assert_eq!(read(TodayPeriod::CalendarDay), 2);
         runtime.shutdown().unwrap();
+    }
+
+    #[test]
+    fn inactive_recorder_clears_heartbeat_once_without_idle_writes() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("heartbeat.sqlite3");
+        let storage = Storage::App(CollectorDb::open(&path).unwrap());
+        let observer = rusqlite::Connection::open(&path).unwrap();
+        let version = || {
+            observer
+                .query_row("PRAGMA data_version", [], |r| r.get::<_, i64>(0))
+                .unwrap()
+        };
+        let mut log = StatusLog::default();
+        storage.log_status(&mut log, true).unwrap();
+        assert!(
+            LiveSource::open(&path)
+                .unwrap()
+                .is_recording(Local::now().timestamp_millis())
+                .unwrap()
+        );
+        storage.log_status(&mut log, false).unwrap();
+        assert!(
+            !LiveSource::open(&path)
+                .unwrap()
+                .is_recording(Local::now().timestamp_millis())
+                .unwrap()
+        );
+        let idle = version();
+        for _ in 0..3 {
+            storage.log_status(&mut log, false).unwrap();
+        }
+        assert_eq!(version(), idle);
+        storage.log_status(&mut log, true).unwrap();
+        assert!(version() > idle);
+    }
+
+    #[test]
+    fn failed_data_handoff_retains_connection_and_pending_events() {
+        let temp = tempfile::tempdir().unwrap();
+        let (tx, rx) = bounded::<QueuedJob>(1);
+        drop(rx);
+        let mut worker = StorageWorker {
+            flush_timeout: Duration::from_millis(100),
+            helper: DataWorker {
+                tx: Some(tx),
+                thread: None,
+            },
+            db: Some(Storage::Independent(
+                EventDb::open(&temp.path().join("handoff.sqlite3")).unwrap(),
+            )),
+            job: None,
+            deferred: Default::default(),
+            batch: vec![InputEvent {
+                shortcut: None,
+                ts_ms: chrono::Utc::now().timestamp_millis(),
+                device: crate::input::Device::Keyboard,
+                code: 8,
+            }],
+        };
+        assert!(
+            worker
+                .spawn_job(|_| Box::new(|| panic!("disconnected job ran")))
+                .is_err()
+        );
+        assert!(worker.db.is_some());
+        assert!(worker.job.is_none());
+        assert_eq!(worker.batch.len(), 1);
+        worker.flush().unwrap();
+        assert_eq!(worker.db.as_ref().unwrap().lifetime().unwrap().keyboard, 1);
+        worker.helper.tx = None;
+        assert!(worker.spawn_job(|_| Box::new(|| {})).is_err());
+        assert!(worker.db.is_some());
+        worker.db = None;
+        assert!(worker.flush().is_err());
     }
 
     #[test]
     fn consecutive_data_jobs_reuse_one_thread_and_return_the_connection() {
         let temp = tempfile::tempdir().unwrap();
         let mut worker = StorageWorker {
+            flush_timeout: Duration::from_millis(100),
             helper: DataWorker::new().unwrap(),
             db: Some(Storage::Independent(
                 EventDb::open(&temp.path().join("jobs.sqlite3")).unwrap(),
@@ -1629,6 +1788,7 @@ mod tests {
                 .tx
                 .send_timeout(
                     Command::Input(InputEvent {
+                        shortcut: None,
                         ts_ms: Local::now().timestamp_millis(),
                         device: crate::input::Device::Mouse,
                         code: 1,
@@ -1687,6 +1847,7 @@ mod tests {
         let path = temp.path().join("committed.sqlite3");
         let mut db = CollectorDb::open(&path).unwrap();
         db.insert(&[InputEvent {
+            shortcut: None,
             ts_ms: Local::now().timestamp_millis(),
             device: crate::input::Device::Keyboard,
             code: 0,
@@ -1698,11 +1859,13 @@ mod tests {
             let _ = tx.send(result);
         });
         let mut worker = StorageWorker {
+            flush_timeout: Duration::from_millis(100),
             helper: DataWorker::new().expect("create data worker"),
             db: None,
             job: None,
             deferred: Default::default(),
             batch: vec![InputEvent {
+                shortcut: None,
                 ts_ms: Local::now().timestamp_millis(),
                 device: crate::input::Device::Mouse,
                 code: 1,
@@ -1748,6 +1911,7 @@ mod tests {
                 .tx
                 .send_timeout(
                     Command::Input(InputEvent {
+                        shortcut: None,
                         ts_ms: Local::now().timestamp_millis(),
                         device: crate::input::Device::Mouse,
                         code: 1,
@@ -1802,6 +1966,7 @@ mod tests {
         runtime
             .tx
             .send(Command::Input(InputEvent {
+                shortcut: None,
                 ts_ms: now,
                 device: crate::input::Device::Keyboard,
                 code: 0,
@@ -1823,6 +1988,7 @@ mod tests {
         runtime
             .tx
             .send(Command::Input(InputEvent {
+                shortcut: None,
                 ts_ms: now + 1,
                 device: crate::input::Device::Mouse,
                 code: 1,
@@ -1857,6 +2023,7 @@ mod tests {
         let at = Local::now().timestamp_millis() - 120_000;
         source_db
             .insert(&[InputEvent {
+                shortcut: None,
                 ts_ms: at,
                 device: crate::input::Device::Keyboard,
                 code: 0,
@@ -1866,6 +2033,7 @@ mod tests {
         runtime
             .tx
             .send(Command::Input(InputEvent {
+                shortcut: None,
                 ts_ms: at,
                 device: crate::input::Device::Mouse,
                 code: 1,
@@ -1883,6 +2051,7 @@ mod tests {
         runtime
             .tx
             .send(Command::Input(InputEvent {
+                shortcut: None,
                 ts_ms: at,
                 device: crate::input::Device::Mouse,
                 code: 1,
@@ -1908,6 +2077,7 @@ mod tests {
             runtime
                 .tx
                 .send(Command::Input(InputEvent {
+                    shortcut: None,
                     ts_ms: Local::now().timestamp_millis(),
                     device,
                     code: 1,
@@ -1969,6 +2139,7 @@ mod tests {
             runtime
                 .tx
                 .send(Command::Input(InputEvent {
+                    shortcut: None,
                     ts_ms: Local::now().timestamp_millis(),
                     device: Device::Keyboard,
                     code: 0,
@@ -2026,13 +2197,14 @@ mod tests {
     fn async_snapshot_returns_without_waiting_on_a_full_queue() {
         let (tx, rx) = bounded(1);
         tx.send(Command::Input(InputEvent {
+            shortcut: None,
             ts_ms: 0,
             device: Device::Mouse,
             code: 1,
         }))
         .unwrap();
         let runtime = Runtime {
-            _instance_lock: tempfile::tempfile().unwrap(),
+            _instance_lock: tempfile::tempfile().unwrap().into(),
             tx,
             writer: None,
             capture: None,
@@ -2068,6 +2240,7 @@ mod tests {
         runtime
             .tx
             .send(Command::Input(InputEvent {
+                shortcut: None,
                 ts_ms: Local::now().timestamp_millis(),
                 device: Device::Keyboard,
                 code: 0,
@@ -2184,13 +2357,14 @@ mod tests {
         };
         let mut db = Storage::App(CollectorDb::open(&path).unwrap());
         db.insert(&[InputEvent {
+            shortcut: None,
             ts_ms: Local::now().timestamp_millis(),
             device: Device::Mouse,
             code: 1,
         }])
         .unwrap();
         let before_status = Local::now().timestamp_millis();
-        db.log_status(&mut log).unwrap();
+        db.log_status(&mut log, true).unwrap();
         assert!(log.failure_reported);
         assert_eq!(db.snapshot(Local::now()).unwrap().lifetime.mouse, 1);
         let heartbeat = rusqlite::Connection::open(&path).unwrap();
@@ -2203,7 +2377,7 @@ mod tests {
             .unwrap();
         assert!(last_heartbeat >= before_status);
         std::fs::remove_dir(blocked_archive).unwrap();
-        db.log_status(&mut log).unwrap();
+        db.log_status(&mut log, true).unwrap();
         assert!(!log.failure_reported);
         assert!(
             std::fs::read_to_string(log_path)
@@ -2223,19 +2397,20 @@ mod tests {
             ..Default::default()
         };
         let mut db = Storage::App(CollectorDb::open(&path).unwrap());
-        db.log_status(&mut log).unwrap();
+        db.log_status(&mut log, true).unwrap();
         assert!(log.failure_reported);
         let event = InputEvent {
+            shortcut: None,
             ts_ms: Local::now().timestamp_millis(),
             device: Device::Mouse,
             code: 1,
         };
         db.insert(&[event]).unwrap();
         assert_eq!(db.snapshot(Local::now()).unwrap().lifetime.mouse, 1);
-        db.log_status(&mut log).unwrap();
+        db.log_status(&mut log, true).unwrap();
         assert!(log.failure_reported);
         std::fs::remove_dir(&log_path).unwrap();
-        db.log_status(&mut log).unwrap();
+        db.log_status(&mut log, true).unwrap();
         assert!(!log.failure_reported);
         assert!(
             std::fs::read_to_string(log_path)
@@ -2263,6 +2438,7 @@ mod tests {
         });
         for _ in 0..257 {
             tx.send(Command::Input(InputEvent {
+                shortcut: None,
                 ts_ms: 123456,
                 device: Device::Keyboard,
                 code: 0,
@@ -2280,6 +2456,161 @@ mod tests {
                 .unwrap(),
             7
         );
+    }
+
+    #[test]
+    fn paused_source_cache_respects_shortcut_scope_on_navigation() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("source.sqlite3");
+        let writer = CollectorDb::open(&path).unwrap();
+        drop(writer);
+        let writer = rusqlite::Connection::open(&path).unwrap();
+        crate::shortcuts::insert(
+            &writer,
+            crate::shortcuts::Chord {
+                key: 8,
+                modifiers: 1,
+            },
+            Local::now().date_naive(),
+        )
+        .unwrap();
+        let source = LiveSource::open(&path).unwrap();
+        let (tx, rx) = bounded(4);
+        let paused = Arc::new(AtomicBool::new(true));
+        let capture = Arc::new(Mutex::new(CaptureStatus::default()));
+        let worker_paused = paused.clone();
+        let worker_capture = capture.clone();
+        let worker = thread::spawn(move || {
+            source_loop_inner(source, rx, worker_paused, worker_capture, true)
+        });
+        let today = Local::now().date_naive();
+        for (include_shortcuts, share_day) in [
+            (false, None),
+            (true, None),
+            (false, Some(today)),
+            (false, Some(today.pred_opt().unwrap())),
+            (false, Some(today)),
+            (false, None),
+            (true, None),
+        ] {
+            let (reply, result) = bounded(1);
+            tx.send(Command::SnapshotAsync(SnapshotDelivery {
+                share_day,
+                include_shortcuts,
+                timezone: Default::default(),
+                today_period: Default::default(),
+                capture: capture.clone(),
+                paused: paused.clone(),
+                path: path.clone(),
+                source_mode: true,
+                setup_pending: true,
+                database_mode: DatabaseMode::Source,
+                reply: Some(Box::new(move |value| {
+                    reply.send(value).unwrap();
+                })),
+            }))
+            .unwrap();
+            let value: serde_json::Value = serde_json::from_str(
+                &result
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(value.get("share_shortcut").is_some(), share_day.is_some());
+            if let Some(day) = share_day {
+                assert_eq!(value["share_shortcut"]["day"], day.to_string());
+                if day == today {
+                    assert_eq!(value["share_shortcut"]["top"]["count"], 1);
+                } else {
+                    assert!(value["share_shortcut"]["top"].is_null());
+                }
+            }
+            assert_eq!(value.get("shortcuts").is_some(), include_shortcuts);
+            if include_shortcuts {
+                assert_eq!(value["shortcuts"][0]["count"], 1);
+            }
+        }
+        tx.send(Command::Stop).unwrap();
+        worker.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn async_writer_omits_shortcuts_only_when_the_view_does_not_request_them() {
+        let temp = tempfile::tempdir().unwrap();
+        for owned in [false, true] {
+            let path = temp.path().join(if owned {
+                "owned.sqlite3"
+            } else {
+                "independent.sqlite3"
+            });
+            let mut runtime = if owned {
+                Runtime::start_owned(&path, true)
+            } else {
+                Runtime::start(&path, None, true)
+            }
+            .unwrap();
+            runtime
+                .tx
+                .send(Command::Input(InputEvent {
+                    ts_ms: Local::now().timestamp_millis(),
+                    device: Device::Keyboard,
+                    code: 8,
+                    shortcut: Some(crate::shortcuts::Chord {
+                        key: 8,
+                        modifiers: 1,
+                    }),
+                }))
+                .unwrap();
+            for include in [false, true, false, true] {
+                let (tx, rx) = bounded(1);
+                runtime
+                    .request_snapshot_for_view(Default::default(), include, move |r| {
+                        tx.send(r).unwrap();
+                    })
+                    .unwrap();
+                let value: serde_json::Value = serde_json::from_str(
+                    &rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(),
+                )
+                .unwrap();
+                assert_eq!(value["lifetime"]["keyboard"], 1);
+                assert_eq!(value.get("shortcuts").is_some(), include);
+                if include {
+                    assert_eq!(value["shortcuts"][0]["count"], 1);
+                }
+            }
+            let today = Local::now().date_naive();
+            for day in [today, today.pred_opt().unwrap(), today] {
+                let (tx, rx) = bounded(1);
+                runtime
+                    .request_share_snapshot(Default::default(), day, move |r| {
+                        tx.send(r).unwrap();
+                    })
+                    .unwrap();
+                let value: serde_json::Value = serde_json::from_str(
+                    &rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(),
+                )
+                .unwrap();
+                assert!(value.get("shortcuts").is_none());
+                assert_eq!(value["share_shortcut"]["day"], day.to_string());
+                if day == today {
+                    assert_eq!(value["share_shortcut"]["top"]["count"], 1);
+                } else {
+                    assert!(value["share_shortcut"]["top"].is_null());
+                }
+            }
+            let (tx, rx) = bounded(1);
+            runtime
+                .request_snapshot_for_view(Default::default(), false, move |r| {
+                    tx.send(r).unwrap();
+                })
+                .unwrap();
+            let value: serde_json::Value =
+                serde_json::from_str(&rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap())
+                    .unwrap();
+            assert!(value.get("share_shortcut").is_none());
+            runtime.shutdown().unwrap();
+        }
     }
 
     #[test]
@@ -2307,6 +2638,8 @@ mod tests {
         };
         assert_eq!(snapshot().lifetime.total(), 3);
         paused.store(true, Ordering::Relaxed);
+        tx.send(Command::StateChanged).unwrap();
+        assert_eq!(snapshot().lifetime.total(), 3); // pause has reached the worker
         writer
             .execute("INSERT INTO events VALUES(3,0,1,2)", [])
             .unwrap();
@@ -2315,6 +2648,64 @@ mod tests {
         assert_eq!(snapshot().lifetime.total(), 5);
         tx.send(Command::Stop).unwrap();
         worker.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn paused_source_keeps_mini_share_and_changed_scope_on_one_copy() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("source.sqlite3");
+        let now = Local::now();
+        let mut writer = CollectorDb::open(&path).unwrap();
+        let event = InputEvent {
+            ts_ms: now.timestamp_millis(),
+            device: Device::Keyboard,
+            code: 8,
+            shortcut: crate::shortcuts::Chord::new(8, crate::shortcuts::CONTROL, "windows"),
+        };
+        writer.insert(std::slice::from_ref(&event)).unwrap();
+        let mut runtime = Runtime::source_runtime_with_lock(
+            &path,
+            false,
+            false,
+            &temporary.path().join("source-view.lock"),
+        )
+        .unwrap();
+        runtime.set_paused(true);
+        assert_eq!(runtime.snapshot().unwrap().stats.lifetime.total(), 1);
+        writer.insert(&[event.clone(), event]).unwrap();
+        let zone = crate::timezone::TimeZonePreference::Named(chrono_tz::UTC);
+        for include_shortcuts in [false, true] {
+            let (send, receive) = bounded(1);
+            runtime
+                .request_snapshot_for_view(zone, include_shortcuts, move |reply| {
+                    send.send(reply).unwrap();
+                })
+                .unwrap();
+            let value: serde_json::Value =
+                serde_json::from_str(&receive.recv().unwrap().unwrap()).unwrap();
+            assert_eq!(value["lifetime"]["keyboard"], 1);
+        }
+        let (send, receive) = bounded(1);
+        runtime
+            .request_mini_snapshot(zone, TodayPeriod::Rolling24h, move |reply| {
+                send.send(reply).unwrap();
+            })
+            .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&receive.recv().unwrap().unwrap()).unwrap();
+        assert_eq!(value["today"]["keyboard"], 1);
+        let (send, receive) = bounded(1);
+        runtime
+            .request_share_snapshot(zone, now.date_naive(), move |reply| {
+                send.send(reply).unwrap();
+            })
+            .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&receive.recv().unwrap().unwrap()).unwrap();
+        assert_eq!(value["share_shortcut"]["top"]["count"], 1);
+        runtime.set_paused(false);
+        assert_eq!(runtime.snapshot().unwrap().stats.lifetime.total(), 3);
+        runtime.shutdown().unwrap();
     }
 
     #[test]
@@ -2327,6 +2718,7 @@ mod tests {
         let (tx, rx) = bounded(2);
         let writer = thread::spawn(move || writer_loop(db, rx));
         tx.send(Command::Input(InputEvent {
+            shortcut: None,
             ts_ms: 123_456,
             device: Device::Mouse,
             code: 1,
@@ -2406,6 +2798,7 @@ mod tests {
             runtime
                 .tx
                 .send(Command::Input(InputEvent {
+                    shortcut: None,
                     ts_ms: 123_456,
                     device: Device::Mouse,
                     code: 1,
@@ -2433,6 +2826,7 @@ mod tests {
             };
             storage
                 .insert(&[InputEvent {
+                    shortcut: None,
                     ts_ms: Local::now().timestamp_millis() - 4_000 * 86_400_000,
                     device: Device::Keyboard,
                     code: 0,
@@ -2469,6 +2863,55 @@ mod tests {
     }
 
     #[test]
+    fn stop_waits_for_a_short_external_lock_and_saves_the_final_batch() {
+        for owned in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("final.sqlite3");
+            let db = if owned {
+                Storage::App(CollectorDb::open(&path).unwrap())
+            } else {
+                Storage::Independent(EventDb::open(&path).unwrap())
+            };
+            let external = rusqlite::Connection::open(&path).unwrap();
+            external.execute_batch("BEGIN EXCLUSIVE").unwrap();
+            let (tx, rx) = bounded(4);
+            tx.send(Command::Input(InputEvent {
+                shortcut: None,
+                ts_ms: Local::now().timestamp_millis(),
+                device: Device::Mouse,
+                code: 1,
+            }))
+            .unwrap();
+            tx.send(Command::Stop).unwrap();
+            let writer =
+                thread::spawn(move || storage_loop(db, rx, Default::default(), Default::default()));
+            thread::sleep(Duration::from_millis(600));
+            external.execute_batch("ROLLBACK").unwrap();
+            writer.join().unwrap().unwrap();
+            let table = if owned { "lifetime_totals" } else { "totals" };
+            assert_eq!(
+                external
+                    .query_row(&format!("SELECT SUM(cnt) FROM {table}"), [], |row| row
+                        .get::<_, i64>(0))
+                    .unwrap(),
+                1
+            );
+            if owned {
+                assert_eq!(
+                    external
+                        .query_row(
+                            "SELECT value FROM clickpulse_metadata WHERE key='heartbeat_ms'",
+                            [],
+                            |row| row.get::<_, String>(0)
+                        )
+                        .unwrap(),
+                    "0"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn stop_drains_events_and_flushes_partial_batch() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("db.sqlite3");
@@ -2477,6 +2920,7 @@ mod tests {
         let writer = thread::spawn(move || writer_loop(db, rx));
         for _ in 0..257 {
             tx.send(Command::Input(InputEvent {
+                shortcut: None,
                 ts_ms: 123_456,
                 device: Device::Mouse,
                 code: 1,
@@ -2494,6 +2938,7 @@ mod tests {
         let path = temp.path().join("zone.sqlite3");
         let mut runtime = Runtime::start_owned(&path, false).unwrap();
         let event = InputEvent {
+            shortcut: None,
             ts_ms: Local::now().timestamp_millis(),
             device: Device::Keyboard,
             code: 1,

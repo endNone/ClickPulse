@@ -36,6 +36,40 @@ fn main() {
         "Cargo and Windows public versions must match"
     );
     let build = numbers[3].to_string();
+    for (key, expected) in [
+        ("FileVersion", format!("{version}.{build}")),
+        ("ProductVersion", version.clone()),
+    ] {
+        let marker = format!("VALUE \"{key}\", \"");
+        let actual = resource
+            .split_once(&marker)
+            .and_then(|(_, rest)| rest.split_once('"'))
+            .map(|(value, _)| value);
+        assert_eq!(
+            actual,
+            Some(expected.as_str()),
+            "Windows {key} string is inconsistent"
+        );
+    }
+    let product = resource
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("PRODUCTVERSION "));
+    let expected_product = format!("{},{},{},0", numbers[0], numbers[1], numbers[2]);
+    assert_eq!(
+        product,
+        Some(expected_product.as_str()),
+        "Windows PRODUCTVERSION is inconsistent"
+    );
+    let manifest = std::fs::read_to_string("assets/windows/ClickPulse.manifest")
+        .expect("Read Windows manifest");
+    let identity = manifest
+        .split("<assemblyIdentity")
+        .nth(1)
+        .and_then(|text| text.split_once("/>"));
+    assert!(
+        identity.is_some_and(|(value, _)| value.contains(&format!("version=\"{version}.0\""))),
+        "Windows manifest version is inconsistent"
+    );
     let plist = std::fs::read_to_string("assets/Info.plist").expect("Read macOS package version");
     assert_eq!(
         plist_string(&plist, "CFBundleShortVersionString"),

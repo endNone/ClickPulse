@@ -18,6 +18,35 @@ test('literary comparison is stable, approximate and never formats an empty or t
   assert.equal(H.bookComparison(7000000).copies,10);
 });
 
+test('twenty books use individual lengths and random selection never immediately repeats',()=>{
+  assert.equal(H.books.length,20);
+  assert.equal(new Set(H.books.map(book=>book.id)).size,20);
+  const seen=new Set();
+  H.books.forEach((book,index)=>{
+    assert.ok(book.characters>=100000);
+    assert.equal(H.bookComparison(book.characters,index).copies,1);
+    assert.equal(H.bookComparison(book.characters*2.5,index).copies,2.5);
+    assert.equal(H.bookComparison(1,index).opening,true);
+    seen.add(H.nextBook(-1,(index+.5)/20));
+    const next=new Set(Array.from({length:19},(_,i)=>H.nextBook(index,(i+.5)/19)));
+    assert.equal(next.size,19);assert.equal(next.has(index),false);
+  });
+  assert.equal(seen.size,20);
+  for(const value of [0,1,NaN,Infinity,-1])assert.ok(H.nextBook(19,value)>=0&&H.nextBook(19,value)<19);
+});
+
+test('phrases are independent of books and do not immediately repeat',()=>{
+  assert.equal(H.phraseCount,5);
+  const combinations=new Set();
+  for(let b=0;b<H.books.length;b++)for(let p=0;p<H.phraseCount;p++)
+    combinations.add(H.nextBook(-1,(b+.5)/20)+':'+H.nextPhrase(-1,(p+.5)/5));
+  assert.equal(combinations.size,100);
+  for(let p=0;p<5;p++){
+    const next=new Set(Array.from({length:4},(_,i)=>H.nextPhrase(p,(i+.5)/4)));
+    assert.equal(next.size,4);assert.equal(next.has(p),false);
+  }
+});
+
 test('new capture never hides imported history from all-history calendar',()=>{
   const bounds=H.bounds(records,'2026-10-07','all');
   assert.equal(bounds.start,'2026-02-05');
@@ -94,4 +123,14 @@ test('date ticks are evenly sampled, ordered and include the actual first and la
   const months=H.trend(H.calendarDays(records,'2025-12-01','2027-01-01'));
   assert.equal(months[0].grouping,'month');assert.equal(months[0].day,'2025-12');
   assert.equal(count(months),224);
+});
+
+test('calendar month labels do not overlap for ranges starting at month-end',()=>{
+ const H=require('../ui/history.js');
+ for(const start of ['2026-10-29','2026-05-28'])for(const labels of [['Oct','Nov','Dec'],['10月','11月','12月']]){
+   const days=Array.from({length:90},(_,i)=>({day:H.addDays(start,i)}));
+   const markers=H.monthMarkers(days,m=>labels[Number(m)%3]);
+   for(let i=1;i<markers.length;i++)assert(markers[i].left>=markers[i-1].left+markers[i-1].width);
+   assert(markers.length>=2);
+ }
 });

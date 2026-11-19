@@ -1,6 +1,8 @@
 use super::*;
 use std::{process::Command, time::Instant};
 
+mod cleanup;
+
 const SCOOP_UPDATE: &str = "scoop update clickpulse";
 
 /// Resolve `current` junctions before inspecting ownership. Scoop permits custom
@@ -30,6 +32,18 @@ fn is_scoop_installation(root: &Path) -> bool {
     receipt("install.json").is_some_and(|value| value["architecture"] == "64bit")
         && receipt("manifest.json")
             .is_some_and(|value| value["homepage"] == "https://github.com/endNone/ClickPulse")
+}
+
+/// Destructive maintenance must not treat a failed ownership lookup as portable.
+#[cfg(windows)]
+pub(crate) fn package_manager(executable: &Path) -> Result<Option<&'static str>> {
+    if crate::windows_installation::winget_installation(executable)?.is_some() {
+        return Ok(Some("winget"));
+    }
+    Ok(executable
+        .parent()
+        .filter(|root| is_scoop_installation(root))
+        .map(|_| "scoop"))
 }
 
 /// UI guidance is independent of whether the installation is writable.
@@ -360,6 +374,7 @@ pub fn launch_installer(update: StagedUpdate, installation: Installation) -> Res
     file.write_all(&serde_json::to_vec(&plan)?)?;
     file.sync_all()?;
     let mut command = Command::new(&helper);
+    command.current_dir(std::env::temp_dir());
     command.arg("--apply-update").arg(&path);
     #[cfg(target_os = "windows")]
     {
@@ -384,6 +399,9 @@ pub fn launch_installer(update: StagedUpdate, installation: Installation) -> Res
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+    // If the UI exits during preparation, no commit marker is written. Retain
+    // an exact cleanup inventory so the next normal launch can discard staging.
+    cleanup::record(update.directory.path(), &plan.installation, None)?;
     Ok(ApplyGuard {
         directory: update.directory.keep(),
         manifest_hash: plan.manifest_hash,
@@ -497,6 +515,16 @@ fn replace_windows(
     let backup = install.root.join(format!(".ClickPulse-before-{nonce}"));
     let prepared = install.root.join(format!(".ClickPulse-new-{nonce}"));
     fs::create_dir(&backup)?;
+    // Only empty directories created by this attempt are disposable. If
+    // rollback itself fails, every remaining recovery file must be retained.
+    struct EmptyBackupCleanup(PathBuf);
+    impl Drop for EmptyBackupCleanup {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir(self.0.join("Licenses"));
+            let _ = fs::remove_dir(&self.0);
+        }
+    }
+    let _empty_backup = EmptyBackupCleanup(backup.clone());
     fs::create_dir(&prepared)?;
     let mut files: BTreeSet<_> = manifest.files.keys().cloned().collect();
     files.insert("build-manifest.json".into());
@@ -560,19 +588,47 @@ fn replace_windows(
         Ok(())
     })();
     if let Err(error) = result {
-        for name in installed.iter().rev() {
-            fs::remove_file(install.root.join(name))?;
-        }
-        for name in moved.iter().rev() {
-            fs::rename(backup.join(name), install.root.join(name))
-                .context("Restore previous program file")?;
-        }
+        let rollback = restore_previous_files(&install.root, &backup, &installed, &moved);
         let _ = fs::remove_dir_all(prepared);
-        return Err(error);
+        return match rollback {
+            Ok(()) => Err(error),
+            Err(rollback) => Err(error.context(format!(
+                "{rollback:#}; recovery files remain at {}",
+                backup.display()
+            ))),
+        };
     }
     let _ = fs::remove_dir_all(prepared);
     Ok(backup)
 }
+/// Try every restore even if one destination is temporarily inaccessible.
+fn restore_previous_files(
+    root: &Path,
+    backup: &Path,
+    installed: &[PathBuf],
+    moved: &[PathBuf],
+) -> Result<()> {
+    let mut errors = Vec::new();
+    for name in installed.iter().rev() {
+        if let Err(error) = fs::remove_file(root.join(name))
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            errors.push(format!("Remove {}: {error}", root.join(name).display()));
+        }
+    }
+    for name in moved.iter().rev() {
+        if let Err(error) = fs::rename(backup.join(name), root.join(name)) {
+            errors.push(format!("Restore {}: {error}", root.join(name).display()));
+        }
+    }
+    ensure!(
+        errors.is_empty(),
+        "Rollback incomplete: {}",
+        errors.join("; ")
+    );
+    Ok(())
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Notice {
     pub success: bool,
@@ -591,6 +647,7 @@ fn write_notice(success: bool, version: &str) -> Result<()> {
     Ok(())
 }
 pub fn take_notice() -> Option<Notice> {
+    cleanup::start();
     let path = cache_dir().ok()?.join("last-update.json");
     let bytes = read_limited(File::open(&path).ok()?, 4096).ok()?;
     let notice: Notice = serde_json::from_slice(&bytes).ok()?;
@@ -721,22 +778,32 @@ fn apply_update_with_restart(
         .and_then(|b| serde_json::from_slice::<Commit>(&b).ok())
         .filter(|c| c.manifest_hash == plan.manifest_hash);
     if !committed && aborted.is_none() {
+        cleanup::record(directory, &plan.installation, None)?;
         return Ok(());
     }
     let paused = commit
         .as_ref()
         .or(aborted.as_ref())
         .is_some_and(|c| c.paused);
+    let mut profile_in_use = false;
     let result = (|| -> Result<PathBuf> {
         // Block another normal App launch while its program files are being swapped.
         // The existing profile is only locked, never opened as a database or rewritten.
         let profile_lock = File::options()
+            .create(true)
+            .truncate(false)
             .read(true)
             .write(true)
             .open(crate::platform::data_dir()?.join("profile.lock"))?;
-        profile_lock
-            .try_lock()
-            .context("ClickPulse reopened before the update could start")?;
+        if let Err(error) =
+            crate::storage::lock_profile_for_helper(&profile_lock, Duration::from_secs(5))
+        {
+            profile_in_use = matches!(
+                error.downcast_ref::<std::fs::TryLockError>(),
+                Some(std::fs::TryLockError::WouldBlock)
+            );
+            return Err(error.context("ClickPulse reopened before the update could start"));
+        }
         ensure!(
             committed,
             "Update cancelled because the application did not finish saving"
@@ -746,6 +813,12 @@ fn apply_update_with_restart(
             "Installed program changed while updating"
         );
         verify_payload(&payload, &manifest)?;
+        // Once replacement begins, a failed rollback may need these files.
+        // Only a successful replacement authorizes deleting its backup.
+        let receipt = directory.join("cleanup.json");
+        if receipt.try_exists()? {
+            fs::remove_file(receipt)?;
+        }
         let backup = if plan.installation.target.mac() {
             replace_mac(&plan.installation, &payload, &nonce)?
         } else {
@@ -754,8 +827,24 @@ fn apply_update_with_restart(
         drop(profile_lock);
         Ok(backup)
     })();
+    // The new App removes exact recorded files after the helper exits. Preserve
+    // failed replacement backups; they may still be needed for recovery.
+    if let Ok(backup) = &result
+        && let Err(error) = cleanup::record(directory, &plan.installation, Some(backup))
+    {
+        eprintln!("Unable to record update cleanup: {error:#}");
+    }
+    if result.is_err()
+        && let Err(error) = cleanup::record_cancelled(directory, &plan)
+    {
+        eprintln!("Cancelled update retained for recovery: {error:#}");
+    }
+    drop(ready);
+    drop(lock);
     let _ = write_notice(result.is_ok(), &plan.version);
-    relaunch(&plan.installation, paused)?;
+    if !profile_in_use {
+        relaunch(&plan.installation, paused)?;
+    }
     result.map(|_| ())
 }
 

@@ -10,9 +10,13 @@ use tray_icon::{Icon, TrayIcon};
 pub(super) struct StorageAlert {
     warning: bool,
     notified: bool,
+    published: super::view_state::Published<String>,
 }
 
 impl StorageAlert {
+    pub fn reset_view(&mut self) {
+        self.published.reset();
+    }
     pub fn update(
         &mut self,
         tray: &TrayIcon,
@@ -28,8 +32,12 @@ impl StorageAlert {
             }
             self.warning = warning;
         }
-        if let Ok(json) = serde_json::to_string(capture) {
-            let _ = view.evaluate_script(&format!("window.receiveCapture?.({json});"));
+        if view.is_ready()
+            && let Ok(json) = serde_json::to_string(capture)
+        {
+            self.published.send(json, |json| {
+                view.evaluate_script(&format!("window.receiveCapture?.({json});"))
+            });
         }
         if self.should_notify(warning, capture.storage_blocked.load(Ordering::Relaxed)) {
             let body = locale.text("error.storage_waiting");

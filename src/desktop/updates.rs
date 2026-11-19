@@ -3,7 +3,6 @@ use serde::Serialize;
 use std::{
     cell::Cell,
     path::PathBuf,
-    process::Command,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -322,6 +321,35 @@ mod tests {
     }
 
     #[test]
+    fn rate_limits_are_informational_in_background_and_actionable_when_requested() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("clickpulse.log");
+        let mut controller = Controller::new(false);
+        controller.automatic_allowed = true;
+        controller.log_path = Some(path.clone());
+        for source in [CheckSource::Automatic, CheckSource::Manual] {
+            assert!(controller.begin_check(100_000, source));
+            controller.receive(Event::Checked {
+                id: controller.id,
+                result: Err(format!("{}: fallback unavailable", updater::RATE_LIMITED)),
+            });
+            assert_eq!(
+                controller.view.status,
+                if source == CheckSource::Automatic {
+                    "idle"
+                } else {
+                    "limited"
+                }
+            );
+        }
+        let contents = std::fs::read_to_string(path).unwrap();
+        let lines: Vec<_> = contents.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains(" INFO "));
+        assert!(lines[1].contains(" ERROR "));
+    }
+
+    #[test]
     fn a_new_daily_window_gets_a_fresh_bounded_retry_cycle() {
         let mut controller = Controller::new(false);
         let mut now = 100_000;
@@ -512,7 +540,7 @@ impl Controller {
     pub fn installing(&self) -> bool {
         matches!(self.view.status, "preparing" | "installing")
     }
-    fn busy(&self) -> bool {
+    pub(super) fn busy(&self) -> bool {
         self.installing() || matches!(self.view.status, "checking" | "downloading" | "verifying")
     }
     /// Only normal installed-app sessions schedule checks or persist update
@@ -632,7 +660,12 @@ impl Controller {
             .map(|delay| self.attempted_at.saturating_add(*delay));
     }
     fn log_failure(&self, source: CheckSource, operation: &str, error: &str) {
-        clickpulse::logging::error(
+        let log = if source == CheckSource::Automatic && error.starts_with(updater::RATE_LIMITED) {
+            clickpulse::logging::info
+        } else {
+            clickpulse::logging::error
+        };
+        log(
             self.log_path.as_deref(),
             &format!("update source={source:?} operation={operation}: {error}"),
         );
@@ -708,10 +741,14 @@ impl Controller {
         let result = std::thread::Builder::new()
             .name("clickpulse-update-download".into())
             .spawn(move || {
-                let last = Cell::new(Instant::now() - Duration::from_secs(1));
+                let last = Cell::new(None::<Instant>);
                 let result = updater::stage(&candidate, |received, total| {
-                    if last.get().elapsed() >= Duration::from_millis(100) || received == total {
-                        last.set(Instant::now());
+                    if last
+                        .get()
+                        .is_none_or(|last| last.elapsed() >= Duration::from_millis(100))
+                        || received == total
+                    {
+                        last.set(Some(Instant::now()));
                         let _ = proxy.send_event(super::UiEvent::Update(Event::Progress {
                             id,
                             received,
@@ -761,6 +798,11 @@ impl Controller {
                 Err(error) => {
                     self.log_failure(self.check_source, "check", &error);
                     self.check_failed();
+                    if self.check_source == CheckSource::Manual
+                        && error.starts_with(updater::RATE_LIMITED)
+                    {
+                        self.view.status = "limited";
+                    }
                 }
             },
             Event::Progress {
@@ -807,19 +849,6 @@ impl Controller {
             .as_ref()
             .map(|c| c.release_url.as_str())
             .unwrap_or(updater::RELEASES);
-        #[cfg(target_os = "macos")]
-        Command::new("/usr/bin/open").arg(url).spawn()?;
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            Command::new("rundll32.exe")
-                .arg("url.dll,FileProtocolHandler")
-                .arg(url)
-                .creation_flags(0x08000000)
-                .spawn()?;
-        }
-        #[cfg(target_os = "linux")]
-        Command::new("xdg-open").arg(url).spawn()?;
-        Ok(())
+        clickpulse::platform::open_web_page(url)
     }
 }

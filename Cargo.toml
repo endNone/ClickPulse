@@ -5,8 +5,14 @@ edition = "2024"
 description = "Local keyboard and mouse activity statistics"
 license = "GPL-3.0-or-later"
 
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.6", features = ["derive"] }
 rusqlite = { version = "0.40", features = ["bundled", "backup"] }
@@ -26,19 +32,26 @@ png = "0.18.1"
 tao = "0.35"
 tray-icon = "0.24"
 wry = { version = "0.55", features = ["transparent"] }
-rfd = "0.17"
+rfd = { version = "0.17", features = ["common-controls-v6"] }
 # 4.19's z backend requires zbus 6, which is not available on crates.io yet.
 notify-rust = { version = "~4.18", default-features = false, features = ["z"] }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+arboard = { version = "3.6", default-features = false, features = ["image-data"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
 core-graphics = "0.25"
 dispatch2 = "0.3.1"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSProcessInfo"] }
+block2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSScreen", "NSAlert", "NSApplication", "NSAppearance", "NSButton", "NSEvent", "NSButtonCell", "NSActionCell", "NSCell", "NSControl", "NSResponder", "NSView", "NSWindow"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 webview2-com = "0.38"
 windows-core = "0.61"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_Security", "Win32_System_Console", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_Input", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_Security", "Win32_System_Console", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_RemoteDesktop", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_UI_Accessibility", "Win32_UI_Input", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 evdev = "0.13.2"

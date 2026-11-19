@@ -60,6 +60,20 @@ pub struct LinuxInput {
     dropped: bool,
 }
 impl LinuxInput {
+    pub fn shortcut(&self, key: u32) -> Option<crate::shortcuts::Chord> {
+        if self.held.held_codes().any(|code| code == 100) {
+            return None;
+        }
+        crate::shortcuts::Chord::new(
+            key,
+            crate::shortcuts::modifiers(
+                self.held
+                    .held_codes()
+                    .map(|code| canonical_key(code as u16)),
+            ),
+            "linux",
+        )
+    }
     /// Seed held keys at attach/resynchronization without inventing presses.
     pub fn synchronize(&mut self, held: impl IntoIterator<Item = u16>) {
         self.held.reset();
@@ -96,6 +110,29 @@ impl LinuxInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shortcuts_use_state_at_press_not_after_batch_release() {
+        let mut keys = LinuxInput::default();
+        keys.event(1, 29, 1);
+        keys.event(1, 46, 1);
+        assert_eq!(keys.shortcut(8).unwrap().modifiers, 1);
+        assert!(keys.event(1, 46, 2).is_none());
+        keys.event(1, 29, 0);
+        assert!(keys.shortcut(8).is_none());
+        keys.event(1, 100, 1);
+        assert!(keys.shortcut(8).is_none());
+    }
+
+    #[test]
+    fn shifted_print_screen_keeps_the_linux_physical_mapping() {
+        let mut keys = LinuxInput::default();
+        keys.event(1, 42, 1);
+        let (_, code) = keys.event(1, 99, 1).unwrap();
+        let chord = keys.shortcut(code).unwrap();
+        assert_eq!(chord.key, crate::shortcuts::PRINT_SCREEN);
+        assert_eq!(chord.modifiers, crate::shortcuts::SHIFT);
+    }
+
     #[test]
     fn physical_keys_repeat_modifiers_and_mouse_keep_distinct_counts() {
         let mut input = LinuxInput::default();
@@ -135,5 +172,18 @@ mod tests {
         assert_eq!(canonical_key(99), 0x10137);
         assert_eq!(canonical_key(119), 0x10245);
         assert!(canonical_key(202) >= 0x20000);
+    }
+
+    #[test]
+    fn pc_system_keys_convert_evdev_codes_and_count_each_press_once() {
+        let mut input = LinuxInput::default();
+        for (evdev, physical) in [(99, 0x10137), (70, 0x10046), (119, 0x10245)] {
+            for _ in 0..10 {
+                assert_eq!(input.event(1, evdev, 1), Some((Device::Keyboard, physical)));
+                assert_eq!(input.event(1, evdev, 2), None);
+                assert_eq!(input.event(1, evdev, 1), None);
+                assert_eq!(input.event(1, evdev, 0), None);
+            }
+        }
     }
 }

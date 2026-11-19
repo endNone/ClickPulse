@@ -131,18 +131,8 @@ fn system_locale() -> Locale {
         return from_preferences(&languages.join(","));
     }
     #[cfg(target_os = "macos")]
-    for arguments in [
-        ["read", "app.clickpulse.desktop", "AppleLanguages"],
-        ["read", "-g", "AppleLanguages"],
-    ] {
-        if let Ok(output) = std::process::Command::new("/usr/bin/defaults")
-            .args(arguments)
-            .output()
-            && output.status.success()
-            && !output.stdout.is_empty()
-        {
-            return from_preferences(&String::from_utf8_lossy(&output.stdout));
-        }
+    if let Some(languages) = mac_preferred_languages() {
+        return from_preferences(&languages.join(","));
     }
     for variable in ["LC_ALL", "LC_MESSAGES", "LANG"] {
         if let Ok(value) = std::env::var(variable)
@@ -152,6 +142,40 @@ fn system_locale() -> Locale {
         }
     }
     Locale::English
+}
+
+#[cfg(target_os = "macos")]
+fn mac_preferred_languages() -> Option<Vec<String>> {
+    use core_foundation::{
+        array::CFArray,
+        base::{CFType, CFTypeRef, TCFType},
+        string::{CFString, CFStringRef},
+    };
+    unsafe extern "C" {
+        fn CFPreferencesCopyAppValue(key: CFStringRef, application_id: CFStringRef) -> CFTypeRef;
+    }
+    let key = CFString::new("AppleLanguages");
+    let app = CFString::new("app.clickpulse.desktop");
+    // App preferences include the global fallback, without launching defaults.
+    let value =
+        unsafe { CFPreferencesCopyAppValue(key.as_concrete_TypeRef(), app.as_concrete_TypeRef()) };
+    if value.is_null() {
+        return None;
+    }
+    let value = unsafe { CFType::wrap_under_create_rule(value) };
+    let array = value.downcast::<CFArray>()?;
+    let languages: Vec<_> = array
+        .iter()
+        .filter_map(|value| {
+            if (*value).is_null() {
+                return None;
+            }
+            // CFPreferences returned a property-list array: each element is a CFType.
+            let value = unsafe { CFType::wrap_under_get_rule(*value) };
+            value.downcast::<CFString>().map(|s| s.to_string())
+        })
+        .collect();
+    (!languages.is_empty()).then_some(languages)
 }
 
 #[cfg(test)]

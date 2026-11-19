@@ -63,6 +63,7 @@ unsafe extern "C" {
     fn IOHIDElementGetDevice(element: HidRef) -> HidRef;
     fn IOHIDElementGetUsagePage(element: HidRef) -> u32;
     fn IOHIDElementGetUsage(element: HidRef) -> u32;
+    fn IOHIDElementGetType(element: HidRef) -> u32;
 }
 
 #[derive(Default)]
@@ -114,6 +115,9 @@ unsafe extern "C" fn matched(context: *mut c_void, result: i32, _: *mut c_void, 
     if !elements.is_null() {
         for index in 0..unsafe { CFArrayGetCount(elements) } {
             let element = unsafe { CFArrayGetValueAtIndex(elements, index) } as HidRef;
+            if element.is_null() || !(1..=4).contains(&unsafe { IOHIDElementGetType(element) }) {
+                continue;
+            }
             let mut value = ptr::null_mut();
             if unsafe { IOHIDDeviceGetValue(device, element, &mut value) } == 0 && !value.is_null()
             {
@@ -136,6 +140,7 @@ unsafe extern "C" fn input(context: *mut c_void, result: i32, _: *mut c_void, va
     }
     let element = unsafe { IOHIDValueGetElement(value) };
     if element.is_null()
+        || !(1..=4).contains(&unsafe { IOHIDElementGetType(element) })
         || unsafe { IOHIDElementGetUsagePage(element) } != 7
         || unsafe { IOHIDElementGetUsage(element) } != 0x39
     {
@@ -156,7 +161,8 @@ unsafe extern "C" fn input(context: *mut c_void, result: i32, _: *mut c_void, va
         && !context.stop.load(Ordering::Relaxed)
     {
         let event = InputEvent {
-            ts_ms: chrono::Local::now().timestamp_millis(),
+            shortcut: None,
+            ts_ms: chrono::Utc::now().timestamp_millis(),
             device: Device::Keyboard,
             code: 57,
         };
@@ -170,7 +176,7 @@ pub(super) struct CapsLockCapture {
     manager: HidRef,
     runloop: CFRunLoop,
     // Stable address retained until callbacks have been unregistered and unscheduled.
-    _context: Box<Context>,
+    context: *mut Context,
 }
 impl CapsLockCapture {
     pub(super) fn start(
@@ -188,19 +194,19 @@ impl CapsLockCapture {
         if manager.is_null() {
             return Err(anyhow!("Cannot create physical Caps Lock capture"));
         }
-        let mut capture = Self {
+        let capture = Self {
             manager,
             runloop: CFRunLoop::get_current(),
-            _context: Box::new(Context {
+            context: Box::into_raw(Box::new(Context {
                 storage_blocked,
                 presses: RefCell::default(),
                 tx,
                 paused,
                 stop,
                 status,
-            }),
+            })),
         };
-        let context = (&mut *capture._context as *mut Context).cast();
+        let context = capture.context.cast();
         let keyboards = CFDictionary::from_CFType_pairs(&[
             (CFString::new("DeviceUsagePage"), CFNumber::from(1_i32)),
             (CFString::new("DeviceUsage"), CFNumber::from(6_i32)),
@@ -241,6 +247,8 @@ impl Drop for CapsLockCapture {
             );
             IOHIDManagerClose(self.manager, 0);
             CFRelease(self.manager.cast());
+            // No callback can run after unregistering and unscheduling on this thread.
+            drop(Box::from_raw(self.context));
         }
     }
 }

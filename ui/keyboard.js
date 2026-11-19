@@ -39,10 +39,10 @@ function createClickPulseKeyboard(platform='macos') {
     [key('shift-left','Shift',56,'',2.2,[56]), ...letters('ZXCVBNM',[6,7,8,9,11,45,46]),key('comma',',',43,',<《'),key('period','.',47,'.>。》'),key('slash','/',44,'/?'),key('shift-right','Shift',60,'',2.3,[60])],
     [key('fn','Fn',63,'',1,[63]),key('control','Ctrl',[59,62],'',1.05,[59,62]),key('option-left','⌥',58,'',1.1,[58]),key('command-left','⌘',55,'',1.3,[55]),key('space','Space',49,'  ',5,[49,32]),key('command-right','⌘',54,'',1.3,[54]),key('option-right','⌥',61,'',1.1,[61]),key('left','←',123,'',1,[123]),key('down','↓',125,'',1,[125]),key('up','↑',126,'',1,[126]),key('right','→',124,'',1,[124])]
   ];
-  const windowsSupplemental=[];
+  const windowsSupplemental=[...[105,107,113,106,64,79,80,90].map((vk,i)=>key('f'+(i+13),'F'+(i+13),vk)),key('numequals','Num =',81),key('numcomma','Num ,',95),key('iso-section','§',10,'§±'),key('volume-up','Vol +',72),key('volume-down','Vol −',73),key('mute','Mute',74)];
   if(platform==='windows'||platform==='linux') {
     for(const row of rows)for(const k of row){if(k.id.startsWith('command-'))k.label='Win';if(k.id.startsWith('option-'))k.label='Alt';if(k.id==='return')k.label='Enter';}
-    rows[0].push(key('print-screen','PrtSc',[0x10137,0x10054]),key('scroll-lock','Scroll',0x10046),key('pause-break','Pause',[0x10245,0x10146]));
+    rows[0].push(key('print-screen','PrtSc',[0x10137,0x10054]),key('scroll-lock','ScrLk',0x10046),key('pause-break','Pause',[0x10245,0x10146]));
     rows[5]=[key('control-left','Ctrl',59,'',1.3),key('command-left','Win',55,'',1.1),key('option-left','Alt',58,'',1.1),key('space','Space',49,'  ',5,[49,32]),key('option-right','Alt',61,'',1.1),key('command-right','Win',54,'',1.1),key('menu','Menu',63,'',1.1),key('control-right','Ctrl',62,'',1.3),key('left','←',123),key('down','↓',125),key('up','↑',126),key('right','→',124)];
     windowsSupplemental.push(key('insert','Ins',114),key('home','Home',115),key('pageup','PgUp',116),key('delete','Del',117),key('end','End',119),key('pagedown','PgDn',121),
       key('numlock','Num',71),key('numdivide','Num ÷',75),key('nummultiply','Num ×',67),key('numminus','Num −',78),key('numplus','Num +',69),
@@ -64,15 +64,24 @@ function createClickPulseKeyboard(platform='macos') {
   const all = [...rows.flat(), ...supplemental];
   // Both keyboard views describe the same visible keys. Keep supplemental
   // history in ranked/totals without including it in this display scope.
-  const visibleIds = new Set(rows.flat().map(k => k.id));
+  const compactIds = new Set(rows.flat().map(k => k.id));
   const physicalAliases = k=>k.vk.flatMap(vk=>[65536+vk,0x110000+vk,2**40+vk]);
   // Full-width ASCII punctuation/digits describe the same printed key. Do not
   // normalize arbitrary code values: some ranges are old native/hash encodings.
   const characterAliases = k=>k.chars.flatMap(code=>code>=33&&code<=126?[code,code+0xfee0]:[code]);
   const byId = new Map(all.map(k => [k.id, k]));
-  const compact = value => value >= 1000000 ? (value/1000000).toFixed(2)+'M' : value >= 10000 ? (value/1000).toFixed(1)+'k' : new Intl.NumberFormat('zh-CN').format(value);
+  let numberLocale,formats;
+  function compact(value,locale='en',short=false){
+    if(numberLocale!==locale){
+      numberLocale=locale;
+      formats={plain:new Intl.NumberFormat(locale),short:new Intl.NumberFormat(locale,{notation:'compact',maximumFractionDigits:0}),
+        thousands:new Intl.NumberFormat(locale,{minimumFractionDigits:1,maximumFractionDigits:1}),
+        millions:new Intl.NumberFormat(locale,{minimumFractionDigits:2,maximumFractionDigits:2})};
+    }
+    return short?formats.short.format(value):value>=1000000?formats.millions.format(value/1000000)+'M':value>=10000?formats.thousands.format(value/1000)+'k':formats.plain.format(value);
+  }
 
-  function distribution(stats = {}, scope = 'history') {
+  function distribution(stats = {}, scope = 'history', layout = 'auto') {
     const totals = new Map(all.map(k => [k.id, 0]));
     let total = 0, mapped = 0;
     const allocate = (records, passes) => {
@@ -103,15 +112,44 @@ function createClickPulseKeyboard(platform='macos') {
       allocate(stats.physical, [k => k.vk]);
     }
     const ranked = all.map(k => ({ ...k, count: totals.get(k.id) })).filter(k => k.count > 0).sort((a,b) => b.count-a.count || a.id.localeCompare(b.id));
-    const visibleRanked = ranked.filter(k => visibleIds.has(k.id));
+    const arrowIds=['up','left','down','right'];
+    const navigationIds=['insert','help','home','pageup','delete','end','pagedown',...arrowIds];
+    const fullSize=layout==='full_size'||layout==='auto'&&ranked.some(k=>navigationIds.includes(k.id)||k.id.startsWith('num'));
+    const visibleIds=new Set(compactIds);
     const estimated=historical && [...(stats.history_before_fix||[]),...(stats.history_since_fix||[])].some(row=>Number(row.count)>0&&Number(row.code)<2**40);
-    const displayRows=rows.map(row=>row.map(k=>({...k,count:totals.get(k.id)})));
-    const extra=supplemental.filter(k=>totals.get(k.id)>0).map(k=>({...k,count:totals.get(k.id),supplemental:true}));
+    const systemIds=platform==='macos'?['f13','f14','f15']:['print-screen','scroll-lock','pause-break'];
+    const displayRows=rows.map(row=>row.filter(k=>!fullSize||!arrowIds.includes(k.id)&&!systemIds.includes(k.id)).map(k=>({...k,count:totals.get(k.id)})));
+    if(fullSize){
+      const place=(id,zone,column,row,colSpan=1,rowSpan=1)=>{
+        const k=byId.get(id);if(!k)return null;
+        visibleIds.add(id);
+        return {...k,count:totals.get(id),zone,column,row,colSpan,rowSpan};
+      };
+      const system=systemIds.map((id,i)=>place(id,'system',i+1,1)).filter(Boolean);
+      if(system.length)displayRows.push(system);
+      if(platform==='macos')displayRows.push(['f16','f17','f18','f19'].map((id,i)=>place(id,'numpad-function',i+1,1)));
+      const nav=[platform==='macos'?'help':'insert','home','pageup','delete','end','pagedown'].map((id,i)=>place(id,'navigation',i%3+1,Math.floor(i/3)+1));
+      nav.push(place('up','navigation',2,4),place('left','navigation',1,5),place('down','navigation',2,5),place('right','navigation',3,5));
+      displayRows.push(nav.filter(Boolean));
+      const pad=[
+        ...(platform==='macos'?[
+          ['numclear',1,1],['numequals',2,1],['numdivide',3,1],['nummultiply',4,1],['numminus',4,2],['numplus',4,3]
+        ]:[
+          ['numlock',1,1],['numdivide',2,1],['nummultiply',3,1],['numminus',4,1],['numplus',4,2,1,2]
+        ]),
+        ['num7',1,2],['num8',2,2],['num9',3,2],
+        ['num4',1,3],['num5',2,3],['num6',3,3],['num1',1,4],['num2',2,4],['num3',3,4],['numenter',4,4,1,2],['num0',1,5,2],['numdecimal',3,5]
+      ].map(([id,...position])=>place(id,'numpad',...position)).filter(Boolean);
+      displayRows.push(pad);
+    }
+    const extra=supplemental.filter(k=>!visibleIds.has(k.id)&&totals.get(k.id)>0).map(k=>({...k,count:totals.get(k.id),supplemental:true}));
+    for(const k of extra)visibleIds.add(k.id);
+    const visibleRanked=ranked.filter(k=>visibleIds.has(k.id));
     const other=total-mapped;
     // Keep unresolved historical counts in the total without inventing a key
     // or changing the physical keyboard layout. Original records stay intact.
     if(extra.length)displayRows.push(extra);
-    return {estimated,rows:displayRows,ranked,visibleRanked,total,mapped,unmapped:other,other,historical};
+    return {estimated,fullSize,rows:displayRows,ranked,visibleRanked,total,mapped,unmapped:other,other,historical};
   }
   return { distribution, compact, byId, treemap:keyTreemap };
 }

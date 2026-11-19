@@ -12,7 +12,6 @@ use std::{
 };
 
 use anyhow::Result;
-use chrono::Local;
 use core_foundation::{
     base::TCFType,
     runloop::{CFRunLoop, kCFRunLoopCommonModes, kCFRunLoopDefaultMode},
@@ -32,7 +31,6 @@ use crate::{
 unsafe extern "C" {
     fn CGPreflightListenEventAccess() -> bool;
     fn CGRequestListenEventAccess() -> bool;
-    fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
     fn CGEventTapEnable(tap: *const c_void, enable: bool);
 }
 
@@ -176,23 +174,12 @@ pub(crate) fn spawn(
                                 let code = event
                                     .get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE)
                                     as u32;
-                                if code == 57 {
-                                    None
-                                } else if unsafe { CGEventSourceKeyState(0, code as u16) } {
-                                    keys.press(code, false).then_some((Device::Keyboard, code))
-                                } else {
-                                    keys.release(code);
-                                    None
-                                }
+                                keys.mac_modifier(code, event.get_flags().bits())
+                                    .then_some((Device::Keyboard, code))
                             }
                             CGEventType::LeftMouseDown => Some((Device::Mouse, 1)),
                             CGEventType::RightMouseDown => Some((Device::Mouse, 2)),
-                            CGEventType::OtherMouseDown => Some((
-                                Device::Mouse,
-                                event.get_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER)
-                                    as u32
-                                    + 1,
-                            )),
+                            CGEventType::OtherMouseDown => mouse_button_code(event.get_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER)).map(|code| (Device::Mouse, code)),
                             _ => None,
                         };
                         if !cb_storage_blocked.load(Ordering::Relaxed)
@@ -202,7 +189,8 @@ pub(crate) fn spawn(
                             && let Some((device, code)) = input
                         {
                             let input = InputEvent {
-                                ts_ms: Local::now().timestamp_millis(),
+                                shortcut: (device == Device::Keyboard).then(|| crate::shortcuts::Chord::new(code, crate::shortcuts::mac_flags(event.get_flags().bits()), "macos")).flatten(),
+                                ts_ms: chrono::Utc::now().timestamp_millis(),
                                 device,
                                 code,
                             };
@@ -314,5 +302,25 @@ mod tests {
         let status = status.lock().unwrap();
         assert!(!status.listening);
         assert_eq!(status.error_code, Some("error.queue"));
+    }
+}
+
+fn mouse_button_code(number: i64) -> Option<u32> {
+    u32::try_from(number).ok().and_then(|n| n.checked_add(1))
+}
+
+#[cfg(test)]
+mod button_tests {
+    #[test]
+    fn native_mouse_button_numbers_are_checked() {
+        for (native, expected) in [
+            (-1, None),
+            (i64::MAX, None),
+            (u32::MAX as i64, None),
+            (2, Some(3)),
+            (4, Some(5)),
+        ] {
+            assert_eq!(super::mouse_button_code(native), expected);
+        }
     }
 }

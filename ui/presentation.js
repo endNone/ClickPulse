@@ -20,23 +20,27 @@
     const overlay=$('close-overlay'),remember=$('close-remember');
     const surfaces=[document.querySelector('main'),document.querySelector('.sidebar'),$('mini-widget')];
     let previousFocus=null;
-    function dismiss(){
+    function dismiss(restoreFocus=true){
       overlay.hidden=true;
       for(const surface of surfaces)surface.inert=false;
-      previousFocus?.focus();
+      if(restoreFocus)previousFocus?.focus();
+      previousFocus=null;
     }
+    window.dismissCloseDialog=()=>dismiss(false);
     window.requestClose=()=>{
       if(!overlay.hidden)return;
-      Dropdowns.closeAll();previousFocus=document.activeElement;
+      Dropdowns.closeAll();if(typeof ClickPulseDatePicker!=='undefined')ClickPulseDatePicker.closeAll();previousFocus=document.activeElement;
       remember.checked=false;overlay.hidden=false;
       for(const surface of surfaces)surface.inert=true;
       $('close-hide').focus();
     };
-    $('close-cancel').addEventListener('click',dismiss);
+    $('close-cancel').addEventListener('click',()=>dismiss());
     for(const [id,action] of [['close-hide','hide'],['close-quit','quit']])$(id).addEventListener('click',()=>{
       const save=remember.checked;dismiss();send('close_decision',{close_action:action,remember:save});
     });
-    overlay.addEventListener('keydown',event=>{
+    overlay.addEventListener('pointerdown',event=>{if(event.target===overlay){event.preventDefault();$('close-hide').focus();}});
+    document.addEventListener('keydown',event=>{
+      if(overlay.hidden)return;
       if(event.key==='Escape'){event.preventDefault();dismiss();}
       if(event.key==='Tab'){
         const focusable=[$('close-cancel'),remember,$('close-hide'),$('close-quit')];
@@ -46,16 +50,20 @@
     });
   }
   window.receiveView=next=>{
-    if(next.compact===true||next.visible===false)window.captureSessionState?.();
+    if(next.compact===true||next.visible===false){window.dismissCloseDialog?.();window.captureSessionState?.();}
     // A range anchored in the hidden mode can paint across the newly shown
     // layout in WebKit. Keep selections during live refreshes, not mode changes.
     if(typeof next.compact==='boolean'&&next.compact!==view.compact)window.getSelection?.()?.removeAllRanges();
+    Object.assign(view,next);
     if(next.timezones)window.setTimeZoneChoices(next.timezones);
     if(next.timezone)window.setInterfaceTimeZone(next.timezone);
     if(next.locale)window.setInterfaceLanguage(next.locale,next.language_preference);
     if(next.theme)window.setInterfaceTheme(next.theme);
-    Object.assign(view,next);
+    window.syncPresentationLabels();
+    window.updateInsightsVisibility?.();
+    document.body.dataset.windowFullscreen=String(!!view.fullscreen&&!view.compact);
     window.renderTodayPeriod();
+    window.renderDisplaySettings?.();
     window.renderUpdatePreferences?.();
     if(onWindows||onLinux){
       const key=view.maximized?'window.restore':'window.maximize';
@@ -64,16 +72,26 @@
       if(next.close_action){$('close-action-select').value=next.close_action;Dropdowns.sync('close-action-select');}
     }
     document.body.classList.toggle('compact',view.compact);
-    if(view.compact||!view.visible)Dropdowns.closeAll();
+    if(view.compact||!view.visible){Dropdowns.closeAll();if(typeof ClickPulseDatePicker!=='undefined')ClickPulseDatePicker.closeAll();}
     $('mini-widget').hidden=!view.compact;
     window.updateSportActivity?.();
     $('mini-pin').setAttribute('aria-pressed',String(view.pinned));
     $('mini-pin').setAttribute('aria-label',t(view.pinned?'mini.unpin':'mini.pin'));
-    $('mini-pin').title=t(view.pinned?'mini.unpin':'mini.pin');
     if(view.compact)window.renderMiniSnapshot?.();
     else if(data)window.receive(data);
   };
+  window.syncPresentationLabels=()=>{
+    const pinLabel=t(view.pinned?'mini.unpin':'mini.pin');
+    $('mini-pin').title=pinLabel;$('mini-pin').setAttribute('aria-label',pinLabel);
+    if(onWindows||onLinux){
+      const key=view.maximized?'window.restore':'window.maximize';
+      $('window-maximize').setAttribute('aria-label',t(key));$('window-maximize').title=t(key);
+    }
+    if(recordingSnapshot)window.presentationRecordingState(recordingSnapshot);
+  };
+  let recordingSnapshot=null;
   window.presentationRecordingState=snapshot=>{
+    recordingSnapshot=snapshot;
     const caption=t(snapshot.demo?'common.demo':snapshot.capture.error?'status.recording_error':snapshot.paused?'status.paused':snapshot.source_mode?'status.history':snapshot.capture.listening?'status.recording':'status.permission');
     put('mini-status',caption);
     $('mini-status').classList.toggle('error',!!snapshot.capture.error||snapshot.capture.permission_needed);

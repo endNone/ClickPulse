@@ -144,6 +144,7 @@ impl CollectorDb {
             "Invalid source database"
         );
         crate::collector::initialize(&mut imported)?;
+        crate::shortcuts::read(&imported)?;
         // Minute details are permanent in the first public release. Refuse a
         // truncated backup rather than silently discard aggregate-only history.
         let consistent: bool = imported.query_row("SELECT NOT EXISTS(SELECT 1 FROM lifetime_totals l WHERE l.cnt != (SELECT COALESCE(sum(cnt),0) FROM events WHERE dev=l.dev))", [], |r|r.get(0))?;
@@ -206,7 +207,9 @@ impl CollectorDb {
             // Every positive source row missing from the destination (or zero
             // there) is already a delta row, so overlap needs no second join.
             let overlapping_rows = self.conn.query_row("SELECT (SELECT count(*) FROM incoming.events WHERE cnt>0)-(SELECT count(*) FROM temp.import_delta WHERE existing<=0 AND cnt+existing>0)",[],|r|r.get(0))?;
-            if added.total() == 0 {
+            let shortcut_changes: bool = self.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM incoming.shortcut_daily s LEFT JOIN main.shortcut_daily d USING(origin,platform,day,modifiers,code) WHERE s.cnt>COALESCE(d.cnt,0))", [], |r|r.get(0))?;
+            if added.total() == 0 && !shortcut_changes {
                 return Ok(ImportReport {
                     added,
                     overlapping_rows,
@@ -248,6 +251,12 @@ impl CollectorDb {
                     [chrono::Local::now().timestamp_millis().to_string()],
                 )?;
             }
+            // Keep per-origin maxima for backups; distinct recording databases add.
+            // No per-input identity or ordered chord history is required.
+            tx.execute_batch("INSERT INTO shortcut_daily(origin,platform,day,modifiers,code,cnt) SELECT origin,platform,day,modifiers,code,cnt FROM incoming.shortcut_daily WHERE cnt>0
+                ON CONFLICT(origin,platform,day,modifiers,code) DO UPDATE SET cnt=max(shortcut_daily.cnt,excluded.cnt)")?;
+            crate::shortcuts::validate_days(&tx)?;
+            crate::shortcuts::read(&tx)?;
             tx.commit()?;
             self.projection.clear();
             // Only after a committed merge: a failed import keeps every older copy.
@@ -273,14 +282,170 @@ impl CollectorDb {
 mod tests {
     use super::*;
     use crate::input::{Device, InputEvent};
+    #[test]
+    fn malformed_or_overflowing_shortcuts_roll_back_the_whole_import() {
+        for invalid in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let a = dir.path().join("a.sqlite3");
+            let b = dir.path().join("b.sqlite3");
+            let mut dest = CollectorDb::open(&a).unwrap();
+            let mut src = CollectorDb::open(&b).unwrap();
+            dest.conn
+                .execute(
+                    "INSERT INTO shortcut_daily VALUES('a','windows','2026-11-19',1,8,?1)",
+                    [i64::MAX],
+                )
+                .unwrap();
+            src.conn
+                .execute(
+                    "INSERT INTO shortcut_daily VALUES('b','windows',?1,1,8,1)",
+                    [if invalid { "2026-02-30" } else { "2026-11-19" }],
+                )
+                .unwrap();
+            src.insert(&[InputEvent {
+                ts_ms: chrono::Local::now().timestamp_millis(),
+                device: Device::Mouse,
+                code: 1,
+                shortcut: None,
+            }])
+            .unwrap();
+            assert!(dest.import_history(&b, &a).is_err());
+            assert_eq!(dest.lifetime().unwrap().total(), 0);
+            assert_eq!(
+                crate::shortcuts::read(&dest.conn).unwrap()[0].count,
+                i64::MAX
+            );
+            assert_eq!(
+                dest.conn
+                    .query_row("SELECT count(*) FROM shortcut_daily", [], |r| r
+                        .get::<_, i64>(0))
+                    .unwrap(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn shortcut_only_import_is_backed_up_and_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a.sqlite3");
+        let b = dir.path().join("b.sqlite3");
+        let mut dest = CollectorDb::open(&a).unwrap();
+        let src = CollectorDb::open(&b).unwrap();
+        crate::shortcuts::insert(
+            &src.conn,
+            crate::shortcuts::Chord {
+                key: 8,
+                modifiers: 1,
+            },
+            chrono::Local::now().date_naive(),
+        )
+        .unwrap();
+        crate::shortcuts::insert(
+            &dest.conn,
+            crate::shortcuts::Chord {
+                key: 8,
+                modifiers: 1,
+            },
+            chrono::Local::now().date_naive(),
+        )
+        .unwrap();
+        let report = dest.import_history(&b, &a).unwrap();
+        assert!(report.backup.is_some());
+        assert_eq!(crate::shortcuts::read(&dest.conn).unwrap()[0].count, 2);
+        assert!(dest.import_history(&b, &a).unwrap().backup.is_none());
+        assert_eq!(crate::shortcuts::read(&dest.conn).unwrap()[0].count, 2);
+    }
+    #[test]
+    fn daily_shortcut_import_merges_per_origin_and_day_and_keeps_preview_dates_unknown() {
+        use crate::shortcuts::{read, read_range};
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("destination.sqlite3");
+        let incoming = dir.path().join("incoming.sqlite3");
+        let preview = dir.path().join("preview.sqlite3");
+        let mut dest = CollectorDb::open(&destination).unwrap();
+        let src = CollectorDb::open(&incoming).unwrap();
+        dest.conn
+            .execute_batch(
+                "INSERT INTO shortcut_daily VALUES
+            ('same','windows','2026-11-15',1,8,10),
+            ('same','windows','2026-11-16',1,8,4)",
+            )
+            .unwrap();
+        src.conn
+            .execute_batch(
+                "INSERT INTO shortcut_daily VALUES
+            ('same','windows','2026-11-15',1,8,7),
+            ('same','windows','2026-11-16',1,8,9),
+            ('independent','windows','2026-11-15',1,8,3)",
+            )
+            .unwrap();
+        let report = dest.import_history(&incoming, &destination).unwrap();
+        assert!(report.backup.is_some());
+        assert_eq!(read(&dest.conn).unwrap()[0].count, 22);
+        assert_eq!(
+            read_range(&dest.conn, "2026-11-15", "2026-11-15").unwrap()[0].count,
+            13
+        );
+        assert_eq!(
+            read_range(&dest.conn, "2026-11-16", "2026-11-16").unwrap()[0].count,
+            9
+        );
+        assert!(
+            dest.import_history(&incoming, &destination)
+                .unwrap()
+                .backup
+                .is_none()
+        );
+        let old = CollectorDb::open(&preview).unwrap();
+        old.conn.execute_batch("DROP TABLE shortcut_daily;
+            CREATE TABLE shortcut_totals(origin TEXT,platform TEXT,modifiers INTEGER,code INTEGER,cnt INTEGER,PRIMARY KEY(origin,platform,modifiers,code));
+            INSERT INTO shortcut_totals VALUES('preview','windows',1,8,5)").unwrap();
+        assert!(
+            dest.import_history(&preview, &destination)
+                .unwrap()
+                .backup
+                .is_some()
+        );
+        assert_eq!(read(&dest.conn).unwrap()[0].count, 27);
+        assert_eq!(
+            read_range(&dest.conn, "2026-11-15", "2026-11-16").unwrap()[0].count,
+            22
+        );
+        assert_eq!(
+            dest.conn
+                .query_row("SELECT cnt FROM shortcut_daily WHERE day=''", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            5
+        );
+        assert!(
+            dest.import_history(&preview, &destination)
+                .unwrap()
+                .backup
+                .is_none()
+        );
+        // Import upgrades only its temporary copy, never the user's source file.
+        assert_eq!(
+            old.conn
+                .query_row("SELECT cnt FROM shortcut_totals", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            5
+        );
+        assert!(old.conn.prepare("SELECT * FROM shortcut_daily").is_err());
+        assert_eq!(read(&dest.conn).unwrap()[0].count, 27);
+    }
     fn add(db: &mut CollectorDb, keyboard: usize, mouse: usize, at: i64) {
         let events = (0..keyboard)
             .map(|_| InputEvent {
+                shortcut: None,
                 ts_ms: at,
                 device: Device::Keyboard,
                 code: 0,
             })
             .chain((0..mouse).map(|_| InputEvent {
+                shortcut: None,
                 ts_ms: at,
                 device: Device::Mouse,
                 code: 1,
@@ -706,6 +871,7 @@ mod tests {
                         .and_modify(|v| *v = (*v).max(count))
                         .or_insert(count);
                     events.extend((0..count).map(|_| InputEvent {
+                        shortcut: None,
                         ts_ms: bucket * 60_000,
                         device,
                         code: code as u32,

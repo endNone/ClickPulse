@@ -7,7 +7,7 @@ function createClickPulseDropdowns(document,window){
     wrapper.className='dropdown';wrapper.dataset.select=select.id;
     trigger.type='button';trigger.id=select.id+'-trigger';trigger.className='button dropdown-trigger';trigger.setAttribute('role','combobox');trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');trigger.setAttribute('aria-controls',select.id+'-listbox');
     label.className='dropdown-label';caret.setAttribute('viewBox','0 0 16 16');caret.setAttribute('aria-hidden','true');caret.classList.add('dropdown-caret');path.setAttribute('d','m4 6 4 4 4-4');caret.append(path);trigger.append(label,caret);wrapper.append(trigger);
-    menu.id=select.id+'-listbox';menu.className='dropdown-menu';menu.hidden=true;menu.setAttribute('role','listbox');
+    menu.id=select.id+'-listbox';menu.className='dropdown-menu';if(select.closest('.settings-card'))menu.classList.add('settings-menu');menu.hidden=true;menu.setAttribute('role','listbox');
     select.parentNode.insertBefore(wrapper,select);select.hidden=true;document.body.append(menu);
     let options=[],items=[],signature='',active=-1,buffer='',typedAt=0;
     const current=()=>Math.max(0,options.findIndex(option=>option.value===select.value));
@@ -40,11 +40,21 @@ function createClickPulseDropdowns(document,window){
       }
       if(opened===controller&&trigger.disabled)close();
       mark(changed);
+      if(changed&&opened===controller)position();
     }
     function position(){
-      const rect=trigger.getBoundingClientRect(),margin=8,width=Math.min(Math.max(rect.width,156),window.innerWidth-margin*2),height=Math.min(menu.scrollHeight,244),below=window.innerHeight-rect.bottom-6-margin,above=rect.top-6-margin;
-      const flip=below<height&&above>below,available=Math.max(36,flip?above:below),shown=Math.min(height,available);
-      menu.style.width=width+'px';menu.style.maxHeight=shown+'px';menu.style.left=Math.max(margin,Math.min(rect.left,window.innerWidth-width-margin))+'px';menu.style.top=(flip?rect.top-shown-6:rect.bottom+6)+'px';
+      const rect=trigger.getBoundingClientRect(),margin=8,gap=6,viewportWidth=Math.max(0,window.innerWidth-margin*2);
+      // Measure at the final width, without an old height cap. The outer height
+      // includes borders; using scrollHeight would clip even a two-option menu.
+      menu.style.width='max-content';menu.style.minWidth=Math.min(Math.max(rect.width,156),viewportWidth)+'px';
+      menu.style.maxWidth=Math.min(Math.max(rect.width,360),viewportWidth)+'px';menu.style.maxHeight='none';
+      const natural=menu.getBoundingClientRect(),width=Math.ceil(natural.width),height=Math.min(Math.ceil(natural.height),244);
+      const below=window.innerHeight-rect.bottom-gap-margin,above=rect.top-gap-margin,flip=below<height&&above>below;
+      const available=Math.max(0,flip?above:below),shown=Math.min(height,available);
+      const left=rect.left+rect.width-width,top=flip?rect.top-shown-gap:rect.bottom+gap;
+      menu.style.width=width+'px';menu.style.maxHeight=shown+'px';
+      menu.style.left=Math.max(margin,Math.min(left,window.innerWidth-width-margin))+'px';
+      menu.style.top=Math.max(margin,Math.min(top,window.innerHeight-shown-margin))+'px';
     }
     function open(){
       if(trigger.disabled)return;closeAll();trigger.focus();sync();opened=controller;active=current();menu.hidden=false;trigger.setAttribute('aria-expanded','true');position();mark();
@@ -60,7 +70,8 @@ function createClickPulseDropdowns(document,window){
       const wasOpen=opened===controller,key=event.key;
       if(key==='Tab'){if(wasOpen)commit();return;}
       if(key==='Escape'){if(wasOpen){event.preventDefault();close();}return;}
-      if(key==='Enter'||key===' '){event.preventDefault();wasOpen?commit():open();return;}
+      if(wasOpen&&event.altKey&&key==='ArrowUp'){event.preventDefault();commit();return;}
+      if(key==='Enter'||(key===' '&&!(wasOpen&&buffer&&Date.now()-typedAt<700))){event.preventDefault();wasOpen?commit():open();return;}
       if(['ArrowDown','ArrowUp','Home','End','PageDown','PageUp'].includes(key)){
         event.preventDefault();if(!wasOpen)open();
         if(wasOpen)active=Math.min(options.length-1,Math.max(0,active+(key==='ArrowDown'?1:key==='ArrowUp'?-1:key==='PageDown'?10:key==='PageUp'?-10:0)));

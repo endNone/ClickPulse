@@ -1,17 +1,37 @@
 //! Versioned upgrades are transactional; newer databases are never downgraded.
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail};
 use chrono::{Local, TimeZone};
 use rusqlite::{Connection, OptionalExtension};
 
 pub(crate) const VERSION: i64 = 1;
 pub(crate) const KEY_ENCODING_VERSION: i64 = 1;
 
+#[derive(Debug)]
+pub(crate) struct UnsupportedVersion {
+    pub kind: &'static str,
+    pub version: i64,
+    pub supported: i64,
+}
+impl std::fmt::Display for UnsupportedVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Unsupported {} version {}; use a compatible ClickPulse version. The database was not modified.",
+            self.kind, self.version
+        )
+    }
+}
+impl std::error::Error for UnsupportedVersion {}
+
 pub(crate) fn require_supported(conn: &Connection) -> Result<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    ensure!(
-        (0..=VERSION).contains(&version),
-        "Unsupported database schema version {version}; use a compatible ClickPulse version. The database was not modified."
-    );
+    if !(0..=VERSION).contains(&version) {
+        bail!(UnsupportedVersion {
+            kind: "database schema",
+            version,
+            supported: VERSION
+        });
+    }
     Ok(())
 }
 
@@ -32,10 +52,13 @@ pub(crate) fn metadata(conn: &Connection, key: &str) -> Result<Option<String>> {
 pub(crate) fn require_key_encoding(conn: &Connection) -> Result<()> {
     if let Some(value) = metadata(conn, "key_encoding_version")? {
         let version: i64 = value.parse().context("Invalid key encoding metadata")?;
-        ensure!(
-            version == KEY_ENCODING_VERSION,
-            "Unsupported key encoding version {version}; use a compatible ClickPulse version."
-        );
+        if version != KEY_ENCODING_VERSION {
+            bail!(UnsupportedVersion {
+                kind: "key encoding",
+                version,
+                supported: KEY_ENCODING_VERSION
+            });
+        }
     }
     Ok(())
 }

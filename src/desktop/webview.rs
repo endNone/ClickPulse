@@ -1,7 +1,10 @@
 //! Optional renderer; capture, updates and data tasks live in desktop.rs.
 use super::UiEvent;
 use anyhow::Result;
-use clickpulse::{localization::Locale, presentation::Preferences};
+use clickpulse::{
+    localization::Locale,
+    presentation::{Preferences, UiScale},
+};
 use std::{
     cell::Cell,
     sync::Arc,
@@ -23,6 +26,9 @@ struct RenderedView {
 
 #[derive(Default)]
 pub(super) struct VisibleWebView {
+    zoom: Cell<f64>,
+    keyboard_zoom: Cell<f64>,
+    window_unit: Cell<f64>,
     inner: Option<RenderedView>,
     active: Cell<bool>,
     ready: Cell<bool>,
@@ -42,6 +48,8 @@ impl VisibleWebView {
         }
         self.generation = self.generation.wrapping_add(1);
         self.inner = Some(create(window, proxy, locale, preferences, self.generation)?);
+        self.zoom.set(0.0);
+        self.set_zoom(window, preferences);
         self.active.set(true);
         self.ready.set(false);
         self.hidden_since.set(None);
@@ -49,9 +57,47 @@ impl VisibleWebView {
     }
     pub fn mark_ready(&self) {
         self.ready.set(true);
+        self.keyboard_zoom.set(0.0);
+        self.window_unit.set(0.0);
+    }
+    pub fn set_zoom(&self, window: &Window, preferences: &Preferences) {
+        let width = window
+            .inner_size()
+            .to_logical::<f64>(window.scale_factor())
+            .width;
+        let zoom = preferences.ui_scale.factor(width, preferences.compact);
+        if (self.zoom.get() - zoom).abs() > 0.001
+            && let Some(view) = &self.inner
+            && view.inner.zoom(zoom).is_ok()
+        {
+            self.zoom.set(zoom);
+        }
+        // Window-driven automatic zoom must not resize the physical keyboard.
+        // Explicit user scaling still applies. Publish only when changed and
+        // ready, including after a renderer recreation or hidden-window resize.
+        let keyboard_zoom = keyboard_zoom(preferences.ui_scale, self.zoom.get());
+        // The Mac sidebar control shares a row with native traffic lights,
+        // whose size and position stay fixed even when the page is enlarged.
+        let window_unit = 1.0 / self.zoom.get().max(1.0);
+        if self.is_ready()
+            && ((self.keyboard_zoom.get() - keyboard_zoom).abs() > 0.0001
+                || (self.window_unit.get() - window_unit).abs() > 0.0001)
+            && self.evaluate_script(&format!(
+                "document.documentElement.style.setProperty('--keyboard-zoom','{keyboard_zoom}');document.documentElement.style.setProperty('--window-unit','{window_unit}px');"
+            )).is_ok()
+        {
+            self.keyboard_zoom.set(keyboard_zoom);
+            self.window_unit.set(window_unit);
+        }
     }
     pub fn is_ready(&self) -> bool {
         self.is_active() && self.ready.get()
+    }
+    #[cfg(target_os = "macos")]
+    pub fn sync_titlebar(&self, window: &Window, compact: bool, collapsed: bool) {
+        if !compact && self.is_active() {
+            super::window::align_titlebar(window, self.zoom.get().max(1.0), collapsed);
+        }
     }
     pub fn accepts(&self, generation: u64) -> bool {
         self.inner.is_some() && generation == self.generation
@@ -119,6 +165,14 @@ impl VisibleWebView {
                 libc::malloc_trim(0);
             }
         }
+    }
+}
+
+fn keyboard_zoom(scale: UiScale, applied_zoom: f64) -> f64 {
+    if scale == UiScale::Auto && applied_zoom > 0.0 {
+        1.0 / applied_zoom
+    } else {
+        1.0
     }
 }
 // Wry 0.55's GTK IPC signal captures a strong WebView clone. The view owns
@@ -215,45 +269,25 @@ fn create(
     preferences: &Preferences,
     generation: u64,
 ) -> Result<RenderedView> {
-    let html = include_str!("../../ui/index.html")
-        .replace("__VERSION__", clickpulse::version::PUBLIC)
-        .replace("__BRAND_MARK__", "images/brand-mark.png")
-        .replace("__LOCALE__", locale.code())
-        .replace("__THEME__", preferences.theme.code())
-        .replace("__PLATFORM__", clickpulse::platform::name())
-        .replace("/*__MESSAGES__*/", include_str!("../../ui/locales.json"))
-        .replace(
-            "/*__STYLE__*/",
-            &format!(
-                "{}\n{}\n{}\n{}\n{}\n{}\n{}",
-                clickpulse::branding::font_css(),
-                include_str!("../../ui/style.css"),
-                include_str!("../../ui/history.css"),
-                include_str!("../../ui/compact.css"),
-                include_str!("../../ui/themes.css"),
-                include_str!("../../ui/dropdown.css"),
-                include_str!("../../ui/sport.css")
-            ),
-        )
-        .replace(
-            "/*__SCRIPT__*/",
-            &format!(
-                "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
-                include_str!("../../ui/i18n.js"),
-                include_str!("../../ui/themes.js"),
-                include_str!("../../ui/dropdown.js"),
-                include_str!("../../ui/history.js"),
-                include_str!("../../ui/keyboard.js"),
-                include_str!("../../ui/sport.js"),
-                include_str!("../../ui/app.js"),
-                include_str!("../../ui/presentation.js")
-            ),
-        );
+    // Avoid reusing a previous build's document; preferences are embedded too.
+    let document_path = format!(
+        "/index.html?build={}&view={generation}",
+        clickpulse::version::INTERNAL_BUILD
+    );
+    let theme = preferences.theme.code();
+    let integrated_titlebar = super::window::integrated_titlebar();
     #[cfg(target_os = "windows")]
     let mut web_context =
         wry::WebContext::new(Some(clickpulse::platform::data_dir()?.join("webview")));
     #[cfg(target_os = "windows")]
     let builder = WebViewBuilder::new_with_web_context(&mut web_context);
+    #[cfg(target_os = "windows")]
+    let builder = {
+        use wry::WebViewBuilderExtWindows;
+        builder
+            .with_browser_accelerator_keys(false)
+            .with_default_context_menus(false)
+    };
     #[cfg(not(target_os = "windows"))]
     let builder = WebViewBuilder::new();
     let builder = builder
@@ -261,11 +295,60 @@ fn create(
             use std::borrow::Cow;
             let (content_type, body, status): (&str, Cow<'static, [u8]>, u16) =
                 match request.uri().path() {
-                    "/index.html" => (
-                        "text/html; charset=utf-8",
-                        Cow::Owned(html.as_bytes().to_vec()),
-                        200,
-                    ),
+                    "/index.html" => {
+                        let html = include_str!("../../ui/index.html")
+                            .replace(
+                                "__MAC_TITLEBAR__",
+                                if integrated_titlebar {
+                                    "integrated"
+                                } else {
+                                    "system"
+                                },
+                            )
+                            .replace("__VERSION__", clickpulse::version::PUBLIC)
+                            .replace("__BRAND_MARK__", "images/brand-mark.png")
+                            .replace("__LOCALE__", locale.code())
+                            .replace("__THEME__", theme)
+                            .replace("__PLATFORM__", clickpulse::platform::name())
+                            .replace("/*__MESSAGES__*/", include_str!("../../ui/locales.json"))
+                            .replace(
+                                "/*__STYLE__*/",
+                                &format!(
+                                    "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+                                    clickpulse::branding::font_css(),
+                                    include_str!("../../ui/style.css"),
+                                    include_str!("../../ui/history.css"),
+                                    include_str!("../../ui/compact.css"),
+                                    include_str!("../../ui/themes.css"),
+                                    include_str!("../../ui/dropdown.css"),
+                                    include_str!("../../ui/sport.css"),
+                                    include_str!("../../ui/insights.css")
+                                ),
+                            )
+                            .replace(
+                                "/*__SCRIPT__*/",
+                                &format!(
+                                    "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+                                    include_str!("../../ui/i18n.js"),
+                                    include_str!("../../ui/themes.js"),
+                                    include_str!("../../ui/dropdown.js"),
+                                    include_str!("../../ui/history.js"),
+                                    include_str!("../../ui/keyboard.js"),
+                                    include_str!("../../ui/sport.js"),
+                                    include_str!("../../ui/shortcuts-catalog.js"),
+                                    include_str!("../../ui/date-picker.js"),
+                                    include_str!("../../ui/insights.js"),
+                                    include_str!("../../ui/app.js"),
+                                    include_str!("../../ui/presentation.js")
+                                ),
+                            );
+
+                        (
+                            "text/html; charset=utf-8",
+                            Cow::Owned(html.into_bytes()),
+                            200,
+                        )
+                    }
                     "/images/brand-mark.png" => (
                         "image/png",
                         Cow::Borrowed(clickpulse::branding::ui_mark_png()),
@@ -286,21 +369,23 @@ fn create(
             wry::http::Response::builder()
                 .status(status)
                 .header("Content-Type", content_type)
+                .header("Cache-Control", "no-store")
                 .body(body)
                 .expect("static resource response")
         })
-        .with_url("clickpulse://localhost/index.html");
+        .with_url(format!("clickpulse://localhost{document_path}"));
     let builder = builder
         .with_transparent(cfg!(any(target_os = "macos", target_os = "linux")))
-        .with_navigation_handler(|url| {
+        .with_navigation_handler(move |url| {
             url == "about:blank"
                 || url.starts_with("about:blank#")
-                || matches!(
-                    url.as_str(),
-                    "clickpulse://localhost/index.html"
-                        | "http://clickpulse.localhost/index.html"
-                        | "https://clickpulse.localhost/index.html"
-                )
+                || [
+                    "clickpulse://localhost",
+                    "http://clickpulse.localhost",
+                    "https://clickpulse.localhost",
+                ]
+                .iter()
+                .any(|origin| url == format!("{origin}{document_path}"))
         })
         .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
         .with_ipc_handler(move |req| {
@@ -329,6 +414,26 @@ fn create(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn keyboard_size_is_stable_during_auto_resize_and_respects_manual_scale() {
+        for width in [900.0, 1160.0, 1334.0, 1600.0, 1920.0, 2560.0] {
+            for compact in [false, true] {
+                let zoom = UiScale::Auto.factor(width, compact);
+                assert!((44.0 * zoom * keyboard_zoom(UiScale::Auto, zoom) - 44.0).abs() < 0.001);
+            }
+            for scale in [
+                UiScale::Percent100,
+                UiScale::Percent115,
+                UiScale::Percent130,
+                UiScale::Percent150,
+            ] {
+                let zoom = scale.factor(width, false);
+                assert_eq!(keyboard_zoom(scale, zoom), 1.0);
+            }
+        }
+        assert_eq!(keyboard_zoom(UiScale::Auto, 0.0), 1.0);
+    }
+
     #[test]
     fn hidden_renderer_expires_only_when_idle_and_invisible() {
         let start = Instant::now();

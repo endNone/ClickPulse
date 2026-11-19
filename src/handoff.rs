@@ -168,13 +168,126 @@ fn xml(s: &str) -> String {
         .replace('\'', "&apos;")
 }
 pub fn auto_start_enabled() -> bool {
-    agent(APP_LABEL).is_ok_and(|p| p.is_file())
+    let (Ok(path), Ok(current)) = (agent(APP_LABEL), app_path()) else {
+        return false;
+    };
+    startup_app(&path).is_ok_and(|saved| crate::platform::same_executable(&saved, &current))
+}
+
+fn startup_app(path: &Path) -> Result<PathBuf> {
+    ensure!(!path.is_symlink(), "Startup entry is a symbolic link");
+    use core_foundation::{
+        array::CFArray,
+        base::{CFType, TCFType},
+        data::CFData,
+        dictionary::CFDictionary,
+        propertylist::{create_with_data, kCFPropertyListImmutable},
+        string::CFString,
+    };
+    let bytes = std::fs::read(path)?;
+    let (raw, _) = create_with_data(CFData::from_buffer(&bytes), kCFPropertyListImmutable)
+        .map_err(|e| anyhow::anyhow!("Cannot read startup configuration: {e}"))?;
+    let property = unsafe { CFType::wrap_under_create_rule(raw.cast()) };
+    let raw_dict = property
+        .downcast::<CFDictionary>()
+        .context("Startup configuration must be a dictionary")?;
+    let dict: CFDictionary<CFString, CFType> =
+        unsafe { CFDictionary::wrap_under_get_rule(raw_dict.as_concrete_TypeRef()) };
+    let label = dict
+        .find(CFString::new("Label"))
+        .and_then(|v| v.downcast::<CFString>())
+        .context("Missing startup label")?
+        .to_string();
+    let args = dict
+        .find(CFString::new("ProgramArguments"))
+        .and_then(|v| v.downcast::<CFArray>())
+        .context("Missing startup arguments")?;
+    let args: CFArray<CFType> = unsafe { CFArray::wrap_under_get_rule(args.as_concrete_TypeRef()) };
+    let args: Option<Vec<_>> = args
+        .iter()
+        .map(|v| v.downcast::<CFString>().map(|s| s.to_string()))
+        .collect();
+    let value = serde_json::json!({"Label":label,"ProgramArguments":args.context("Invalid startup arguments")?});
+    startup_app_value(&value)
+}
+
+fn startup_app_value(value: &serde_json::Value) -> Result<PathBuf> {
+    ensure!(
+        value["Label"] == APP_LABEL,
+        "Unrecognized login startup configuration"
+    );
+    let args = value["ProgramArguments"]
+        .as_array()
+        .context("Missing startup arguments")?;
+    ensure!(
+        args.len() == 6
+            && args[0] == "/usr/bin/open"
+            && args[1] == "-g"
+            && args[2] == "-j"
+            && args[4] == "--args"
+            && args[5] == "--background",
+        "Unrecognized login startup command"
+    );
+    let path = PathBuf::from(args[3].as_str().context("Invalid startup App path")?);
+    ensure!(
+        path.is_absolute() && path.extension().is_some_and(|e| e == "app"),
+        "Invalid startup App path"
+    );
+    Ok(path)
+}
+
+fn require_installed_app(path: &Path) -> Result<()> {
+    if path.starts_with("/Volumes")
+        || path
+            .components()
+            .any(|c| c.as_os_str() == "AppTranslocation")
+    {
+        return Err(crate::platform::TemporaryAppLocation.into());
+    }
+    Ok(())
+}
+
+fn login_plist(app: &Path) -> String {
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>Label</key><string>{APP_LABEL}</string><key>ProgramArguments</key><array><string>/usr/bin/open</string><string>-g</string><string>-j</string><string>{}</string><string>--args</string><string>--background</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><false/><key>ProcessType</key><string>Interactive</string></dict></plist>\n",
+        xml(&app.to_string_lossy())
+    )
+}
+
+pub fn repair_auto_start() -> Result<bool> {
+    let path = agent(APP_LABEL)?;
+    if !path.is_file() || path.is_symlink() {
+        return Ok(false);
+    }
+    let Ok(saved) = startup_app(&path) else {
+        return Ok(false);
+    };
+    if saved.try_exists()? {
+        return Ok(false);
+    }
+    // Never replace a persistent entry with a DMG/translocated copy.
+    let current = app_path()?;
+    if require_installed_app(&current).is_err() {
+        return Ok(false);
+    }
+    // launchd reloads this entry at next login. Do not bootstrap a RunAtLoad
+    // service while the recorder is already starting.
+    use std::io::Write;
+    let mut temp =
+        tempfile::NamedTempFile::new_in(path.parent().context("Startup directory missing")?)?;
+    temp.write_all(login_plist(&current).as_bytes())?;
+    temp.as_file().sync_all()?;
+    temp.persist(&path)?;
+    Ok(true)
 }
 
 pub fn set_auto_start(enabled: bool) -> Result<()> {
     let path = agent(APP_LABEL)?;
+    ensure!(!path.is_symlink(), "Startup entry is a symbolic link");
     let service = format!("{}/{}", domain()?, APP_LABEL);
     if enabled {
+        let app = app_path()?;
+        require_installed_app(&app)?;
         let previous = if path.exists() {
             let contents = std::fs::read_to_string(&path)?;
             ensure!(
@@ -185,24 +298,23 @@ pub fn set_auto_start(enabled: bool) -> Result<()> {
         } else {
             None
         };
-        let app = app_path()?;
-        let content = format!(
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>Label</key><string>{APP_LABEL}</string><key>ProgramArguments</key><array><string>/usr/bin/open</string><string>-g</string><string>-j</string><string>{}</string><string>--args</string><string>--background</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><false/><key>ProcessType</key><string>Interactive</string></dict></plist>\n",
-            xml(&app.to_string_lossy())
-        );
+        let content = login_plist(&app);
         std::fs::create_dir_all(path.parent().unwrap())?;
-        let temp = path.with_extension("plist.tmp");
-        std::fs::write(&temp, content)?;
+        use std::io::Write;
+        let mut temp =
+            tempfile::NamedTempFile::new_in(path.parent().context("Startup directory missing")?)?;
+        temp.write_all(content.as_bytes())?;
+        temp.as_file().sync_all()?;
         let checked = Command::new("/usr/bin/plutil")
             .arg("-lint")
-            .arg(&temp)
+            .arg(temp.path())
             .output()?;
         ensure!(
             checked.status.success(),
             "Login startup configuration validation failed"
         );
         let _ = launchctl(&["bootout", &service]);
-        std::fs::rename(temp, &path)?;
+        temp.persist(&path)?;
         activate_with_plist_rollback(&path, previous.as_deref(), || {
             launchctl(&["enable", &service])?;
             launchctl(&[
@@ -410,5 +522,49 @@ mod tests {
         std::fs::write(&path, "new plist contents").unwrap();
         activate_with_plist_rollback(&path, Some("previous plist contents"), || Ok(())).unwrap();
         assert_eq!(std::fs::read_to_string(path).unwrap(), "new plist contents");
+    }
+}
+
+#[cfg(test)]
+mod startup_path_tests {
+    use super::*;
+    #[test]
+    fn startup_plist_round_trips_escaped_paths_and_rejects_wrong_types() {
+        let temp = tempfile::tempdir().unwrap();
+        let entry = temp.path().join("login.plist");
+        let app = Path::new("/Applications/ClickPulse & <测试> 'copy'.app");
+        let plist = login_plist(app);
+        std::fs::write(&entry, &plist).unwrap();
+        assert_eq!(startup_app(&entry).unwrap(), app);
+        for invalid in [
+            "not a plist".to_owned(),
+            plist.replace("<string>/usr/bin/open</string>", "<integer>1</integer>"),
+            plist
+                .replace("<array>", "<dict>")
+                .replace("</array>", "</dict>"),
+            plist.replace(APP_LABEL, "another.app"),
+        ] {
+            std::fs::write(&entry, invalid).unwrap();
+            assert!(startup_app(&entry).is_err());
+        }
+    }
+
+    #[test]
+    fn temporary_app_locations_cannot_replace_login_startup() {
+        for path in [
+            "/Volumes/ClickPulse/ClickPulse.app",
+            "/private/var/folders/a/AppTranslocation/x/d/ClickPulse.app",
+        ] {
+            assert!(require_installed_app(Path::new(path)).is_err());
+        }
+        assert!(require_installed_app(Path::new("/Applications/ClickPulse.app")).is_ok());
+        let valid = serde_json::json!({"Label":APP_LABEL,"ProgramArguments":["/usr/bin/open","-g","-j","/Applications/ClickPulse.app","--args","--background"]});
+        assert_eq!(
+            startup_app_value(&valid).unwrap(),
+            PathBuf::from("/Applications/ClickPulse.app")
+        );
+        let mut wrong = valid;
+        wrong["ProgramArguments"][0] = "/bin/sh".into();
+        assert!(startup_app_value(&wrong).is_err());
     }
 }

@@ -6,7 +6,6 @@ use crate::{
     windows_input::{WindowsKeyboard, mouse_buttons},
 };
 use anyhow::{Result, ensure};
-use chrono::Local;
 use crossbeam_channel::Sender;
 use std::{
     cell::RefCell,
@@ -17,11 +16,15 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
+    time::Instant,
 };
 use windows_sys::Win32::{
     Foundation::{ERROR_CLASS_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, WPARAM},
-    System::LibraryLoader::GetModuleHandleW,
-    UI::{Input::*, WindowsAndMessaging::*},
+    System::{LibraryLoader::GetModuleHandleW, RemoteDesktop::*},
+    UI::{
+        Accessibility::*, Input::KeyboardAndMouse::GetAsyncKeyState, Input::*,
+        WindowsAndMessaging::*,
+    },
 };
 
 struct Listener {
@@ -58,14 +61,15 @@ impl Listener {
     fn fail(&self, code: &'static str, message: String) {
         stop_with_error(&self.stop, &self.status, code, message);
     }
-    fn enqueue(&self, device: Device, code: u32) {
+    fn enqueue(&self, device: Device, code: u32, shortcut: Option<crate::shortcuts::Chord>) {
         if !self.storage_blocked.load(Ordering::Relaxed)
             && !self.paused.load(Ordering::Relaxed)
             && !self.stop.load(Ordering::Relaxed)
             && self
                 .tx
                 .try_send(Command::Input(InputEvent {
-                    ts_ms: Local::now().timestamp_millis(),
+                    shortcut,
+                    ts_ms: chrono::Utc::now().timestamp_millis(),
                     device,
                     code,
                 }))
@@ -91,9 +95,11 @@ impl Listener {
             )
         };
         if read == u32::MAX {
-            self.fail(
-                "error.capture",
-                format!("Read raw input failed: {}", std::io::Error::last_os_error()),
+            // A stale/oversized packet is not a terminal device failure.
+            // Continue listening; never permanently stop capture for one bad handle.
+            eprintln!(
+                "Skipped unreadable raw input packet: {}",
+                std::io::Error::last_os_error()
             );
             return;
         }
@@ -116,7 +122,13 @@ impl Listener {
                     key.VKey,
                     self.ignore_software_input.load(Ordering::Relaxed),
                 ) {
-                    self.enqueue(Device::Keyboard, code);
+                    let shortcut = self.keys.shortcut(
+                        raw.header.hDevice as usize,
+                        code,
+                        Instant::now(),
+                        |vk| unsafe { GetAsyncKeyState(i32::from(vk)) < 0 },
+                    );
+                    self.enqueue(Device::Keyboard, code, shortcut);
                 }
             }
             RIM_TYPEMOUSE => {
@@ -128,12 +140,38 @@ impl Listener {
                 }
                 let flags = unsafe { raw.data.mouse.Anonymous.Anonymous.usButtonFlags };
                 for code in mouse_buttons(flags) {
-                    self.enqueue(Device::Mouse, code);
+                    self.enqueue(Device::Mouse, code, None);
                 }
             }
             _ => {}
         }
     }
+}
+
+// Delivered on the listener's message-loop thread. Covers secure-desktop UAC
+// and foreground transitions into/out of elevated windows, where UIPI can
+// swallow Raw Input releases without switching desktops. Packet-order chord
+// tracking remains unchanged between these discontinuities.
+unsafe extern "system" fn input_context_changed(
+    _: HWINEVENTHOOK,
+    event: u32,
+    _: HWND,
+    _: i32,
+    _: i32,
+    _: u32,
+    _: u32,
+) {
+    LISTENER.with(|state| {
+        if let Some(listener) = state.borrow_mut().as_mut() {
+            if event == EVENT_SYSTEM_FOREGROUND {
+                listener
+                    .keys
+                    .reconcile_foreground(|vk| unsafe { GetAsyncKeyState(i32::from(vk)) < 0 });
+            } else {
+                listener.keys.reset();
+            }
+        }
+    });
 }
 
 unsafe extern "system" fn procedure(
@@ -146,6 +184,22 @@ unsafe extern "system" fn procedure(
         LISTENER.with(|state| {
             if let Some(listener) = state.borrow_mut().as_mut() {
                 listener.input(lparam as HRAWINPUT);
+            }
+        });
+    } else if message == WM_WTSSESSION_CHANGE
+        && matches!(
+            wparam as u32,
+            WTS_SESSION_LOCK
+                | WTS_SESSION_UNLOCK
+                | WTS_CONSOLE_CONNECT
+                | WTS_REMOTE_CONNECT
+                | WTS_CONSOLE_DISCONNECT
+                | WTS_REMOTE_DISCONNECT
+        )
+    {
+        LISTENER.with(|state| {
+            if let Some(listener) = state.borrow_mut().as_mut() {
+                listener.keys.reset();
             }
         });
     } else if message == WM_INPUT_DEVICE_CHANGE && wparam == GIDC_REMOVAL as usize {
@@ -245,15 +299,68 @@ fn listen(stop: &AtomicBool, status: &Mutex<CaptureStatus>) -> Result<()> {
         "Create input window: {}",
         std::io::Error::last_os_error()
     );
-    struct InputWindow(HWND);
+    struct InputWindow {
+        hwnd: HWND,
+        session_notifications: bool,
+        context_hooks: [HWINEVENTHOOK; 2],
+    }
     impl Drop for InputWindow {
         fn drop(&mut self) {
             unsafe {
-                DestroyWindow(self.0);
+                if self.session_notifications {
+                    WTSUnRegisterSessionNotification(self.hwnd);
+                }
+                for hook in self.context_hooks {
+                    if !hook.is_null() {
+                        UnhookWinEvent(hook);
+                    }
+                }
+                DestroyWindow(self.hwnd);
             }
         }
     }
-    let _window = InputWindow(hwnd);
+    let session_notifications =
+        unsafe { WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION) } != 0;
+    if !session_notifications {
+        // The service may not be ready at login; the desktop-switch hook also
+        // resets swallowed releases.
+        eprintln!(
+            "Register session notifications failed: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+    let mut input_window = InputWindow {
+        hwnd,
+        session_notifications,
+        context_hooks: [null_mut(); 2],
+    };
+    for (hook, event) in input_window
+        .context_hooks
+        .iter_mut()
+        .zip([EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_FOREGROUND])
+    {
+        *hook = unsafe {
+            SetWinEventHook(
+                event,
+                event,
+                null_mut(),
+                Some(input_context_changed),
+                0,
+                0,
+                WINEVENT_OUTOFCONTEXT,
+            )
+        };
+        if hook.is_null() {
+            // Optional defense: restricted systems must still count input.
+            // Without this hook, lock/secure-desktop transitions can affect
+            // shortcut counts until session notifications or stale-state
+            // reconciliation clear a missing modifier release.
+            // This API does not promise a meaningful GetLastError value.
+            eprintln!(
+                "Input context notification unavailable (event {event}); continuing Raw Input capture"
+            );
+        }
+    }
     let devices = [2, 6].map(|usage| RAWINPUTDEVICE {
         usUsagePage: 1,
         usUsage: usage,
@@ -293,8 +400,10 @@ fn listen(stop: &AtomicBool, status: &Mutex<CaptureStatus>) -> Result<()> {
                 break;
             }
         }
-        unsafe {
-            MsgWaitForMultipleObjects(0, null(), 0, 100, QS_ALLINPUT);
+        if !stop.load(Ordering::Relaxed) {
+            unsafe {
+                MsgWaitForMultipleObjects(0, null(), 0, 100, QS_ALLINPUT);
+            }
         }
     }
     // Drop the window on its owning thread before draining the storage queue.

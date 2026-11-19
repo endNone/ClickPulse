@@ -61,7 +61,7 @@ pub(crate) fn accumulate(
         Resolution::Millisecond => ("ts_ms", 1, ">"),
         Resolution::Minute => ("bucket", 60_000, ">="),
     };
-    let mut stmt = conn.prepare(&format!(
+    let mut stmt = conn.prepare_cached(&format!(
         "SELECT ({column}*{scale}-?1)/3600000 AS hour,dev,SUM(cnt)
          FROM {table} WHERE {column}{comparison}?2 AND {column}<=?3 GROUP BY hour,dev"
     ))?;

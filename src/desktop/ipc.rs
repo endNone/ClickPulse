@@ -16,6 +16,12 @@ pub(super) enum Request {
     TodayPeriod {
         period: clickpulse::presentation::TodayPeriod,
     },
+    KeyboardLayout {
+        layout: clickpulse::presentation::KeyboardLayout,
+    },
+    UiScale {
+        scale: clickpulse::presentation::UiScale,
+    },
     Theme {
         theme: Theme,
     },
@@ -25,6 +31,20 @@ pub(super) enum Request {
     },
     InstallUpdate {},
     UpdateRelease {},
+    ProjectHome {},
+    SendFeedback {},
+    ShortcutReference {
+        source: String,
+    },
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    CopyShareCard {
+        png: String,
+        day: String,
+    },
+    SaveShareCard {
+        png: String,
+        day: String,
+    },
     Ready {},
     SessionState {
         state: super::session::SessionState,
@@ -51,6 +71,8 @@ pub(super) enum Request {
     Reveal {},
     StorageDirectory {},
     ImportHistory {},
+    #[cfg(windows)]
+    Uninstall {},
     Quit {},
     Close {},
     #[cfg(target_os = "macos")]
@@ -74,6 +96,15 @@ pub(super) enum Request {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn copy_card_ipc_requires_image_and_date_fields() {
+        assert!(matches!(serde_json::from_str::<Request>(r#"{"action":"copy_share_card","png":"data:image/png;base64,AA==","day":"2026-11-17"}"#).unwrap(), Request::CopyShareCard { .. }));
+        assert!(
+            serde_json::from_str::<Request>(r#"{"action":"copy_share_card","day":"2026-11-17"}"#)
+                .is_err()
+        );
+    }
     #[test]
     fn invalid_actions_and_payloads_are_rejected() {
         for body in [
@@ -84,12 +115,19 @@ mod tests {
             r#"{"action":"automatic_updates","enabled":true,"interval":1}"#,
             r#"{"action":"install_update","path":"/tmp/other"}"#,
             r#"{"action":"update_release","url":"https://example.com"}"#,
+            r#"{"action":"project_home","url":"https://example.com"}"#,
+            r#"{"action":"send_feedback","url":"https://example.com"}"#,
             r#"{"action":"timezone","timezone":"not/a-zone"}"#,
             r#"{"action":"timezone"}"#,
             r#"{"action":"timezone","timezone":null}"#,
             r#"{"action":"today_period"}"#,
             r#"{"action":"today_period","period":"all"}"#,
             r#"{"action":"today_period","period":"rolling_24h","hours":48}"#,
+            r#"{"action":"ui_scale","scale":150}"#,
+            r#"{"action":"ui_scale","scale":"500"}"#,
+            r#"{"action":"ui_scale"}"#,
+            r#"{"action":"keyboard_layout","layout":"unknown"}"#,
+            r#"{"action":"keyboard_layout"}"#,
             r#"{"action":"export"}"#,
             r#"{"action":"theme"}"#,
             r#"{"action":"theme","theme":"unknown"}"#,
@@ -132,6 +170,24 @@ mod tests {
             assert!(matches!(
                 serde_json::from_str::<Request>(&body).unwrap(),
                 Request::TodayPeriod { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn display_preferences_accept_only_supported_choices() {
+        for scale in ["auto", "100", "115", "130", "150"] {
+            let body = serde_json::json!({"action":"ui_scale","scale":scale}).to_string();
+            assert!(matches!(
+                serde_json::from_str::<Request>(&body).unwrap(),
+                Request::UiScale { .. }
+            ));
+        }
+        for layout in ["auto", "compact", "full_size"] {
+            let body = serde_json::json!({"action":"keyboard_layout","layout":layout}).to_string();
+            assert!(matches!(
+                serde_json::from_str::<Request>(&body).unwrap(),
+                Request::KeyboardLayout { .. }
             ));
         }
     }

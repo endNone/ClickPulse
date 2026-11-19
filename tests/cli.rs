@@ -161,10 +161,10 @@ fn fresh_user_never_automatically_reads_the_former_developer_database() {
         .args(["stats", "--json"])
         .output()
         .unwrap();
-    assert!(
-        !output.status.success(),
-        "must require the App database, not silently show the old123 events"
-    );
+    assert!(output.status.success());
+    let stats: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(stats["lifetime"]["keyboard"], 0);
+    assert_eq!(stats["lifetime"]["mouse"], 0);
     assert_eq!(std::fs::read(&legacy).unwrap(), before);
     assert!(
         !temp

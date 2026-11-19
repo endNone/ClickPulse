@@ -28,11 +28,12 @@ test('all eight catalogs cover the same keys and preserve every template paramet
 
 test('all static UI and native message keys resolve in every language',()=>{
   const html=readFileSync('ui/index.html','utf8');
-  const files=['src/desktop.rs','src/capture.rs','src/runtime.rs','ui/app.js','ui/presentation.js','ui/sport.js'];
+  const files=['src/desktop.rs','src/desktop/storage_recovery.rs','src/desktop/confirmation.rs','src/storage/startup.rs','src/capture.rs','src/runtime.rs','ui/app.js','ui/presentation.js','ui/sport.js'];
   const keys=new Set([...html.matchAll(/data-i18n(?:-aria|-title)?="([^"]+)"/g)].map(match=>match[1]));
   for(const file of files){
     const source=readFileSync(file,'utf8');
-    for(const match of source.matchAll(/["']((?:page|metric|common|chart|calendar|history|keys|settings|status|mini|native|action|message|error|demo|window|close|sport)\.[a-zA-Z_.]+)["']/g))if(!match[1].endsWith('_'))keys.add(match[1]);
+    // A storage filename is not a translation key; dynamic key prefixes end in '_'.
+    for(const match of source.matchAll(/["']((?:page|metric|common|chart|calendar|history|keys|settings|status|mini|native|action|message|error|demo|window|close|sport|storage|autostart|update)\.[a-zA-Z_.]+)["']/g))if(!match[1].endsWith('_')&&!match[1].endsWith('.json'))keys.add(match[1]);
   }
   for(const key of keys)for(const language of Object.keys(messages))assert.equal(typeof messages[language][key],'string',`${language}: ${key}`);
 });
@@ -57,12 +58,12 @@ test('missing translations use the English platform variant and decimal formatti
 
 test('switching language updates formatting without changing statistics values',()=>{
   const i=create(messages,'en');
-  assert.equal(i.t('metric.today'),'Calendar day');
+  assert.equal(i.t('metric.today'),'Today');
   assert.equal(i.number(1987549),'1,987,549');
   assert.equal(i.percent(.125),'12.50%');
   assert.equal(i.month(10),'Oct');
   i.setLocale('zh-CN');
-  assert.equal(i.t('metric.today'),'时区当天');
+  assert.equal(i.t('metric.today'),'今天');
   assert.equal(i.number(1987549),'1,987,549');
   assert.equal(i.month(10),'10月');
   i.setLocale('unsupported');

@@ -174,10 +174,22 @@ fn windows_program_replacement_keeps_a_recovery_copy_and_unrelated_data() {
 }
 #[test]
 fn partial_windows_failure_restores_every_moved_program_file() {
-    let (_temp, install, payload, m) = windows_fixture();
+    let (_temp, install, payload, mut m) = windows_fixture();
+    for root in [&install.root, &payload] {
+        fs::create_dir(root.join("Licenses")).unwrap();
+        fs::write(root.join("Licenses/NOTICE.txt"), "license").unwrap();
+    }
+    m.files
+        .insert("Licenses/NOTICE.txt".into(), hash_bytes(b"license"));
     fs::remove_file(install.root.join("WebView2Loader.dll")).unwrap();
     fs::create_dir(install.root.join("WebView2Loader.dll")).unwrap();
     assert!(replace_windows(&install, &payload, &m, "failure").is_err());
+    assert!(!install.root.join(".ClickPulse-before-failure").exists());
+    assert!(!install.root.join(".ClickPulse-new-failure").exists());
+    assert_eq!(
+        fs::read(install.root.join("Licenses/NOTICE.txt")).unwrap(),
+        b"license"
+    );
     assert_eq!(
         fs::read(install.root.join("ClickPulse.exe")).unwrap(),
         b"old exe"
@@ -339,7 +351,8 @@ fn helper_process_waits_for_saved_parent_and_preserves_profile_files() {
     let cache = home.join(".cache/ClickPulse/updates");
     fs::create_dir_all(&profile).unwrap();
     fs::create_dir_all(&cache).unwrap();
-    File::create(profile.join("profile.lock")).unwrap();
+    // Simulate a cleaned lock file; the helper must recreate it safely.
+    assert!(!profile.join("profile.lock").exists());
     {
         let db = rusqlite::Connection::open(profile.join("events.sqlite3")).unwrap();
         db.execute_batch("CREATE TABLE history (day TEXT, count INTEGER); INSERT INTO history VALUES ('2026-11-01', 7956);").unwrap();
@@ -637,4 +650,28 @@ fn linux_portable_replacement_preserves_data_and_refuses_foreign_manifest_paths(
     .unwrap();
     assert!(replace_windows(&install, &payload, &manifest, "reject-test").is_err());
     assert!(temp.path().is_dir());
+}
+
+#[test]
+fn rollback_restores_unrelated_files_even_when_one_path_is_blocked() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("app");
+    let backup = temp.path().join("backup");
+    fs::create_dir_all(root.join("blocked")).unwrap();
+    fs::create_dir_all(&backup).unwrap();
+    fs::write(root.join("blocked/occupied"), b"do not remove").unwrap();
+    fs::write(backup.join("blocked"), b"old blocked").unwrap();
+    fs::write(backup.join("clickpulse"), b"old executable").unwrap();
+    fs::write(root.join("clickpulse"), b"new executable").unwrap();
+    let paths = vec![PathBuf::from("clickpulse"), PathBuf::from("blocked")];
+    assert!(restore_previous_files(&root, &backup, &paths, &paths).is_err());
+    assert_eq!(
+        fs::read(root.join("clickpulse")).unwrap(),
+        b"old executable"
+    );
+    assert_eq!(fs::read(backup.join("blocked")).unwrap(), b"old blocked");
+    assert_eq!(
+        fs::read(root.join("blocked/occupied")).unwrap(),
+        b"do not remove"
+    );
 }

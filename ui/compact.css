@@ -32,3 +32,11 @@ body.compact #toast {bottom:37px;max-width:90%;font-size:11px;padding:7px 10px;b
 
 /* The Windows HWND supplies the rounded outline; fill its complete client area. */
 html[data-platform="windows"] body.compact .mini-widget {border-radius:0;border:0}
+
+.mini-device-label {min-width:0;overflow:hidden}
+.mini-device-label span {overflow:hidden;text-overflow:ellipsis}
+.mini-device-label svg,.mini-devices strong {flex:none}
+.mini-summary>div {min-width:0}
+.mini-bottom {min-width:0;gap:6px}
+#mini-status {min-width:0;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1}
+#mini-pause-label {max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

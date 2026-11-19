@@ -65,11 +65,11 @@ test('Mac extended keys retain identities while unresolved counts stay outside t
   assert.equal(view.ranked.some(key=>key.id==='other'),false);
 });
 
-test('compact layouts on both platforms exclude extended keys while preserving every stored count',()=>{
+test('compact layouts keep extended counts visible without duplicating keys',()=>{
   const stats={physical:[{code:0,count:5},{code:115,count:1000},{code:86,count:7},{code:999,count:3}]};
   for(const platform of ['macos','windows']){
-    const model=K.create(platform),view=model.distribution(stats);
-    assert.deepEqual(view.visibleRanked.map(key=>key.id),['A']);
+    const model=K.create(platform),view=model.distribution(stats,'history','compact');
+    assert.deepEqual(view.visibleRanked.map(key=>key.id),['home','num4','A']);
     const visibleRows=view.rows.filter(row=>!row.some(key=>key.supplemental));
     assert.equal(visibleRows.length,6);
     assert.ok(visibleRows[5].some(key=>key.id==='space'));
@@ -77,7 +77,7 @@ test('compact layouts on both platforms exclude extended keys while preserving e
     assert.equal(view.ranked.length,3);assert.equal(view.total,1015);
     assert.equal(view.mapped,1012);assert.equal(view.unmapped,3);
     assert.equal(view.ranked.reduce((sum,key)=>sum+key.count,0)+view.unmapped,view.total);
-    const historical=model.distribution({history_available:true,history_since_fix:stats.physical.map(row=>({...row,code:2**40+row.code}))});
+    const historical=model.distribution({history_available:true,history_since_fix:stats.physical.map(row=>({...row,code:2**40+row.code}))},'history','compact');
     assert.deepEqual(historical.visibleRanked,view.visibleRanked);
     assert.equal(historical.total,view.total);
   }
@@ -174,4 +174,87 @@ test('Linux uses PC physical identities and Super labels',()=>{
   assert.equal(distribution.total,8);assert.equal(distribution.mapped,7);assert.equal(distribution.unmapped,1);
   assert.equal(linux.byId.get('command-left').label,'Super');
   assert.equal(linux.byId.get('control-right').vk[0],62);
+});
+
+test('full-size automatically exposes navigation and numpad, conserving all counts',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const model=K.create(platform);
+    assert.equal(model.distribution({physical:[{code:0,count:1}]}).fullSize,false);
+    assert.equal(model.distribution({physical:[{code:123,count:1}]}).fullSize,true);
+    assert.equal(model.distribution({physical:[{code:123,count:1}]},'history','compact').fullSize,false);
+    const view=model.distribution({physical:[{code:82,count:10},{code:72,count:4},{code:10,count:3},{code:999,count:2}]});
+    assert.equal(view.fullSize,true);
+    const cells=view.rows.flat();assert.equal(new Set(cells.map(k=>k.id)).size,cells.length);
+    assert.equal(cells.find(k=>k.id==='num0').colSpan,2);
+    assert.equal(cells.find(k=>k.id==='numplus').rowSpan,platform==='macos'?1:2);
+    assert.equal(cells.find(k=>k.id==='numenter').rowSpan,2);
+    assert.equal(cells.filter(k=>k.zone==='navigation').length,10);
+    assert.deepEqual(view.rows[0].map(k=>k.id),['esc',...Array.from({length:12},(_,i)=>'f'+(i+1))]);
+    assert.deepEqual(cells.filter(k=>k.zone==='system').map(k=>k.id),platform==='macos'?['f13','f14','f15']:['print-screen','scroll-lock','pause-break']);
+    assert.equal(cells.reduce((sum,k)=>sum+k.count,0)+view.other,19);
+    assert.equal(view.other,2);
+    assert.equal(model.distribution({},'history','full_size').fullSize,true);
+  }
+});
+
+
+test('Mac numeric keypad places equals beside Clear and gives plus and minus separate rows',()=>{
+  for(const physical of [[],[{code:81,count:1},{code:104,count:3}]]){
+    const view=K.distribution({physical},'history','full_size');
+    const pad=view.rows.flat().filter(k=>k.zone==='numpad');
+    assert.deepEqual(pad.filter(k=>k.row===1).map(k=>[k.id,k.column]),[['numclear',1],['numequals',2],['numdivide',3],['nummultiply',4]]);
+    assert.deepEqual(pad.filter(k=>k.column===4).map(k=>[k.id,k.row,k.rowSpan]),[['nummultiply',1,1],['numminus',2,1],['numplus',3,1],['numenter',4,2]]);
+    const occupied=new Set();
+    for(const key of pad)for(let row=key.row;row<key.row+key.rowSpan;row++)for(let col=key.column;col<key.column+key.colSpan;col++){
+      const position=row+':'+col;assert.ok(!occupied.has(position),position);occupied.add(position);
+    }
+    assert.equal(occupied.size,20);
+    assert.equal(view.rows.flat().filter(k=>k.id==='numequals').length,1);
+    assert.equal(pad.find(k=>k.id==='numequals').count,physical.length?1:0);
+    assert.equal(view.total,physical.length?4:0);
+    if(physical.length)assert.equal(view.visibleRanked.find(k=>k.id==='jis-kana').count,3);
+  }
+});
+
+test('Mac extended function keys occupy the hardware row once, including zero-count keys',()=>{
+  const codes=[105,107,113,106,64,79,80],ids=codes.map((_,i)=>'f'+(13+i));
+  for(const physical of [[],codes.map((code,i)=>({code,count:i+1})).concat({code:90,count:8})]){
+    const view=K.distribution({physical},'history','full_size'),cells=view.rows.flat();
+    assert.deepEqual(cells.filter(k=>k.zone==='system').map(k=>[k.id,k.column,k.row]),[['f13',1,1],['f14',2,1],['f15',3,1]]);
+    assert.deepEqual(cells.filter(k=>k.zone==='numpad-function').map(k=>[k.id,k.column,k.row]),[['f16',1,1],['f17',2,1],['f18',3,1],['f19',4,1]]);
+    for(const [index,id] of ids.entries()){
+      const matches=cells.filter(k=>k.id===id);assert.equal(matches.length,1);
+      assert.deepEqual(matches[0].vk,[codes[index]]);assert.equal(matches[0].count,physical.length?index+1:0);
+      assert.equal(matches[0].supplemental,undefined);
+    }
+    const f20=cells.filter(k=>k.id==='f20');assert.equal(f20.length,physical.length?1:0);
+    if(f20.length){assert.equal(f20[0].supplemental,true);assert.equal(f20[0].count,8);}
+    assert.equal(cells.reduce((n,k)=>n+k.count,0),view.total);
+    assert.equal(new Set(cells.map(k=>k.id)).size,cells.length);
+  }
+});
+
+test('PC top row preserves system-key identities, blank numpad header and platform modifiers',()=>{
+  for(const platform of ['windows','linux']){
+    const model=K.create(platform),view=model.distribution({physical:[{code:0x10137,count:10},{code:0x10046,count:20},{code:0x10245,count:30}]},'history','full_size');
+    assert.deepEqual(view.rows.flat().filter(k=>k.zone==='system').map(k=>[k.label,k.column,k.count]),[['PrtSc',1,10],['ScrLk',2,20],['Pause',3,30]]);
+    assert.equal(view.rows.flat().some(k=>k.zone==='numpad-function'),false);
+    assert.equal(view.mapped,60);assert.equal(view.other,0);
+    for(const side of ['left','right'])assert.equal(model.byId.get('command-'+side).label,platform==='linux'?'Super':'Win');
+    assert.equal(model.byId.get('menu').label,'Menu');
+  }
+});
+
+test('keycap counts use the active locale and reuse numeric formatters',()=>{
+  const fs=require('node:fs'),vm=require('node:vm');let constructed=0;
+  const context=vm.createContext({module:{exports:{}},Intl:{NumberFormat:function(...args){constructed++;return new Intl.NumberFormat(...args);}}});
+  vm.runInContext(fs.readFileSync('ui/keyboard.js','utf8'),context);
+  const keyboard=context.module.exports.create('macos');
+  assert.equal(keyboard.compact(1234,'de'),new Intl.NumberFormat('de').format(1234));
+  const first=constructed;
+  for(let i=0;i<1000;i++)keyboard.compact(i,'de');
+  assert.equal(constructed,first);
+  assert.equal(keyboard.compact(12345,'fr'),'12,3k');
+  assert.equal(keyboard.compact(1234,'fr'),new Intl.NumberFormat('fr').format(1234));
+  assert.equal(keyboard.compact(1234567,'de'),'1,23M');
 });

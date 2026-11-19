@@ -10,6 +10,14 @@ Statistics work offline, with no telemetry, account, cloud sync or upload servic
 
 **Ignore software-generated input** is off by default. On macOS it excludes recognized software-generated events; on Windows it excludes recognized software-generated keystrokes while preserving touchpad clicks. Virtual devices and some automation tools may be indistinguishable from physical devices.
 
+## Shortcut statistics and sharing
+
+Shortcut statistics store daily totals for modifier combinations, beginning with this feature. Dates use the system’s local calendar day at recording time, like daily activity totals; changing the display time zone does not regroup shortcuts. Undated private-preview counts remain in all-time totals only. No time sequence, text, active applications or clipboard contents are saved. Ordinary typing is excluded; annotations describe common defaults, not confirmed actions. Each recording database has a random local counter identity so imports can merge independent counts without repeating backups. For each date and combination, imports keep the higher count from the same identity and add counts from different identities. This identity is never sent anywhere. See the [shortcut encyclopedia](shortcuts.md). Opening an official reference launches its website in your browser; no activity counts are sent.
+
+The Heatmap page places the keyboard above the mouse and shows cumulative mouse-button counts and their proportions. Older totals without button details remain visible as unclassified clicks. No cursor path or scroll distance is collected.
+
+Daily cards are generated on your device. They contain the chosen date, daily keyboard/mouse totals, seven daily totals, the selected day's most-used shortcut and its count (when available), and the project's GitHub address. Shortcut days follow the recording-local dates described above; undated preview counts are excluded. When the selected display time zone differs from the system time zone, cards omit the shortcut row because daily shortcut totals cannot be reprojected. Shortcut records do not retain their original time zones, so imported history or past system time-zone changes cannot be realigned. No time zone, typed content, full shortcut list, individual key counts or application names are included. On macOS and Windows, **Copy image** puts the card on your system clipboard for pasting. Nothing is uploaded; you choose whether and where to share it.
+
 ## Time and retention
 
 By default, Overview and Mini count from midnight in the selected time zone. **Settings → Application → Counter period** can change their main count to the last 24 hours. The seven-day summary, history and calendar continue to use calendar dates. Rolling windows cover `(now − window, now]` and exclude future timestamps. Older minute-only records show `≈` until precise records cover the entire window.
@@ -31,7 +39,7 @@ The desktop calendar groups all saved minute records into dates in the selected 
 
 ## Historical keys
 
-Older records can contain characters, special keys and hashed codes that cannot always be mapped to a physical position. Known identities map to the keyboard; unresolved counts remain in the keyboard total without creating an extra key. Visible-key counts can therefore add up to less than the keyboard total. Original records are retained.
+Older records can contain characters, special keys and hashed codes that cannot always be mapped to a physical position. Known identities map to the keyboard; unresolved counts appear as **Other keys** below it and remain in the keyboard total. Original records are retained.
 
 New records use a separate physical-key encoding space. Overlapping character history and physical summaries are not added twice. Details deleted before migration cannot be recovered.
 
@@ -39,9 +47,9 @@ Encoding metadata and cached historical eras preserve attribution across upgrade
 
 ## Literary comparisons
 
-The activity calendar’s literary phrase uses only keyboard counts in the selected range. It does not include mouse clicks or read or infer written content. One press is treated approximately as one character for a playful comparison with the English text of *Pride and Prejudice*. Modifiers and deletion also count, so this is not a measure of writing output.
+The activity calendar compares keyboard counts in the selected range with 20 classic books. Mouse clicks are excluded. One press is treated approximately as one character; modifiers and deletion also count. This is a playful comparison, not a measure of writing output or an inference about what you type.
 
-The reference is [Project Gutenberg’s English edition, number 1342](https://www.gutenberg.org/ebooks/1342). The fixed baseline is 700,000 characters, rounded from roughly 685,000 after removing illustration captions and folding repeated whitespace between the first sentence and the ebook end marker. Results display one decimal place. All interface languages use the same baseline; the app does not download the book. Small counts show a short starting phrase, and no keyboard activity hides the comparison.
+A book and a phrase are picked independently when you return to Overview: 20 books and five phrases make 100 combinations. Neither repeats immediately. Both stay fixed while counts refresh or the language changes. Each book has its own approximate English-edition length, shared across interface languages. Results use one decimal place; tiny counts show a starting phrase, and no keyboard activity hides the comparison. All references are bundled as small numbers and titles; no books are downloaded. See [books and reference lengths](literary-references.md).
 
 ## Saving, updates and migration
 
@@ -49,10 +57,14 @@ Temporary save failures are retried while pending activity stays in memory. Afte
 
 SQLite uses WAL. Save failures retry automatically as described above. A full or disconnected input queue still stops capture and shows an error. Auxiliary log failures retry without blocking the database. Normal exit stops input and drains pending records first.
 
-First launch creates the standard user-data directory. Program updates and uninstalling retain its history and preferences; startup does not automatically import a developer folder or backup.
+First launch creates the standard user-data directory. Updates retain history and preferences. Windows **Uninstall and data** lets you keep history and settings for reinstalling while clearing caches, or explicitly delete the local profile. Databases outside the data folder are kept at the displayed location. Direct package-manager removal or deleting program files retains data; see [Windows uninstall](install-windows.md#uninstall). Startup does not automatically import a developer folder or backup.
 
 Database schema upgrades are transactional and refuse a newer unsupported format. If the window preferences file is damaged, the app preserves its exact original bytes as a separate `presentation.corrupt-…json` file before restoring defaults and showing a notice. This affects window settings, not statistics. An unreadable file or failed preservation stops recovery instead of silently overwriting it.
+
+An unavailable data location opens a recovery choice before recording starts, including during background startup. Choosing another location preserves the previous location setting. Starting again from a verified damaged database requires confirmation and keeps the old database, including its pending saved records, under a new backup name. Recovery never deletes that backup. Busy or inaccessible databases can be retried; databases from newer versions require a compatible ClickPulse version and cannot be reset. See [recovery choices](usage.md#save-folder-and-history-import).
 
 Explicit migration uses SQLite backup, including committed WAL records, and validates daily totals, lifetime totals and database integrity. It creates a new destination and preserves the source. It rejects an existing destination, does not merge overlapping history and does not stop other services.
 
 Use demo or redacted evidence in public screenshots and reports; do not attach real databases, raw logs, preferences or personal paths.
+
+Pausing refresh in advanced `--source-db` mode creates a private temporary SQLite copy on local disk. All pages, date ranges and share-card shortcuts read that same snapshot until refresh resumes. The copy is removed on resume or normal exit; it does not hold a long-running read lock on the recorder or load the entire database into memory. The original database is never modified. Recording heartbeats are cleared when recording is paused or unavailable; repeated idle status checks do not rewrite them.
