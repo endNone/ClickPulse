@@ -32,6 +32,18 @@ fn backup_path(install: &Installation, directory: &Path) -> Result<PathBuf> {
     };
     Ok(root.join(format!(".ClickPulse-before-{}", nonce(directory)?)))
 }
+// Windows enforces the byte-range lock even against other handles in this process.
+// The staging lock is created empty. Verify that invariant without reading it, and
+// keep the receipt compatible with older versions that hashed the empty file.
+fn verify_empty_lock(path: &Path) -> Result<()> {
+    let metadata = crate::removal::plain(path)?;
+    ensure!(
+        metadata.is_file() && metadata.len() == 0,
+        "Invalid update lock"
+    );
+    Ok(())
+}
+
 fn inventory(root: &Path, skip_receipt: bool) -> Result<BTreeMap<String, Option<String>>> {
     let mut result = BTreeMap::new();
     for path in crate::removal::profile_files(root)? {
@@ -51,7 +63,10 @@ fn inventory(root: &Path, skip_receipt: bool) -> Result<BTreeMap<String, Option<
             result.len() < MAX_FILES * 3 + 256,
             "Too many cleanup entries"
         );
-        let hash = if path.is_file() {
+        let hash = if skip_receipt && name == "running.lock" {
+            verify_empty_lock(&path)?;
+            Some(hash_bytes(&[]))
+        } else if path.is_file() {
             Some(hash_file(&path)?)
         } else {
             None
@@ -85,7 +100,12 @@ pub(super) fn record(
     file.persist(directory.join(RECEIPT))?;
     Ok(())
 }
-fn purge(root: &Path, expected: &BTreeMap<String, Option<String>>, receipt: bool) -> Result<()> {
+fn purge(
+    root: &Path,
+    expected: &BTreeMap<String, Option<String>>,
+    receipt: bool,
+    lock: Option<File>,
+) -> Result<()> {
     if !root.try_exists()? {
         return Ok(());
     }
@@ -99,9 +119,17 @@ fn purge(root: &Path, expected: &BTreeMap<String, Option<String>>, receipt: bool
         "Cleanup tree changed: {}",
         root.display()
     );
+    let remove_lock = receipt && actual.contains_key("running.lock");
+    ensure!(
+        !remove_lock || lock.is_some(),
+        "Cleanup did not acquire the update lock"
+    );
     // Use the verified inventory itself, children before parents. A fresh tree
     // walk here could accidentally include a file added after preflight.
     for (name, hash) in actual.iter().rev() {
+        if receipt && name == "running.lock" {
+            continue; // Keep the lock in place until every other entry is gone.
+        }
         let relative = safe_relative(name)?;
         let mut path = root.to_owned();
         crate::removal::plain(&path)?;
@@ -116,6 +144,14 @@ fn purge(root: &Path, expected: &BTreeMap<String, Option<String>>, receipt: bool
             fs::remove_dir(&path)?;
         }
     }
+    if remove_lock {
+        crate::removal::plain(root)?;
+        let path = root.join("running.lock");
+        verify_empty_lock(&path)?;
+        fs::remove_file(path)?;
+    }
+    // Windows completes deletion of the lock file after the last handle closes.
+    drop(lock);
     finish_purge(
         root,
         receipt,
@@ -183,7 +219,7 @@ fn finish_purge(
 fn clean(directory: &Path, installation: &Installation) -> Result<()> {
     // A newly reopened App must not delete an updater's active staging tree.
     let lock_path = directory.join("running.lock");
-    let _active_guard = if lock_path.try_exists()? {
+    let active_guard = if lock_path.try_exists()? {
         crate::removal::plain(&lock_path)?;
         let file = File::options().read(true).write(true).open(lock_path)?;
         file.try_lock()?;
@@ -207,9 +243,10 @@ fn clean(directory: &Path, installation: &Installation) -> Result<()> {
             &backup_path(installation, directory)?,
             &receipt.backup,
             false,
+            None,
         )?;
     }
-    purge(directory, &receipt.staged, true)
+    purge(directory, &receipt.staged, true, active_guard)
 }
 
 pub(super) fn record_cancelled(directory: &Path, plan: &Plan) -> Result<()> {
@@ -392,6 +429,10 @@ mod tests {
         assert!(clean(&stage, &install).is_err());
         assert!(stage.join("payload").is_file());
         drop(lock);
+        fs::write(stage.join("running.lock"), b"not an updater lock").unwrap();
+        assert!(clean(&stage, &install).is_err());
+        assert!(stage.join("payload").is_file());
+        fs::write(stage.join("running.lock"), b"").unwrap();
         clean(&stage, &install).unwrap();
         assert!(!stage.exists());
         assert_eq!(fs::read(install.executable()).unwrap(), b"old binary");
@@ -447,10 +488,10 @@ mod tests {
         );
         assert_eq!(attempts, 3);
         assert_eq!(fs::read(root.join(RECEIPT)).unwrap(), b"receipt");
-        assert!(purge(&root, &BTreeMap::new(), true).is_err());
+        assert!(purge(&root, &BTreeMap::new(), true, None).is_err());
         assert_eq!(fs::read(root.join("unrelated")).unwrap(), b"keep");
         fs::remove_file(root.join("unrelated")).unwrap();
-        purge(&root, &BTreeMap::new(), true).unwrap();
+        purge(&root, &BTreeMap::new(), true, None).unwrap();
         assert!(!root.exists());
     }
     #[test]
@@ -494,13 +535,13 @@ mod tests {
         fs::write(root.join("helper"), "owned").unwrap();
         let expected = inventory(&root, false).unwrap();
         fs::write(root.join("notes"), "unrelated").unwrap();
-        assert!(purge(&root, &expected, false).is_err());
+        assert!(purge(&root, &expected, false, None).is_err());
         assert!(root.join("helper").exists());
         fs::remove_file(root.join("notes")).unwrap();
         fs::write(root.join("helper"), "changed").unwrap();
-        assert!(purge(&root, &expected, false).is_err());
+        assert!(purge(&root, &expected, false, None).is_err());
         fs::remove_file(root.join("helper")).unwrap();
-        purge(&root, &expected, false).unwrap();
+        purge(&root, &expected, false, None).unwrap();
         assert!(!root.exists());
     }
     #[cfg(unix)]
@@ -513,7 +554,7 @@ mod tests {
         let expected = inventory(&root, false).unwrap();
         fs::remove_file(root.join("helper")).unwrap();
         std::os::unix::fs::symlink(temp.path(), root.join("helper")).unwrap();
-        assert!(purge(&root, &expected, false).is_err());
+        assert!(purge(&root, &expected, false, None).is_err());
         assert!(root.exists());
     }
 }

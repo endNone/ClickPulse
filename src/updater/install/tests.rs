@@ -562,6 +562,10 @@ fn helper_process_waits_for_saved_parent_and_preserves_profile_files() {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+    assert!(
+        stage.join("cleanup.json").is_file(),
+        "missing cleanup receipt"
+    );
     assert_ne!(hash_file(&old_exe).unwrap(), previous_hash);
     while !root.parent().unwrap().join("restarted").exists() {
         assert!(Instant::now() < until, "updated program did not restart");
