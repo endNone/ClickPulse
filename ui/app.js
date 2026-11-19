@@ -452,7 +452,7 @@ window.receive=snapshot=>{
     renderChanged('windows',data.windows,()=>renderWindows(data.windows));
     renderChanged('hourly',data.hourly||[],()=>renderHourly(data.hourly||[]));
     renderChanged('trend',[range,data.days.slice(-range)],()=>renderTrend($('trend-chart'),data.days.slice(-range)));
-    renderChanged('donut',[data.lifetime,data.mouse_buttons],()=>renderDonut(data.lifetime,data.mouse_buttons));
+    renderChanged('donut',data.lifetime,()=>renderDonut(data.lifetime));
     updateRangeOptions($('calendar-range-select'),true);calendarRange=$('calendar-range-select').value;
     renderChanged('calendar',[data.now.split('T')[0],calendarRange,calendarBook,calendarPhrase,historyRevision],renderCalendar);
   }else if(page==='history'){
@@ -630,21 +630,12 @@ function renderTrend(container,days){
   chart.empty.hidden=days.some(d=>total(d.counts)>0);
 }
 let donutNodes;
-function renderDonut(counts,buttons={}){
+function renderDonut(counts){
   const all=total(counts),circ=2*Math.PI*51,palette=T.get(currentTheme);
-  const left=buttons.left||0,right=buttons.right||0,middle=buttons.middle||0,side=buttons.side||0,other=buttons.other||0;
   const entries=[
     [t('common.keyboard'),counts.keyboard,palette.accent],
-    [t('chart.mouse_left'),left,palette.mouse],
-    [t('chart.mouse_right'),right,palette.navy]
+    [t('common.mouse'),counts.mouse,palette.mouse]
   ];
-  if(middle>0)entries.push([t('chart.mouse_middle'),middle,palette.strong]);
-  if(side>0)entries.push([t('chart.mouse_side'),side,palette.hover]);
-  if(other>0)entries.push([t('chart.mouse_other'),other,palette.selected]);
-  // Older independent databases retained mouse totals without button details.
-  // Keep those clicks visible, without guessing which button was pressed.
-  const unknown=Math.max(0,counts.mouse-left-right-middle-side-other);
-  if(unknown>0)entries.push([t('chart.mouse_unknown'),unknown,'#91a4bd']);
   const describe=([label,value])=>`${label}: ${n(value)} (${I.percent(all?value/all:0,1)})`;
   const layout=JSON.stringify([I.locale,currentTheme,entries.map(([label,value,color])=>[label,value>0&&all>0,color])]);
   if(!donutNodes||donutNodes.layout!==layout){
@@ -656,7 +647,7 @@ function renderDonut(counts,buttons={}){
       arc.append(title);svg.append(arc);return {arc,title};
     });
     $('donut').replaceChildren(svg);
-    const legend=$('composition-legend');legend.style.setProperty('--mix-columns',entries.length===4?2:3);
+    const legend=$('composition-legend');
     const labels=entries.map(([label,,color])=>{
       const node=document.createElement('div'),count=document.createElement('strong'),name=document.createElement('span'),dot=document.createElement('i');
       dot.className='composition-dot';dot.style.backgroundColor=color;name.append(dot,label);node.append(count,name);return {node,count};

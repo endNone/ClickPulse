@@ -30,7 +30,7 @@ Keys keep their size when you resize the window. Scroll sideways in narrower win
 
 Selecting **Settings** expands section shortcuts in the sidebar. Choose a heading to jump to its controls; unavailable groups are hidden.
 
-**Activity mix** separates keyboard use, left clicks and right clicks. Middle clicks, side buttons and other mouse buttons appear separately when used. Older records without button details remain visible as **Unclassified clicks**. Hover over a segment or legend entry for its share.
+**Activity mix** compares all keyboard presses with all mouse clicks. Hover over either segment or its legend entry to see the percentage. Open **Heatmap** for the breakdown by mouse button.
 
 ## Sport in Mini mode
 

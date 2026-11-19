@@ -763,29 +763,27 @@ test('refresh only draws the selected page and skips unchanged charts',()=>{
   assert.equal(a.get('history-chart').replacements,1);
 });
 
-test('activity mix separates mouse buttons, keeps unknown history, and has no center text',()=>{
-  const a=app(),s=snapshot();s.mouse_buttons={left:14,right:2,middle:2,side:1,other:1};
+test('activity mix compares lifetime keyboard and mouse totals regardless of button detail',()=>{
+  const a=app(),s=snapshot();
   const legend=()=>a.get('composition-legend').children.map(node=>[node.children[1].children[1],node.children[0].textContent]);
+  s.mouse_buttons={left:14,right:2,middle:2,side:1,other:1};
   a.window.receive(s);
-  assert.deepEqual(legend(),[['Keyboard','100'],['Left click','14'],['Right click','2'],['Middle click','2'],['Side buttons','1'],['Other mouse buttons','1']]);
+  assert.deepEqual(legend(),[['Keyboard','100'],['Mouse','20']]);
   const svg=a.get('donut').children[0];
-  assert.ok(svg.children.every(node=>node.attributes.cx==='85')); // circles, no SVG text
-  assert.equal(svg.children.filter(node=>node.attributes['stroke-dasharray']).length,6);
-  assert.match(svg.attributes['aria-label'],/Left click: 14/);
-  // Same lifetime total, different distribution must redraw the chart.
-  a.window.receive({...s,mouse_buttons:{left:13,right:5,other:2}});
-  assert.equal(a.get('donut').replacements,2);
-  assert.equal(legend()[1][1],'13');
-  a.window.receive({...s,mouse_buttons:{left:5,right:2,other:1}});
-  assert.deepEqual(legend().at(-1),['Unclassified clicks','12']);
+  assert.ok(svg.children.every(node=>node.attributes.cx==='85')); // circles, no center text
+  assert.equal(svg.children.filter(node=>node.attributes['stroke-dasharray']).length,2);
+  assert.match(svg.attributes['aria-label'],/Mouse: 20 \(16\.7%\)/);
+  // Older histories can have fewer per-button counts than total clicks.
+  a.window.receive({...s,mouse_buttons:{left:5,right:2}});
+  assert.equal(a.get('donut').replacements,1);
+  assert.deepEqual(legend()[1],['Mouse','20']);
   for(const locale of Object.keys(messages)){
     a.window.receiveView({locale});
-    assert.equal(legend()[1][0],messages[locale]['chart.mouse_left']);
-    assert.equal(legend()[2][0],messages[locale]['chart.mouse_right']);
+    assert.deepEqual(legend().map(([label])=>label),[messages[locale]['common.keyboard'],messages[locale]['common.mouse']]);
   }
-  a.window.receive({...s,lifetime:{keyboard:0,mouse:0},mouse_buttons:{left:0,right:0,other:0}});
+  a.window.receive({...s,lifetime:{keyboard:0,mouse:0}});
   assert.equal(a.get('donut').children[0].children.length,1);
-  assert.equal(legend().length,3);
+  assert.deepEqual(legend().map(([,count])=>count),['0','0']);
 });
 test('a page visited after hidden updates receives the latest keyboard counts',()=>{
   const a=app(),s=snapshot();a.window.receive(s);a.navigate('settings');
