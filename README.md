@@ -27,23 +27,23 @@
 
 ## Download size and memory
 
-The v0.3.1 desktop downloads are all under 7 MiB. Starting ClickPulse in the background uses **88.5–98.9% less memory** than in v0.3.0 on the three systems tested.
+The v0.3.1 desktop downloads are all under 7.3 MB. Starting ClickPulse in the background uses **88.5–98.9% less memory** than in v0.3.0 on the three systems tested.
 
-**Download size (MiB)**
+**Download size (MB)**
 
 | Platform | x64 | ARM64 |
 | :--- | ---: | ---: |
-| macOS 12+ | 6.93 DMG · 6.26 ZIP | 6.66 DMG · 6.02 ZIP |
-| Windows 10/11 | 4.40 ZIP | — |
-| Ubuntu 22.04 / 24.04 | 6.23 ZIP | 6.15 ZIP |
+| macOS 12+ | 7.27 DMG · 6.56 ZIP | 6.99 DMG · 6.31 ZIP |
+| Windows 10/11 | 4.62 ZIP | — |
+| Ubuntu 22.04 / 24.04 | 6.53 ZIP | 6.44 ZIP |
 
-**Measured memory (MiB)**
+**Measured memory (MB)**
 
 | Test system | Background start | Full window | Mini | Hidden for 10 min |
 | :--- | ---: | ---: | ---: | ---: |
-| macOS · Apple Silicon | **15.8** | 223.2 | 158.0 | 29.7 |
-| Windows 11 · x64 | **2.3** | 214.5 | 173.0 | 3.6 |
-| Ubuntu 24.04 · x64 | **42.5** | 249.7 | 254.2 | 104.2 |
+| macOS · Apple Silicon | **16.5** | 234.1 | 165.7 | 31.1 |
+| Windows 11 · x64 | **2.4** | 225.0 | 181.4 | 3.7 |
+| Ubuntu 24.04 · x64 | **44.5** | 261.8 | 266.6 | 109.3 |
 
 Median of five samples for the app and its interface processes, with input recording off and the full window in English. macOS reports physical footprint, Windows reports USS, and Ubuntu reports PSS with software rendering. [v0.3.1 downloads and benchmark results](https://github.com/endNone/ClickPulse/releases/tag/v0.3.1).
 
