@@ -313,6 +313,50 @@ fn minute_in_zone(bucket: i64, zone: TimeZonePreference) -> Result<DateTime<Fixe
     Ok(local)
 }
 
+/// Read only the requested calendar dates. Both occurrences of a repeated DST
+/// hour land in the same dot; dates without samples do not acquire observations.
+#[derive(Clone, Copy)]
+pub(crate) struct HourRange {
+    pub start: chrono::NaiveDate,
+    pub end: chrono::NaiveDate,
+    pub zone: TimeZonePreference,
+}
+
+// Positional wire format keeps larger histories small: date, hour, keys, clicks.
+pub type HistoryHour = (chrono::NaiveDate, u32, i64, i64);
+
+impl HourRange {
+    pub(crate) fn read(self, conn: &Connection, sql: &str) -> Result<Vec<HistoryHour>> {
+        ensure!(self.start <= self.end, "Invalid history date range");
+        let utc_midnight =
+            |day: chrono::NaiveDate| day.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp() / 60;
+        // All supported offsets fall within one day on either side of UTC.
+        let mut hours = BTreeMap::<_, Counts>::new();
+        scan_minutes(
+            conn,
+            sql,
+            utc_midnight(self.start) - 1440,
+            utc_midnight(self.end) + 2880 - 1,
+            |bucket, dev, count| {
+                let local = minute_in_zone(bucket, self.zone)?;
+                let day = local.date_naive();
+                if (self.start..=self.end).contains(&day) {
+                    hours
+                        .entry((day, local.hour()))
+                        .or_default()
+                        .add(dev, count);
+                }
+                Ok(())
+            },
+        )?;
+        Ok(hours
+            .into_iter()
+            .filter(|(_, counts)| counts.total() > 0)
+            .map(|((day, hour), counts)| (day, hour, counts.keyboard, counts.mouse))
+            .collect())
+    }
+}
+
 /// The caller holds a consistent read transaction. Aggregate minute/device rows
 /// before conversion so key count does not multiply timezone conversions.
 pub(crate) fn project(
@@ -443,6 +487,65 @@ mod tests {
     fn zone(name: &str) -> TimeZonePreference {
         TimeZonePreference::Named(name.parse().unwrap())
     }
+    #[test]
+    fn historical_hours_respect_local_day_and_dst_in_all_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("collector.sqlite3");
+        let mut collector = CollectorDb::open(&path).unwrap();
+        let mut independent = EventDb::open(&temp.path().join("independent.sqlite3")).unwrap();
+        let day: chrono::NaiveDate = "2026-11-01".parse().unwrap();
+        let range = HourRange {
+            start: day,
+            end: day,
+            zone: zone("America/New_York"),
+        };
+        // The two 01:30s are one clock-hour observation. Neighbouring dates
+        // must not leak into the requested Sunday through the padded UTC scan.
+        let input = [
+            ("2026-11-01T03:59:00Z", Device::Keyboard),
+            ("2026-11-01T05:30:00Z", Device::Keyboard),
+            ("2026-11-01T06:30:00Z", Device::Keyboard),
+            ("2026-11-01T06:45:00Z", Device::Mouse),
+            ("2026-11-02T04:59:00Z", Device::Mouse),
+            ("2026-11-02T05:00:00Z", Device::Keyboard),
+        ]
+        .map(|(time, device)| InputEvent {
+            ts_ms: instant(time).timestamp_millis(),
+            device,
+            code: 1,
+            shortcut: None,
+        });
+        collector.insert(&input).unwrap();
+        independent.insert(&input).unwrap();
+        let source = crate::source::LiveSource::open(&path).unwrap();
+        let expected = vec![(day, 1, 2, 1), (day, 23, 0, 1)];
+        assert_eq!(collector.history_hours(range).unwrap(), expected);
+        assert_eq!(independent.history_hours(range).unwrap(), expected);
+        assert_eq!(source.history_hours(range).unwrap(), expected);
+        // A migrated independent file also includes its imported minute counts.
+        independent.import_legacy(&path).unwrap();
+        assert_eq!(
+            independent.history_hours(range).unwrap(),
+            vec![(day, 1, 4, 2), (day, 23, 0, 2)]
+        );
+        let utc = HourRange {
+            zone: zone("UTC"),
+            ..range
+        };
+        assert_eq!(
+            source.history_hours(utc).unwrap(),
+            vec![(day, 3, 1, 0), (day, 5, 1, 0), (day, 6, 1, 1)]
+        );
+        let fractional = HourRange {
+            zone: zone("Asia/Kathmandu"),
+            ..range
+        };
+        assert_eq!(
+            source.history_hours(fractional).unwrap(),
+            vec![(day, 9, 1, 0), (day, 11, 1, 0), (day, 12, 1, 1)]
+        );
+    }
+
     #[test]
     fn mini_today_matches_full_counts_across_timezones_and_dst() {
         let temp = tempfile::tempdir().unwrap();

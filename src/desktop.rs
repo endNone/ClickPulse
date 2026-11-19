@@ -61,6 +61,11 @@ enum UiEvent {
         share_day: Option<chrono::NaiveDate>,
         result: std::result::Result<String, String>,
     },
+    HistoryHours {
+        generation: u64,
+        id: u32,
+        result: std::result::Result<String, String>,
+    },
     SportSample {
         id: u64,
         result: std::result::Result<String, String>,
@@ -429,6 +434,20 @@ pub fn run(
                     if quit_after_data {
                         *flow = ControlFlow::Exit;
                     }
+                }
+            }
+            Event::UserEvent(UiEvent::HistoryHours {
+                generation,
+                id,
+                result,
+            }) => {
+                if webview.accepts(generation) {
+                    let rows = result.unwrap_or_else(|error| {
+                        eprintln!("error.stats: {error}");
+                        "null".to_owned()
+                    });
+                    let _ = webview
+                        .evaluate_script(&format!("window.receiveHistoryHours({id},{rows});"));
                 }
             }
             Event::UserEvent(UiEvent::SportSample { id, result }) => {
@@ -844,6 +863,25 @@ pub fn run(
                                 preferences.sport_enabled = false;
                             }
                             view_changed = true;
+                        }
+                        Request::HistoryHours {
+                            id,
+                            start,
+                            end,
+                            timezone,
+                        } => {
+                            if let Some(rt) = &runtime {
+                                let proxy = snapshot_proxy.clone();
+                                rt.request_history_hours(start, end, timezone, move |result| {
+                                    let result =
+                                        result.and_then(|hours| Ok(serde_json::to_string(&hours)?));
+                                    let _ = proxy.send_event(UiEvent::HistoryHours {
+                                        generation,
+                                        id,
+                                        result: result.map_err(|error| format!("{error:#}")),
+                                    });
+                                });
+                            }
                         }
                         Request::SportSample {} => {
                             if ready

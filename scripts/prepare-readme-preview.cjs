@@ -64,7 +64,7 @@ snapshot.hourly.forEach((h,i)=>{
 assert.deepEqual(sum(snapshot.hourly),snapshot.windows[3].counts);
 assert.equal(physical.reduce((n,k)=>n+k.count,0), lifetime.keyboard);
 assert.deepEqual(sum(history), lifetime);
-const scripts = ['i18n.js','themes.js','dropdown.js','history.js','keyboard.js','sport.js','shortcuts-catalog.js','date-picker.js','insights.js','app.js','presentation.js'];
+const scripts = ['i18n.js','themes.js','dropdown.js','history.js','history-scatter.js','keyboard.js','sport.js','shortcuts-catalog.js','date-picker.js','insights.js','app.js','presentation.js'];
 const styles = ['style.css','history.css','compact.css','themes.css','dropdown.css','sport.css','insights.css'];
 const fonts = [['ClickPulse UI','Inter.woff2'],['ClickPulse Mono','NotoSansMono.woff2']];
 fs.mkdirSync(path.join(output,'fonts'),{recursive:true});

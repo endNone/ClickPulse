@@ -30,6 +30,10 @@ pub(crate) enum Command {
     Snapshot(Sender<Result<Snapshot>>),
     SnapshotAsync(SnapshotDelivery),
     MiniSnapshot(SnapshotDelivery),
+    HistoryHours(
+        crate::timezone::HourRange,
+        Completion<Vec<crate::timezone::HistoryHour>>,
+    ),
     SportSample(SportDelivery),
     Import(
         PathBuf,
@@ -482,6 +486,20 @@ impl Runtime {
         self.queue_snapshot(timezone, None, include_shortcuts, None, reply)
     }
 
+    pub fn request_history_hours(
+        &self,
+        start: chrono::NaiveDate,
+        end: chrono::NaiveDate,
+        zone: crate::timezone::TimeZonePreference,
+        reply: impl FnOnce(Result<Vec<crate::timezone::HistoryHour>>) + Send + 'static,
+    ) {
+        // Dropping an unqueued Completion also notifies the caller.
+        let _ = self.tx.try_send(Command::HistoryHours(
+            crate::timezone::HourRange { start, end, zone },
+            Completion::new(reply),
+        ));
+    }
+
     /// Share cards request only the selected day's leading chord, never the full ranking.
     pub fn request_share_snapshot(
         &self,
@@ -771,6 +789,9 @@ fn source_loop_inner(
             }
             Command::SportSample(delivery) => {
                 delivery.complete(reader().and_then(LiveSource::lifetime))
+            }
+            Command::HistoryHours(range, reply) => {
+                reply.complete(reader().and_then(|db| db.history_hours(range)))
             }
             Command::MiniSnapshot(delivery) => {
                 let result = reader().and_then(|source| match delivery.today_period {
@@ -1109,6 +1130,13 @@ impl StorageWorker {
                     });
                 Box::new(move || delivery.complete(result))
             })?,
+            Command::HistoryHours(range, reply) => self.spawn_job(move |db| {
+                let result = match db {
+                    Storage::Independent(db) => db.history_hours(range),
+                    Storage::App(db) => db.history_hours(range),
+                };
+                Box::new(move || reply.complete(result))
+            })?,
             Command::MiniSnapshot(delivery) => self.spawn_job(move |db| {
                 let result = db.mini_counts(Local::now(), delivery.timezone, delivery.today_period);
                 Box::new(move || delivery.complete_mini(result))
@@ -1221,6 +1249,7 @@ fn reject_while_retrying(command: Command) {
         }
         Command::SnapshotAsync(reply) => reply.complete(Err(error())),
         Command::MiniSnapshot(reply) => reply.complete_mini(Err(error())),
+        Command::HistoryHours(_, reply) => reply.complete(Err(error())),
         Command::SportSample(reply) => reply.complete(Err(error())),
         Command::Import(_, _, reply) => reply.complete(Err(error())),
         Command::Relocate(_, _, _, reply) => reply.complete(Err(error())),

@@ -11,3 +11,24 @@ select {appearance:none;-webkit-appearance:none;min-width:108px;padding-right:34
 .heat-cell {width:12px;height:12px;border-radius:2px}.heat-cell.today {outline:1px solid #2563eb;outline-offset:2px}
 .history-summary {margin:0 0 16px;color:var(--muted);font-size:var(--ui-detail-size);line-height:1.6}
 .history-pagination {display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;font-size:var(--ui-micro-size);color:#7087a7}.history-pagination>div {display:flex;gap:8px}
+
+.history-scatter {--scatter-key:#306aca;--scatter-mouse:#c6752a;border-block:1px solid var(--line);margin:20px 0;padding:20px 0 16px}
+.scatter-heading,.scatter-devices {display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.scatter-heading {gap:10px 14px;margin-bottom:12px}
+.scatter-heading h3 {margin:0;color:var(--text);font-size:var(--ui-section-size);font-weight:650}
+.scatter-devices {gap:6px;margin-left:auto}
+.scatter-devices button {display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:6px;padding:5px 9px;font:550 var(--ui-micro-size)/1.4 var(--sans)}
+.scatter-devices button i {width:8px;height:8px;border-radius:50%;background:var(--scatter-key)}
+#scatter-mouse i {background:var(--scatter-mouse)}
+.scatter-devices button[aria-pressed="false"] {color:var(--muted)}
+.scatter-devices button[aria-pressed="false"] i {background:transparent;border:1px solid currentColor}
+.scatter-weekdays {display:inline-flex;max-width:100%;flex-wrap:wrap}
+.scatter-weekdays button {padding-inline:9px}
+.scatter-frame {position:relative;margin-top:14px}
+#scatter-plot {display:block;width:100%;height:clamp(180px,20vw,234px);color:var(--muted);font-family:var(--sans)}
+#scatter-plot:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
+#scatter-tip {position:absolute;z-index:1;pointer-events:none;transform:translate(-50%,-100%);padding:5px 9px;border:1px solid var(--line);border-radius:5px;background:var(--surface);box-shadow:0 2px 8px #172b4a1a;color:var(--text);font-size:var(--ui-micro-size);white-space:nowrap;max-width:100%}
+#scatter-caption,#scatter-status {font:400 var(--ui-micro-size)/1.5 var(--sans);color:var(--muted)}
+#scatter-caption {margin:9px 0 0}
+#scatter-status {display:grid;place-items:center;min-height:130px;margin:0}
+#scatter-keys {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}

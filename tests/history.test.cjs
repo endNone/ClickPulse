@@ -134,3 +134,17 @@ test('calendar month labels do not overlap for ranges starting at month-end',()=
    assert(markers.length>=2);
  }
 });
+
+test('hourly scatter keeps dates distinct and filters weekdays, devices and zero counts', () => {
+  const {group, demoHours} = require('../ui/history-scatter.js');
+  const rows = [['2026-11-07',9,10,0], ['2026-11-08',9,0,11], ['2026-11-14',9,7,2]];
+  const saturday = group(rows,5,[true,true],H);
+  assert.deepEqual(saturday.buckets[9][0].map(p=>p.count),[7,10]);
+  assert.deepEqual(saturday.buckets[9][1].map(p=>p.day),['2026-11-14']);
+  assert.equal(saturday.maximum,10);
+  assert.equal(group(rows,-1,[false,true],H).maximum,11);
+  assert.equal(group(rows,0,[true,true],H).maximum,0);
+  const simulated = demoHours([{day:'2026-11-07',counts:{keyboard:1837,mouse:419}}]);
+  assert.equal(simulated.reduce((sum,row)=>sum+row[2],0),1837);
+  assert.equal(simulated.reduce((sum,row)=>sum+row[3],0),419);
+});

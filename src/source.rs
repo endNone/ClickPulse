@@ -10,6 +10,9 @@ use crate::db::{
     Counts, DayCount, EncodedKeyCount, KeyCount, KeyboardStats, Snapshot, WindowCount,
 };
 
+const MINUTE_COUNTS: &str =
+    "SELECT bucket,dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY bucket,dev";
+
 pub struct LiveSource {
     conn: Connection,
     sealed: crate::timezone::SealedProjection,
@@ -62,12 +65,7 @@ impl LiveSource {
         now: DateTime<Local>,
         zone: crate::timezone::TimeZonePreference,
     ) -> Result<Counts> {
-        crate::timezone::today_counts(
-            &self.conn,
-            now,
-            zone,
-            "SELECT bucket,dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY bucket,dev",
-        )
+        crate::timezone::today_counts(&self.conn, now, zone, MINUTE_COUNTS)
     }
 
     pub fn open(path: &Path) -> Result<Self> {
@@ -97,6 +95,13 @@ impl LiveSource {
         zone: crate::timezone::TimeZonePreference,
     ) -> Result<Snapshot> {
         self.snapshot_for_view(now, zone, true)
+    }
+
+    pub(crate) fn history_hours(
+        &self,
+        range: crate::timezone::HourRange,
+    ) -> Result<Vec<crate::timezone::HistoryHour>> {
+        range.read(&self.conn, MINUTE_COUNTS)
     }
 
     pub fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
@@ -134,7 +139,7 @@ impl LiveSource {
             &mut snapshot,
             zone,
             now,
-            "SELECT bucket,dev,SUM(cnt) FROM events WHERE bucket>=?1 AND bucket<=?2 GROUP BY bucket,dev",
+            MINUTE_COUNTS,
             &[(
                 if precise { "recent_counts" } else { "events" },
                 if precise {

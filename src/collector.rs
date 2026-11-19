@@ -195,6 +195,13 @@ impl CollectorDb {
         self.snapshot_for_view(now, zone, true)
     }
 
+    pub(crate) fn history_hours(
+        &self,
+        range: crate::timezone::HourRange,
+    ) -> Result<Vec<crate::timezone::HistoryHour>> {
+        self.reader.history_hours(range)
+    }
+
     pub fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
         self.reader.share_shortcut(day)
     }

@@ -60,6 +60,7 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false,random=()=>
     vm.runInContext('Object.hasOwn=undefined;Array.prototype.at=undefined;',context);
     for(const module of ['themes','i18n','history','keyboard','dropdown','sport'])vm.runInContext(readFileSync('ui/'+module+'.js','utf8'),context);
   }
+  vm.runInContext(readFileSync('ui/history-scatter.js','utf8'),context);
   vm.runInContext(readFileSync('ui/app.js','utf8'),context);
   vm.runInContext(readFileSync('ui/presentation.js','utf8'),context);
   return {window,get,root,context,intervals,settingsLinks,jumpTo(id){settingsLinks.find(b=>b.dataset.settingsSection===id).fire();},setTime(value){now=value;},selectRange(days){ranges.find(button=>Number(button.dataset.range)===days).fire();},navigate(page){nav.find(button=>button.dataset.page===page).fire();}};
@@ -1504,4 +1505,33 @@ test('language and timezone arriving together leave the new zone selected',()=>{
   const a=app();a.window.receive(snapshot());
   a.window.receiveView({locale:'zh-CN',language_preference:'zh-CN',timezone:'UTC',timezones:['UTC','Asia/Shanghai']});
   assert.equal(a.get('timezone-select').value,'UTC');
+});
+
+test('History loads past hour buckets on demand and updates today from existing counters',()=>{
+  const a=app(), requests=[];
+  a.window.ipc.postMessage=message=>{
+    const r=JSON.parse(message);
+    if(r.action==='history_hours') requests.push(r);
+  };
+  const s=snapshot(), past={day:'2026-10-05',counts:{keyboard:7,mouse:29}};
+  s.history_days.unshift(past);
+  s.hours=[{keyboard:100,mouse:20}];
+  a.window.receive(s);
+  assert.equal(requests.length,0);
+  a.navigate('history');
+  const first=requests[0];
+  assert.equal(first.start,past.day);assert.equal(first.end,past.day);
+  assert.equal(a.get('scatter-status').textContent,messages.en['common.loading']);
+  a.window.receiveHistoryHours(first.id,[[past.day,0,7,29]]);
+  assert.equal(a.get('scatter-plot').hidden,false);
+  a.window.receive({...s,hours:[{keyboard:106,mouse:22}]});
+  assert.equal(requests.length,1);
+  a.get('scatter-weekdays').children[6].fire();
+  assert.equal(a.get('scatter-status').textContent,messages.en['scatter.empty']);
+  a.window.receive({...s,history_days:[{...past,counts:{keyboard:8,mouse:29}},s.history_days[1]]});
+  assert.equal(requests.length,2);
+  a.window.receiveHistoryHours(first.id,[]);
+  assert.equal(a.get('scatter-status').textContent,messages.en['common.loading']);
+  a.navigate('overview');a.window.receiveHistoryHours(requests[1].id,[]);
+  a.navigate('history');assert.equal(requests.length,3);
 });

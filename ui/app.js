@@ -116,12 +116,16 @@ function renderDataOperation(){
   renderUpdateState();
 }
 window.receiveDataBusy=busy=>{
+  if(dataOperationBusy&&!busy)scatter.clear();
   dataOperationBusy=!!busy;
   renderDataOperation();
 };
 let calendarRange='365',historyRange='all',historyPage=0,calendarLayout='',historySignature='';
 let calendarCells=new Map();
 const H=ClickPulseHistory;
+const scatter=ClickPulseScatter.create({document,window,I,H,send});
+window.receiveHistoryHours=(id,rows)=>scatter.receive(id,rows);
+window.clearHistoryScatter=()=>scatter.clear();
 let calendarBook=H.nextBook(-1,Math.random()),calendarPhrase=H.nextPhrase(-1,Math.random());
 const titles={overview:'page.overview',history:'page.history',keys:'page.heatmap',shortcuts:'page.shortcuts',mouse:'page.heatmap',share:'page.share',settings:'page.settings'};
 const navTitles={...titles,shortcuts:'nav.shortcuts',share:'nav.share'};
@@ -309,6 +313,7 @@ function navigatePage(next){
     calendarBook=H.nextBook(calendarBook,Math.random());
     calendarPhrase=H.nextPhrase(calendarPhrase,Math.random());
   }
+  if(page==='history'&&next!=='history')scatter.clear();
   page=next==='mouse'?'keys':next;
   document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==page);
   updateHeading();syncSettingsNavigation();
@@ -748,6 +753,7 @@ function renderCalendar(){
 }
 function renderHistory(){
   const today=data.now.split('T')[0],records=H.recordedInRange(data.history_days,today,historyRange),bounds=H.bounds(data.history_days,today,historyRange);
+  if(!dataOperationBusy&&window.presentationView?.visible!==false)scatter.update(data,records,bounds,currentTheme);
   const pagination=H.paginate(records,historyPage);historyPage=pagination.page;
   const signature=I.locale+':'+currentTheme+':'+historyRange+':'+historyPage+':'+today+':'+historyRevision;
   if(signature===historySignature)return;

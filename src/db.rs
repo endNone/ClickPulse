@@ -109,6 +109,8 @@ pub struct Snapshot {
     pub legacy_imported: bool,
 }
 
+const MINUTE_COUNTS: &str = "SELECT bucket,dev,SUM(cnt) FROM (SELECT bucket,dev,cnt FROM minutes WHERE bucket>=?1 AND bucket<=?2 UNION ALL SELECT bucket,dev,cnt FROM legacy_minutes WHERE bucket>=?1 AND bucket<=?2) GROUP BY bucket,dev";
+
 pub struct EventDb {
     conn: Connection,
     projection: crate::timezone::ProjectionCache,
@@ -381,6 +383,13 @@ impl EventDb {
         self.snapshot_for_view(now, zone, true)
     }
 
+    pub(crate) fn history_hours(
+        &self,
+        range: crate::timezone::HourRange,
+    ) -> Result<Vec<crate::timezone::HistoryHour>> {
+        range.read(&self.conn, MINUTE_COUNTS)
+    }
+
     pub fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
         crate::shortcuts::read_top_for_day(&self.conn, day)
     }
@@ -398,7 +407,7 @@ impl EventDb {
             &mut snapshot,
             zone,
             now,
-            "SELECT bucket,dev,SUM(cnt) FROM (SELECT bucket,dev,cnt FROM minutes WHERE bucket>=?1 AND bucket<=?2 UNION ALL SELECT bucket,dev,cnt FROM legacy_minutes WHERE bucket>=?1 AND bucket<=?2) GROUP BY bucket,dev",
+            MINUTE_COUNTS,
             &[
                 ("recent", crate::hourly::Resolution::Millisecond),
                 ("legacy_minutes", crate::hourly::Resolution::Minute),

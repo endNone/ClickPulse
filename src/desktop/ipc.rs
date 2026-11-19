@@ -56,6 +56,12 @@ pub(super) enum Request {
     Hide {},
     Refresh {},
     SportSample {},
+    HistoryHours {
+        id: u32,
+        start: chrono::NaiveDate,
+        end: chrono::NaiveDate,
+        timezone: clickpulse::timezone::TimeZonePreference,
+    },
     Sport {
         enabled: bool,
     },

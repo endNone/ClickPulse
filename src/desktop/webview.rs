@@ -328,11 +328,12 @@ fn create(
                             .replace(
                                 "/*__SCRIPT__*/",
                                 &format!(
-                                    "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+                                    "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
                                     include_str!("../../ui/i18n.js"),
                                     include_str!("../../ui/themes.js"),
                                     include_str!("../../ui/dropdown.js"),
                                     include_str!("../../ui/history.js"),
+                                    include_str!("../../ui/history-scatter.js"),
                                     include_str!("../../ui/keyboard.js"),
                                     include_str!("../../ui/sport.js"),
                                     include_str!("../../ui/shortcuts-catalog.js"),

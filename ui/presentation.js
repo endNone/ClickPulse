@@ -50,6 +50,7 @@
     });
   }
   window.receiveView=next=>{
+    if(next.compact===true||next.visible===false)window.clearHistoryScatter();
     if(next.compact===true||next.visible===false){window.dismissCloseDialog?.();window.captureSessionState?.();}
     // A range anchored in the hidden mode can paint across the newly shown
     // layout in WebKit. Keep selections during live refreshes, not mode changes.
