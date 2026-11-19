@@ -127,9 +127,9 @@ Select interface text, paths or numbers and use **⌘C** on macOS or **Ctrl+C** 
 
 ## Shortcuts, Heatmap and Share
 
-**Shortcuts** shows cumulative counts, the eight most-used combinations, and the top five’s share. The system filter applies to the whole dashboard; search narrows only the detailed list. Counts begin when this feature is installed. Shift-only combinations are hidden by default; **Show Shift combinations** includes them in the dashboard and list. This choice lasts for the current app session and does not change recording or the encyclopedia.
+**Shortcuts** shows cumulative counts, the eight most-used combinations, and the top five’s share. The dashboard shows shortcuts recorded on the current operating system. Search narrows the detailed list. Counts begin when this feature is installed. Shift-only combinations are hidden by default; **Show Shift combinations** includes them in the dashboard and list. This choice lasts for the current app session and does not change recording or the encyclopedia.
 
-Switch to **Shortcut encyclopedia** to browse the bundled reference. An annotation describes a common default, not a confirmed command. Custom mappings and applications can differ. The [handbook](shortcuts.md) explains coverage and links to official references.
+Switch to **Shortcut encyclopedia** to browse the reference for your operating system. An annotation describes a common default, not a confirmed command. Custom mappings and applications can differ. The [handbook](shortcuts.md) explains coverage and links to official references.
 
 The **Mouse** section below Keyboard in **Heatmap** separates left, right, middle and side buttons. Its distribution covers all recorded history.
 

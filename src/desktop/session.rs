@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 #[serde(default, deny_unknown_fields)]
 pub(super) struct InsightsState {
     pub shortcut_library: bool,
-    pub shortcut_system: String,
+    // Accept older session payloads. The renderer now uses the native platform.
+    #[serde(skip_serializing)]
+    shortcut_system: String,
     pub shortcut_rows: u16,
     pub shortcut_show_shift: bool,
     pub share_style: String,
@@ -153,6 +155,12 @@ mod tests {
         let restored: SessionState = serde_json::from_value(value.clone()).unwrap();
         assert!(restored.valid());
         assert_eq!(restored.insights.share_day.as_deref(), Some("2026-11-16"));
+        assert!(
+            serde_json::to_value(&restored.insights)
+                .unwrap()
+                .get("shortcut_system")
+                .is_none()
+        );
         value["insights"]["shortcut_rows"] = 200.into();
         assert!(
             serde_json::from_value::<SessionState>(value.clone())

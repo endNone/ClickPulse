@@ -23,22 +23,23 @@ function cardData(snapshot,day,timeZone,systemTimeZone=Intl.DateTimeFormat().res
  return {day,shortcutLoaded,shortcut:shortcutAligned&&daily?.day===day&&positive(daily.top?.count)?daily.top:null,keyboard:positive(counts.keyboard),mouse:positive(counts.mouse),week,partial:day===dayKey(snapshot.now,timeZone),demo:!!snapshot.demo,timeZone};
 }
 function shortcutRows(rows,C,query,platform){
- return (rows||[]).filter(r=>positive(r.count)&&(!platform||r.platform===platform)).map(r=>({...r,entries:C.matches(r)}))
+ return (rows||[]).filter(r=>positive(r.count)&&r.platform===platform).map(r=>({...r,entries:C.matches(r)}))
  .filter(r=>!query||C.matchesQuery(r,r.entries,query))
- .sort((a,b)=>b.count-a.count||a.platform.localeCompare(b.platform)||a.modifiers-b.modifiers||a.key-b.key);
+ .sort((a,b)=>b.count-a.count||a.modifiers-b.modifiers||a.key-b.key);
 }
 // The input is already ranked and platform-filtered. Search only narrows the detail list.
 function shortcutSummary(rows){
  const total=rows.reduce((sum,row)=>sum+row.count,0),topFive=rows.slice(0,5).reduce((sum,row)=>sum+row.count,0);
  return {total,distinct:rows.length,top:rows.slice(0,8),topFive,others:total-topFive};
 }
-function create({document,window,I,send,toast,syncSelect=()=>{},getSystemTimeZone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone}){
+function create({document,window,I,send,toast,getSystemTimeZone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone}){
  const C=ClickPulseShortcutCatalog,$=id=>document.getElementById(id),t=(key,vars)=>I.t(key,vars),n=value=>I.number(value);
  const datePicker=typeof ClickPulseDatePicker==='undefined'?null:ClickPulseDatePicker.create({document,window,I,input:$('share-date')});
  let paintVersion=0,painting=false,painted=false,exporting=false,suspended=false;
- const canCopy=()=>['macos','windows'].includes(window.clickpulsePlatform)&&!window.clickpulsePreview;
+ const platform=window.clickpulsePlatform;
+ const canCopy=()=>['macos','windows'].includes(platform)&&!window.clickpulsePreview;
  $('share-copy').hidden=!canCopy();
- let snapshot=null,active='',signature='',library=false,showShift=false,query='',system='',style='blue',selectedDay='',followToday=true,card=null,visibleRows=100,listSignature='',listCounters=[],mouseButtonsSignature='';
+ let snapshot=null,active='',signature='',library=false,showShift=false,query='',style='blue',selectedDay='',followToday=true,card=null,visibleRows=100,listSignature='',listCounters=[],mouseButtonsSignature='';
  let shortcutChartSignature='';
  const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el;};
  const svg=(tag,attrs)=>{const el=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [key,value]of Object.entries(attrs||{}))el.setAttribute(key,value);return el;};
@@ -46,11 +47,9 @@ function create({document,window,I,send,toast,syncSelect=()=>{},getSystemTimeZon
  function remember(){window.captureSessionState?.();}
  function sourceLink(entry){const a=node('button',C.sources[entry.source].name+' ↗','shortcut-source');a.type='button';a.onclick=()=>window.clickpulsePreview?window.open(C.sources[entry.source].url,'_blank','noopener'):send('shortcut_reference',{source:entry.source});return a;}
  function chordKeys(row){const keys=node('div',undefined,'shortcut-chord');for(const key of C.chordParts(row))keys.append(node('kbd',key));return keys;}
- function chord(row){const el=node('div');el.append(chordKeys(row),node('div',row.platform==='macos'?'macOS':row.platform==='windows'?'Windows':'Ubuntu / GNOME','shortcut-system'));return el;}
  function renderShortcutCharts(rows,emptyKey){
   const summary=shortcutSummary(rows),{total,distinct,top,topFive,others}=summary;
-  const mixedSystems=new Set(rows.map(row=>row.platform)).size>1;
-  const next=JSON.stringify([I.locale,system,total,distinct,top,mixedSystems,emptyKey]);if(next===shortcutChartSignature)return;shortcutChartSignature=next;
+  const next=JSON.stringify([I.locale,total,distinct,top,emptyKey]);if(next===shortcutChartSignature)return;shortcutChartSignature=next;
   const percentage=value=>total?I.percent(value/total,1):'—';
   const metric=(label,value)=>{const el=node('div',undefined,'insight-metric');el.append(node('span',t(label)),node('strong',n(value)));return el;};
   const leader=node('div',undefined,'insight-metric shortcut-leader');leader.append(node('span',t('shortcuts.most_used')));
@@ -58,7 +57,7 @@ function create({document,window,I,send,toast,syncSelect=()=>{},getSystemTimeZon
   else leader.append(node('strong','—'));
   $('shortcut-metrics').replaceChildren(metric('shortcuts.presses',total),metric('shortcuts.distinct',distinct),leader);
   const ranking=top.map(row=>{
-   const el=node('div',undefined,'shortcut-rank-row'),label=mixedSystems?chord(row):chordKeys(row),track=node('div',undefined,'shortcut-rank-track'),bar=node('div',undefined,'shortcut-rank-bar'),value=node('div',undefined,'shortcut-rank-value');
+   const el=node('div',undefined,'shortcut-rank-row'),label=chordKeys(row),track=node('div',undefined,'shortcut-rank-track'),bar=node('div',undefined,'shortcut-rank-bar'),value=node('div',undefined,'shortcut-rank-value');
    bar.style.width=(row.count/top[0].count*100)+'%';track.setAttribute('aria-hidden','true');track.append(bar);
    value.append(node('strong',n(row.count)),node('small',percentage(row.count)));el.append(label,track,value);return el;
   });
@@ -74,8 +73,9 @@ function create({document,window,I,send,toast,syncSelect=()=>{},getSystemTimeZon
  }
  function renderShortcuts(){
   const pending=!library&&!Array.isArray(snapshot.shortcuts);
-  const all=shortcutRows(snapshot.shortcuts,C,'',system).filter(row=>showShift||row.modifiers!==4);
-  const emptyKey=!(snapshot.shortcuts||[]).some(r=>positive(r.count))&&!library&&!query?'shortcuts.empty':'shortcuts.no_results';
+  const local=library?[]:shortcutRows(snapshot.shortcuts,C,'',platform);
+  const all=showShift?local:local.filter(row=>row.modifiers!==4);
+  const emptyKey=!local.length&&!library&&!query?'shortcuts.empty':'shortcuts.no_results';
   $('shortcut-dashboard').hidden=library||pending;$('shortcut-period').hidden=library;
   $('shortcut-shift-filter').hidden=library;$('shortcut-show-shift').checked=showShift;
   $('shortcut-loading').hidden=!pending;$('shortcut-details').hidden=pending;
@@ -83,18 +83,16 @@ function create({document,window,I,send,toast,syncSelect=()=>{},getSystemTimeZon
   if(!library&&!pending)renderShortcutCharts(all,emptyKey);
   $('shortcut-search').placeholder=t('shortcuts.search');$('shortcut-search').setAttribute('aria-label',t('shortcuts.search'));
   $('shortcut-library').setAttribute('aria-pressed',String(library));$('shortcut-activity').setAttribute('aria-pressed',String(!library));
-  $('shortcut-system').setAttribute('aria-label',t('shortcuts.all_systems'));$('shortcut-system').options[0].textContent=t('shortcuts.all_systems');
-  syncSelect('shortcut-system');
   if(pending)return;
-  const rows=library?C.entries.filter(e=>(!system||e.platform===system)&&C.search(e,query)).map(e=>({...e,entries:[e]})):all.filter(r=>!query||C.matchesQuery(r,r.entries,query));
+  const rows=library?C.entries.filter(e=>e.platform===platform&&C.search(e,query)).map(e=>({...e,entries:[e]})):all.filter(r=>!query||C.matchesQuery(r,r.entries,query));
   const more=$('shortcut-more');more.hidden=rows.length<=visibleRows;more.textContent=t('shortcuts.more',{count:n(Math.max(0,rows.length-visibleRows))});
   const shown=rows.slice(0,visibleRows);
-  const nextList=JSON.stringify([library,showShift,query,system,I.locale,visibleRows,emptyKey,shown.map(r=>[r.platform,r.modifiers,r.key])]);
+  const nextList=JSON.stringify([library,showShift,query,I.locale,visibleRows,emptyKey,shown.map(r=>[r.platform,r.modifiers,r.key])]);
   const max=Math.max(1,...all.map(r=>r.count));
   if(nextList!==listSignature){
   listSignature=nextList;listCounters=[];
   $('shortcut-list').replaceChildren(...shown.map(row=>{
-   const el=node('div',undefined,'shortcut-row');el.append(chord(row));const annotation=node('div',undefined,'shortcut-annotation');
+   const el=node('div',undefined,'shortcut-row');el.append(chordKeys(row));const annotation=node('div',undefined,'shortcut-annotation');
    if(row.entries.length){for(const entry of row.entries){annotation.append(node('strong',C.title(entry,I.locale)),node('small',t('shortcuts.reference')+' · '+C.scope(entry,I.locale)));if(library)annotation.append(sourceLink(entry));}}
    else annotation.append(node('small',t('shortcuts.unknown')));
    el.append(annotation);const count=node('div',undefined,'shortcut-count');
@@ -225,7 +223,6 @@ function create({document,window,I,send,toast,syncSelect=()=>{},getSystemTimeZon
  }
  $('shortcut-search').addEventListener('input',e=>{query=e.target.value;visibleRows=100;invalidate();});
  $('shortcut-show-shift').addEventListener('change',e=>{showShift=e.target.checked;visibleRows=100;invalidate();remember();});
- $('shortcut-system').addEventListener('change',e=>{system=e.target.value;visibleRows=100;invalidate();remember();});
  $('shortcut-library').addEventListener('click',()=>{library=true;visibleRows=100;invalidate();remember();});
  $('shortcut-activity').addEventListener('click',()=>{library=false;visibleRows=100;invalidate();remember();});
  $('shortcut-more').addEventListener('click',()=>{visibleRows=Math.min(6000,visibleRows+100);invalidate();remember();});
@@ -266,18 +263,18 @@ function create({document,window,I,send,toast,syncSelect=()=>{},getSystemTimeZon
    if(!selectedDay||followToday||selectedDay>today){const changed=!followToday&&!!selectedDay;selectedDay=today;followToday=true;if(changed)remember();}
    card=cardData(data,selectedDay,I.effectiveTimeZone,getSystemTimeZone());
   }
-  const next=JSON.stringify([page,I.locale,I.effectiveTimeZone,document.documentElement.dataset.theme,query,system,library,showShift,style,selectedDay,today,data.demo,page==='shortcuts'?data.shortcuts:page==='mouse'?[data.lifetime?.mouse,data.mouse_buttons]:card]);
+  const next=JSON.stringify([page,I.locale,I.effectiveTimeZone,document.documentElement.dataset.theme,query,library,showShift,style,selectedDay,today,data.demo,page==='shortcuts'?data.shortcuts:page==='mouse'?[data.lifetime?.mouse,data.mouse_buttons]:card]);
   if(next===signature)return;signature=next;
   if(page==='shortcuts')renderShortcuts();else if(page==='mouse')renderMouse();else renderShare();
  }
- function sessionState(){return {shortcut_library:library,shortcut_show_shift:showShift,shortcut_system:system,shortcut_rows:visibleRows,share_style:style,share_day:followToday?null:selectedDay};}
+ function sessionState(){return {shortcut_library:library,shortcut_show_shift:showShift,shortcut_rows:visibleRows,share_style:style,share_day:followToday?null:selectedDay};}
  function restoreSession(state){
   if(!state)return;
-  library=state.shortcut_library===true;showShift=state.shortcut_show_shift===true;system=['macos','windows','linux'].includes(state.shortcut_system)?state.shortcut_system:'';
+  library=state.shortcut_library===true;showShift=state.shortcut_show_shift===true;
   visibleRows=Number.isInteger(state.shortcut_rows)&&state.shortcut_rows>=100&&state.shortcut_rows<=6000&&state.shortcut_rows%100===0?state.shortcut_rows:100;
   style=['blue','paper','ink'].includes(state.share_style)?state.share_style:'blue';
   selectedDay=typeof state.share_day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(state.share_day)?state.share_day:'';followToday=!selectedDay;
-  $('shortcut-system').value=system;syncSelect('shortcut-system');signature='';listSignature='';
+  signature='';listSignature='';
  }
  releaseCard();
  return {render,sessionState,restoreSession,setWindowState};

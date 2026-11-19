@@ -13,11 +13,11 @@ function viewHarness({lateBrand=false,fonts,platform='macos',preview=false,timeZ
  const brand=element();brand.complete=false;brand.naturalWidth=0;
  const document={fonts,getElementById:get,createElement:element,createElementNS:element,querySelector:()=>lateBrand?brand:null,querySelectorAll:selector=>selector==='[data-share-style]'?styles:[],documentElement:{dataset:{theme:'blue'}}};
  global.ClickPulseShortcutCatalog=C;
- const window={captureSessionState(){},clickpulsePlatform:platform,clickpulsePreview:preview},synced=[];
+ const window={captureSessionState(){},clickpulsePlatform:platform,clickpulsePreview:preview};
  const I={locale:'en',timezone:timeZone,effectiveTimeZone:timeZone,t:(key,vars)=>key+(vars?.count||''),number:String,percent:(ratio,digits)=>(ratio*100).toFixed(digits)+'%',day:String,date:String};
- const view=M.create({document,window,I,send:(...args)=>sent.push(args),toast:message=>toasts.push(message),getSystemTimeZone:()=>systemTimeZone,syncSelect(id){synced.push([id,get(id).value]);}});
+ const view=M.create({document,window,I,send:(...args)=>sent.push(args),toast:message=>toasts.push(message),getSystemTimeZone:()=>systemTimeZone});
  delete global.ClickPulseShortcutCatalog;
- return {view,get,styles,document,window,brand,I,synced,texts,sent,toasts,setSystemTimeZone:zone=>{systemTimeZone=zone;},draws:()=>draws,exports:()=>exports};
+ return {view,get,styles,document,window,brand,I,texts,sent,toasts,setSystemTimeZone:zone=>{systemTimeZone=zone;},draws:()=>draws,exports:()=>exports};
 }
 const sampleCard=()=>({share_shortcut:{day:'2026-11-17',top:null},now:'2026-11-17T12:00:00Z',history_days:[{day:'2026-11-17',counts:{keyboard:10,mouse:2}},{day:'2026-11-16',counts:{keyboard:5,mouse:1}}]});
 test('leaving share frees its canvas and returning redraws unchanged data',()=>{
@@ -40,11 +40,10 @@ test('shortcut list is bounded, searchable, and library rows survive live count 
  const a=viewHarness();const data={shortcuts:Array.from({length:250},(_,i)=>({platform:'macos',modifiers:8+(i%2),key:Math.floor(i/2),count:i+1}))};
  a.view.render('shortcuts',data);assert.equal(a.get('shortcut-list').children.length,100);
  a.get('shortcut-more').fire('click');assert.equal(a.get('shortcut-list').children.length,200);
- a.get('shortcut-library').fire('click');assert.equal(a.get('shortcut-list').children.length,100);
+ a.get('shortcut-library').fire('click');assert.equal(a.get('shortcut-list').children.length,C.entries.filter(e=>e.platform==='macos').length);
  const replacements=a.get('shortcut-list').replacements;
  a.view.render('shortcuts',{shortcuts:[{platform:'macos',modifiers:8,key:8,count:9999}]});assert.equal(a.get('shortcut-list').replacements,replacements);
  a.get('shortcut-search').fire('input','Ctrl+C');assert(a.get('shortcut-list').children.length<20);
- a.get('shortcut-system').fire('change','linux');assert.equal(a.view.sessionState().shortcut_system,'linux');
 });
 test('combined Heatmap refreshes mouse buttons only while that page is active',()=>{
  const a=viewHarness(),data={lifetime:{mouse:2},mouse_buttons:{left:2}};
@@ -104,14 +103,16 @@ test('mouse donut accounts for legacy unknown clicks and handles empty or single
  assert.equal(arcs().length,1);assert.equal(arcs()[0].attributes['stroke-dasharray'],'100 100');
  assert.equal(a.get('mouse-chart').children[0].children[1].children[1].textContent,'chart.mouse_right');
 });
-test('renderer restore synchronizes the platform picker and keeps expanded result rows',()=>{
- const a=viewHarness(),data={shortcuts:[]};a.view.render('shortcuts',data);
- a.get('shortcut-library').fire('click');a.get('shortcut-more').fire('click');
- const b=viewHarness();b.view.restoreSession(a.view.sessionState());b.view.render('shortcuts',data);
- assert.equal(b.get('shortcut-list').children.length,C.entries.length);
- b.view.restoreSession({...a.view.sessionState(),shortcut_system:'windows'});b.view.render('shortcuts',data);
- assert(b.synced.some(([id,value])=>id==='shortcut-system'&&value==='windows'));
- assert.equal(b.get('shortcut-list').children.length,C.entries.filter(e=>e.platform==='windows').length);
+test('restoring an old system choice keeps the encyclopedia on the installed platform',()=>{
+ for(const platform of ['macos','windows','linux']){
+  const a=viewHarness({platform}),local=C.entries.filter(e=>e.platform===platform);
+  a.view.restoreSession({shortcut_library:true,shortcut_system:platform==='macos'?'windows':'macos',shortcut_rows:200});
+  a.view.render('shortcuts',{shortcuts:[]});
+  const rows=a.get('shortcut-list').children;
+  assert.deepEqual(rows.map(row=>row.children[0].children.map(k=>k.textContent)),local.map(C.chordParts));
+  assert.equal(a.view.sessionState().shortcut_rows,200);
+  assert.equal('shortcut_system' in a.view.sessionState(),false);
+ }
 });
 test('live share updates preserve an in-progress date edit until it is committed',()=>{
  const a=viewHarness(),data=sampleCard();a.view.render('share',data);
@@ -145,11 +146,11 @@ test('live counts update shortcut numbers in place until the ranking changes',()
  a.view.render('shortcuts',{shortcuts:[rows[0],{...rows[1],count:20}]});
  assert.equal(host.children[0].children[2].children[0].textContent,'20');
 });
-test('filtered shortcut empty state changes when activity arrives on another platform',()=>{
- const a=viewHarness();a.view.render('shortcuts',{shortcuts:[]});a.get('shortcut-system').fire('change','windows');
- assert.equal(a.get('shortcut-list').children[0].textContent,'shortcuts.empty');
+test('imported activity from another system leaves the local empty state intact',()=>{
+ const a=viewHarness({platform:'windows'});a.view.render('shortcuts',{shortcuts:[]});
  a.view.render('shortcuts',{shortcuts:[{platform:'macos',modifiers:8,key:8,count:1}]});
- assert.equal(a.get('shortcut-list').children[0].textContent,'shortcuts.no_results');
+ assert.equal(a.get('shortcut-list').children[0].textContent,'shortcuts.empty');
+ assert.equal(a.get('shortcut-ranking').children[0].children[1].textContent,'shortcuts.empty');
 });
 test('unrelated keyboard and hourly updates do not rebuild mouse button graphics',()=>{
  const a=viewHarness(),data={today:{mouse:2},week:{mouse:2},lifetime:{mouse:2},mouse_buttons:{left:2},hourly:[{start_ms:100,end_ms:200,counts:{mouse:2}}]};
@@ -187,31 +188,38 @@ test('reference matches exact platform, modifiers and canonical key without assi
 });
 test('shortcut ranking keeps unknown chords and searches both languages',()=>{
  const rows=[{platform:'macos',modifiers:8,key:8,count:7},{platform:'macos',modifiers:9,key:7,count:9},{platform:'windows',modifiers:1,key:8,count:2}];
- const sorted=M.shortcutRows(rows,C,'','');assert.equal(sorted[0].count,9);assert.equal(sorted[0].entries.length,0);
+ const sorted=M.shortcutRows(rows,C,'','macos');assert.equal(sorted[0].count,9);assert.equal(sorted[0].entries.length,0);
  assert.equal(M.shortcutRows(rows,C,'复制','macos').length,1);
  assert.equal(M.shortcutRows(rows,C,'copy','windows')[0].count,2);
 });
 test('shortcut chart totals include unlisted combinations and split top five exactly',()=>{
  const raw=Array.from({length:10},(_,i)=>({platform:'macos',modifiers:9,key:200+i,count:10-i}));
- const rows=M.shortcutRows([...raw,{...raw[0],count:0},{...raw[0],count:-5}],C,'','');
+ const rows=M.shortcutRows([...raw,{...raw[0],count:0},{...raw[0],count:-5}],C,'','macos');
  const summary=M.shortcutSummary(rows);
  assert.equal(summary.total,55);assert.equal(summary.distinct,10);assert.equal(summary.top.length,8);
  assert.equal(summary.topFive,40);assert.equal(summary.others,15);
  assert.equal(summary.top[0].count,10);assert.equal(summary.top[7].count,3);
  assert.deepEqual(M.shortcutSummary([]),{total:0,distinct:0,top:[],topFive:0,others:0});
 });
-test('platform changes scope all charts while detail search leaves totals unchanged',()=>{
- const a=viewHarness(),data={shortcuts:[{platform:'macos',modifiers:8,key:8,count:30},{platform:'macos',modifiers:8,key:9,count:10},{platform:'windows',modifiers:1,key:8,count:60}]};
- a.view.render('shortcuts',data);
- const metrics=a.get('shortcut-metrics');assert.equal(metrics.children[0].children[1].textContent,'100');
- const ranking=a.get('shortcut-ranking');assert.equal(ranking.children.length,3);
- const chart=ranking.children[0];a.get('shortcut-search').fire('input','Cmd+V');
- assert.equal(a.get('shortcut-list').children.length,1);assert.equal(metrics.children[0].children[1].textContent,'100');assert.equal(ranking.children[0],chart);
- a.get('shortcut-system').fire('change','macos');assert.equal(metrics.children[0].children[1].textContent,'40');
- assert.equal(metrics.children[1].children[1].textContent,'2');assert.equal(ranking.children.length,2);
- assert.equal(ranking.children[0].children[2].children[1].textContent,'75.0%');
- a.get('shortcut-system').fire('change','windows');assert.equal(metrics.children[0].children[1].textContent,'60');
- assert.equal(ranking.children.length,1);assert.equal(a.get('shortcut-list').children[0].textContent,'shortcuts.no_results');
+test('statistics, ranking and search automatically use the installed platform',()=>{
+ const data={shortcuts:[
+  {platform:'macos',modifiers:8,key:8,count:30},{platform:'macos',modifiers:8,key:9,count:10},
+  {platform:'windows',modifiers:1,key:8,count:60},{platform:'linux',modifiers:1,key:8,count:17}
+ ]};
+ for(const [platform,total,distinct,leadingShare] of [['macos',40,2,'75.0%'],['windows',60,1,'100.0%'],['linux',17,1,'100.0%']]){
+  const a=viewHarness({platform});a.view.render('shortcuts',data);
+  const metrics=a.get('shortcut-metrics'),ranking=a.get('shortcut-ranking');
+  assert.equal(metrics.children[0].children[1].textContent,String(total));
+  assert.equal(metrics.children[1].children[1].textContent,String(distinct));
+  assert.equal(ranking.children.length,distinct);
+  assert.equal(ranking.children[0].children[2].children[1].textContent,leadingShare);
+  assert.equal(a.get('shortcut-concentration').children[1].children[0].children[2].textContent,String(total));
+  const first=ranking.children[0];a.get('shortcut-search').fire('input','Cmd+V');
+  const results=a.get('shortcut-list').children;
+  if(platform==='macos'){assert.equal(results.length,1);assert.equal(results[0].children[2].children[0].textContent,'10');}
+  else assert.equal(results[0].textContent,'shortcuts.no_results');
+  assert.equal(metrics.children[0].children[1].textContent,String(total));assert.equal(ranking.children[0],first);
+ }
 });
 test('empty dashboard has no invented bars or percentage and encyclopedia hides statistics',()=>{
  const a=viewHarness();a.view.render('shortcuts',{shortcuts:[]});
@@ -243,20 +251,20 @@ test('share cards follow chosen timezone and actual day rows, including missing 
 });
 
 test('Shift-only combinations are hidden by default, included on request, and restored per session',()=>{
- const a=viewHarness(),rows=[{platform:'windows',modifiers:4,key:123,count:100},{platform:'windows',modifiers:5,key:123,count:10},{platform:'windows',modifiers:1,key:8,count:5}];
+ const a=viewHarness({platform:'windows'}),rows=[{platform:'windows',modifiers:4,key:123,count:100},{platform:'windows',modifiers:5,key:123,count:10},{platform:'windows',modifiers:1,key:8,count:5}];
  a.view.render('shortcuts',{shortcuts:rows});
  assert.equal(a.get('shortcut-metrics').children[0].children[1].textContent,'15');
  assert.equal(a.get('shortcut-list').children.length,2);
  const toggle=a.get('shortcut-show-shift');toggle.checked=true;toggle.fire('change');
  assert.equal(a.get('shortcut-metrics').children[0].children[1].textContent,'115');
  assert.equal(a.get('shortcut-list').children.length,3);
- const b=viewHarness();b.view.restoreSession(a.view.sessionState());b.view.render('shortcuts',{shortcuts:rows});
+ const b=viewHarness({platform:'windows'});b.view.restoreSession(a.view.sessionState());b.view.render('shortcuts',{shortcuts:rows});
  assert.equal(b.get('shortcut-show-shift').checked,true);
  assert.equal(b.get('shortcut-list').children.length,3);
  assert.equal(viewHarness().view.sessionState().shortcut_show_shift,false);
  toggle.checked=false;toggle.fire('change');a.get('shortcut-library').fire('click');
  assert.equal(a.get('shortcut-shift-filter').hidden,true);
- a.get('shortcut-search').fire('input','Shift+Tab');
+ a.get('shortcut-search').fire('input','Ctrl+Shift+Esc');
  assert(a.get('shortcut-list').children.some(row=>row.className==='shortcut-row'));
  a.get('shortcut-activity').fire('click');assert.equal(a.get('shortcut-shift-filter').hidden,false);
 });
