@@ -22,43 +22,6 @@
 
 <p align="center">按键和点击统计只保存在你的设备上，无需账号，也不收集遥测数据。</p>
 
-<p align="center">检查版本和下载更新时会连接 GitHub。你可以在设置中关闭自动检查。</p>
-
-## 功能
-
-- 通过活动趋势、小时分布与近一年日历，找出每天最活跃的时段。
-- 在键盘热力图、矩形树图与鼠标按键分布中查看最常用的按键。
-- 统计每日快捷键排行，适配多国键盘布局，并提供网页交互式[快捷键图鉴](https://endnone.github.io/ClickPulse/)。
-- 生成日报与周报（2–31 天）活动卡片，支持多风格切换、导出 PNG、复制图片与 AI 海报提示词。
-- 在历史记录中回看任意一天的活动，迁移数据目录或合并另一台电脑的历史记录。
-- 内置四款主题、八种界面语言、可调字号与自定义统计时区。
-
-## 安装
-
-- **macOS 12+** (Apple Silicon / Intel) · [下载 DMG](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Windows 10 / 11** (x64) · [下载便携版 ZIP](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Linux** (Ubuntu 22.04 / 24.04) · [下载 Linux 安装包](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-
-### 使用 Homebrew 或 Scoop 安装
-
-**macOS · Homebrew**
-
-```sh
-brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
-brew install --cask endnone/clickpulse/clickpulse
-```
-
-**Windows · Scoop**
-
-```powershell
-scoop bucket add clickpulse https://github.com/endNone/ClickPulse
-scoop install clickpulse
-```
-
-macOS 版未经 Apple 公证，Windows 版未签名。系统可能会在首次启动时阻止运行。
-
-分平台安装指南 · [macOS](../zh-CN/install-macos.md) · [Windows](../zh-CN/install-windows.md) · [Ubuntu](../zh-CN/install-linux.md)
-
 ## Mini 模式
 
 使用其他应用时，也可以通过小型悬浮窗查看实时计数。
@@ -112,6 +75,32 @@ macOS 版未经 Apple 公证，Windows 版未签名。系统可能会在首次�
   <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="像素风日报"></a>
   <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="包豪斯风周报"></a>
 </p>
+
+## 安装
+
+- **macOS 12+** (Apple Silicon / Intel) · [下载 DMG](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Windows 10 / 11** (x64) · [下载便携版 ZIP](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Linux** (Ubuntu 22.04 / 24.04) · [下载 Linux 安装包](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+
+### 使用 Homebrew 或 Scoop 安装
+
+**macOS · Homebrew**
+
+```sh
+brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
+brew install --cask endnone/clickpulse/clickpulse
+```
+
+**Windows · Scoop**
+
+```powershell
+scoop bucket add clickpulse https://github.com/endNone/ClickPulse
+scoop install clickpulse
+```
+
+macOS 版未经 Apple 公证，Windows 版未签名。系统可能会在首次启动时阻止运行。
+
+分平台安装指南 · [macOS](../zh-CN/install-macos.md) · [Windows](../zh-CN/install-windows.md) · [Ubuntu](../zh-CN/install-linux.md)
 
 ## 下载体积与运行内存
 

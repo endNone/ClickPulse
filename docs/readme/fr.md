@@ -22,42 +22,6 @@
 
 <p align="center">Vos statistiques de frappe et de clic restent sur votre appareil. Aucun compte, aucune télémétrie.</p>
 
-<p align="center">L’application se connecte à GitHub pour vérifier si une nouvelle version est disponible et télécharger les mises à jour. Vous pouvez désactiver la recherche automatique dans les paramètres.</p>
-
-## Fonctionnalités
-
-- Repérez vos périodes d’activité grâce aux tendances et au calendrier.
-- Retrouvez les touches les plus utilisées sur la carte de chaleur et le diagramme en rectangles.
-- Consultez l’historique pour revoir l’activité d’une journée précise.
-- Déplacez vos données ou fusionnez-les avec l’historique d’un autre ordinateur.
-- Choisissez parmi quatre thèmes et huit langues, et définissez le fuseau horaire de vos statistiques.
-
-## Installation
-
-- **macOS 12+** (Apple Silicon / Intel) · [Télécharger le DMG](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Windows 10 / 11** (x64) · [Télécharger le ZIP portable](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Linux** (Ubuntu 22.04 / 24.04) · [Télécharger la version Linux](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-
-### Installer avec Homebrew ou Scoop
-
-**macOS · Homebrew**
-
-```sh
-brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
-brew install --cask endnone/clickpulse/clickpulse
-```
-
-**Windows · Scoop**
-
-```powershell
-scoop bucket add clickpulse https://github.com/endNone/ClickPulse
-scoop install clickpulse
-```
-
-La version macOS n’est pas notariée par Apple et la version Windows n’est pas signée. Le système peut bloquer le premier lancement.
-
-Guides d’installation · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
-
 ## Mode Mini
 
 Gardez vos compteurs à l’écran dans une petite fenêtre flottante pendant que vous utilisez d’autres applications.
@@ -111,6 +75,32 @@ Le bouton en forme d’éclair de la fenêtre Mini active des animations qui ré
   <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="Rapport quotidien en pixel art"></a>
   <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="Rapport hebdomadaire de style Bauhaus"></a>
 </p>
+
+## Installation
+
+- **macOS 12+** (Apple Silicon / Intel) · [Télécharger le DMG](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Windows 10 / 11** (x64) · [Télécharger le ZIP portable](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Linux** (Ubuntu 22.04 / 24.04) · [Télécharger la version Linux](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+
+### Installer avec Homebrew ou Scoop
+
+**macOS · Homebrew**
+
+```sh
+brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
+brew install --cask endnone/clickpulse/clickpulse
+```
+
+**Windows · Scoop**
+
+```powershell
+scoop bucket add clickpulse https://github.com/endNone/ClickPulse
+scoop install clickpulse
+```
+
+La version macOS n’est pas notariée par Apple et la version Windows n’est pas signée. Le système peut bloquer le premier lancement.
+
+Guides d’installation · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
 
 ## Taille du téléchargement et mémoire utilisée
 

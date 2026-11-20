@@ -22,42 +22,6 @@
 
 <p align="center">按鍵與點擊統計只儲存在你的裝置上，無須帳號，也不收集遙測資料。</p>
 
-<p align="center">檢查版本與下載更新時會連線至 GitHub。你可以在設定中關閉自動檢查。</p>
-
-## 功能
-
-- 透過活動趨勢和日曆，找出每天最活躍的時段。
-- 在鍵盤熱度圖與矩形式樹狀圖中查看最常用的按鍵。
-- 在歷史紀錄中回顧任意一天的活動。
-- 移動資料夾，或合併另一部電腦上的歷史紀錄。
-- 從四款佈景主題與八種介面語言中挑選，並指定統計使用的時區。
-
-## 安裝
-
-- **macOS 12+** (Apple Silicon / Intel) · [下載 DMG](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Windows 10 / 11** (x64) · [下載可攜式 ZIP](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Linux** (Ubuntu 22.04 / 24.04) · [下載 Linux 套件](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-
-### 使用 Homebrew 或 Scoop 安裝
-
-**macOS · Homebrew**
-
-```sh
-brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
-brew install --cask endnone/clickpulse/clickpulse
-```
-
-**Windows · Scoop**
-
-```powershell
-scoop bucket add clickpulse https://github.com/endNone/ClickPulse
-scoop install clickpulse
-```
-
-macOS 版未經 Apple 公證，Windows 版未簽署。系統可能會阻擋首次啟動。
-
-各平台安裝指南 · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
-
 ## Mini 模式
 
 使用其他應用程式時，也能透過小型浮動視窗查看即時計數。
@@ -111,6 +75,32 @@ macOS 版未經 Apple 公證，Windows 版未簽署。系統可能會阻擋首�
   <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="像素風日報"></a>
   <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="包浩斯風週報"></a>
 </p>
+
+## 安裝
+
+- **macOS 12+** (Apple Silicon / Intel) · [下載 DMG](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Windows 10 / 11** (x64) · [下載可攜式 ZIP](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Linux** (Ubuntu 22.04 / 24.04) · [下載 Linux 套件](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+
+### 使用 Homebrew 或 Scoop 安裝
+
+**macOS · Homebrew**
+
+```sh
+brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
+brew install --cask endnone/clickpulse/clickpulse
+```
+
+**Windows · Scoop**
+
+```powershell
+scoop bucket add clickpulse https://github.com/endNone/ClickPulse
+scoop install clickpulse
+```
+
+macOS 版未經 Apple 公證，Windows 版未簽署。系統可能會阻擋首次啟動。
+
+各平台安裝指南 · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
 
 ## 下載大小與記憶體用量
 

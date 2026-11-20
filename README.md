@@ -23,41 +23,6 @@
 
 <p align="center">Your key and click statistics stay on your device.<br>No account, no telemetry.</p>
 
-<p align="center">ClickPulse connects to GitHub to check for new versions and download updates. Turn off automatic checks in Settings.</p>
-
-## Features
-
-- **Discover daily patterns** with activity trends, hourly distributions and a past-year calendar.
-- **Find your most-used keys and buttons** with a keyboard heatmap, treemap and mouse-button breakdown.
-- **Track shortcut habits** with daily rankings, non-US layout support and an interactive web [Shortcut Atlas](https://endnone.github.io/ClickPulse/).
-- **Export daily and weekly reports** as styled PNG cards, clipboard images or AI poster prompts.
-- **Revisit and move your data** across your complete local history, or merge backups from another computer.
-- **Make it yours** with four themes, eight languages, custom font sizes and your preferred time zone.
-
-## Install
-
-- **macOS 12+** (Apple Silicon / Intel): [Download DMG](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Windows 10 / 11** (x64): [Download portable ZIP](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Linux** (Ubuntu 22.04 / 24.04): [Download](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-
-### Install with Homebrew or Scoop
-
-**macOS Homebrew**
-
-```sh
-brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
-brew install --cask endnone/clickpulse/clickpulse
-```
-
-**Windows Scoop**
-
-```powershell
-scoop bucket add clickpulse https://github.com/endNone/ClickPulse
-scoop install clickpulse
-```
-
-The macOS app is not notarized by Apple and the Windows app is unsigned. Your system may block the first launch. [macOS steps](docs/install-macos.md) · [Windows steps](docs/install-windows.md) · [Ubuntu steps](docs/install-linux.md)
-
 ## Mini mode
 
 Keep live counts visible in a small floating window while you use other apps.
@@ -111,6 +76,30 @@ Optional effects in Mini mode react to your typing and clicking speed. Enable th
   <a href="docs/images/poster-daily-arcade.webp"><img src="docs/images/poster-daily-arcade.webp" width="48%" alt="Pixel art daily report"></a>
   <a href="docs/images/poster-weekly-bauhaus.webp"><img src="docs/images/poster-weekly-bauhaus.webp" width="48%" alt="Bauhaus-style weekly report"></a>
 </p>
+
+## Install
+
+- **macOS 12+** (Apple Silicon / Intel): [Download DMG](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Windows 10 / 11** (x64): [Download portable ZIP](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Linux** (Ubuntu 22.04 / 24.04): [Download](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+
+### Install with Homebrew or Scoop
+
+**macOS Homebrew**
+
+```sh
+brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
+brew install --cask endnone/clickpulse/clickpulse
+```
+
+**Windows Scoop**
+
+```powershell
+scoop bucket add clickpulse https://github.com/endNone/ClickPulse
+scoop install clickpulse
+```
+
+The macOS app is not notarized by Apple and the Windows app is unsigned. Your system may block the first launch. [macOS steps](docs/install-macos.md) · [Windows steps](docs/install-windows.md) · [Ubuntu steps](docs/install-linux.md)
 
 ## Download size and memory
 

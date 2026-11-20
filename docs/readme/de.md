@@ -22,42 +22,6 @@
 
 <p align="center">Deine Tastatur- und Mausstatistiken bleiben auf deinem Gerät. Kein Konto, keine Telemetrie.</p>
 
-<p align="center">Für die Suche nach neuen Versionen und den Download von Updates verbindet sich die App mit GitHub. Die automatische Suche kannst du in den Einstellungen ausschalten.</p>
-
-## Funktionen
-
-- Erkenne im Kalender und im Aktivitätsverlauf, wann du besonders aktiv bist.
-- Sieh in der Heatmap und der Treemap, welche Tasten du am häufigsten verwendest.
-- Rufe im Verlauf die Aktivitäten eines beliebigen Tages auf.
-- Verschiebe deine Daten oder führe sie mit dem Verlauf eines anderen Computers zusammen.
-- Wähle aus vier Farbthemen und acht Sprachen und lege die Zeitzone für deine Statistik fest.
-
-## Installation
-
-- **macOS 12+** (Apple Silicon / Intel) · [DMG herunterladen](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Windows 10 / 11** (x64) · [Portable ZIP-Datei herunterladen](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Linux** (Ubuntu 22.04 / 24.04) · [Linux-Paket herunterladen](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-
-### Installation mit Homebrew oder Scoop
-
-**macOS · Homebrew**
-
-```sh
-brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
-brew install --cask endnone/clickpulse/clickpulse
-```
-
-**Windows · Scoop**
-
-```powershell
-scoop bucket add clickpulse https://github.com/endNone/ClickPulse
-scoop install clickpulse
-```
-
-Die macOS-App ist nicht von Apple notarisiert, die Windows-App ist unsigniert. Das Betriebssystem kann den ersten Start blockieren.
-
-Installationsanleitungen · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
-
 ## Mini-Modus
 
 Ein kleines schwebendes Fenster zeigt dir die aktuellen Zählerstände, während du in anderen Apps arbeitest.
@@ -111,6 +75,32 @@ Ein kleines schwebendes Fenster zeigt dir die aktuellen Zählerstände, während
   <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="Tagesbericht in Pixelgrafik"></a>
   <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="Wochenbericht im Bauhausstil"></a>
 </p>
+
+## Installation
+
+- **macOS 12+** (Apple Silicon / Intel) · [DMG herunterladen](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Windows 10 / 11** (x64) · [Portable ZIP-Datei herunterladen](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Linux** (Ubuntu 22.04 / 24.04) · [Linux-Paket herunterladen](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+
+### Installation mit Homebrew oder Scoop
+
+**macOS · Homebrew**
+
+```sh
+brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
+brew install --cask endnone/clickpulse/clickpulse
+```
+
+**Windows · Scoop**
+
+```powershell
+scoop bucket add clickpulse https://github.com/endNone/ClickPulse
+scoop install clickpulse
+```
+
+Die macOS-App ist nicht von Apple notarisiert, die Windows-App ist unsigniert. Das Betriebssystem kann den ersten Start blockieren.
+
+Installationsanleitungen · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
 
 ## Downloadgröße und Speicherbedarf
 

@@ -22,42 +22,6 @@
 
 <p align="center">키 입력과 클릭 통계는 기기에만 저장됩니다. 계정이 필요 없으며 원격 측정 데이터를 수집하지 않습니다.</p>
 
-<p align="center">새 버전을 확인하고 업데이트를 다운로드할 때 GitHub에 연결합니다. 설정에서 자동 확인을 끌 수 있습니다.</p>
-
-## 기능
-
-- 활동 추이와 달력에서 일상적인 사용 패턴을 확인하세요.
-- 키보드 히트맵과 트리맵에서 자주 누르는 키를 찾아보세요.
-- 기록에서 날짜를 선택해 그날의 활동을 살펴보세요.
-- 데이터 저장 위치를 옮기거나 다른 컴퓨터의 기록을 합칠 수 있습니다.
-- 테마 4종, 표시 언어 8종 중에서 선택하고 통계에 사용할 시간대를 지정하세요.
-
-## 설치
-
-- **macOS 12+** (Apple Silicon / Intel) · [DMG 다운로드](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Windows 10 / 11** (x64) · [포터블 ZIP 다운로드](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-- **Linux** (Ubuntu 22.04 / 24.04) · [Linux 패키지 다운로드](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
-
-### Homebrew 또는 Scoop으로 설치
-
-**macOS · Homebrew**
-
-```sh
-brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
-brew install --cask endnone/clickpulse/clickpulse
-```
-
-**Windows · Scoop**
-
-```powershell
-scoop bucket add clickpulse https://github.com/endNone/ClickPulse
-scoop install clickpulse
-```
-
-macOS 버전은 Apple의 공증을 받지 않았으며 Windows 버전은 서명되지 않았습니다. 운영체제가 첫 실행을 차단할 수 있습니다.
-
-운영체제별 설치 안내 · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
-
 ## Mini 모드
 
 다른 앱을 쓰는 동안에도 작은 플로팅 창에서 실시간 횟수를 확인할 수 있습니다.
@@ -111,6 +75,32 @@ Mini 창의 번개 버튼을 누르면 타이핑이나 클릭 속도에 반응�
   <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="픽셀 아트풍 일간 보고서"></a>
   <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="바우하우스풍 주간 보고서"></a>
 </p>
+
+## 설치
+
+- **macOS 12+** (Apple Silicon / Intel) · [DMG 다운로드](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Windows 10 / 11** (x64) · [포터블 ZIP 다운로드](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Linux** (Ubuntu 22.04 / 24.04) · [Linux 패키지 다운로드](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+
+### Homebrew 또는 Scoop으로 설치
+
+**macOS · Homebrew**
+
+```sh
+brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
+brew install --cask endnone/clickpulse/clickpulse
+```
+
+**Windows · Scoop**
+
+```powershell
+scoop bucket add clickpulse https://github.com/endNone/ClickPulse
+scoop install clickpulse
+```
+
+macOS 버전은 Apple의 공증을 받지 않았으며 Windows 버전은 서명되지 않았습니다. 운영체제가 첫 실행을 차단할 수 있습니다.
+
+운영체제별 설치 안내 · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
 
 ## 다운로드 크기와 메모리 사용량
 
