@@ -18,7 +18,7 @@ nav button.selected .nav-icon {color:var(--cyan)}
 button:focus-visible,select:focus-visible {outline-color:var(--blue)}
 .banner {background:var(--accent-soft);border-color:var(--accent-border);color:var(--accent-strong)}
 .metric.featured {background:linear-gradient(115deg,var(--featured-start),var(--featured-end));border-color:var(--featured-end)}
-.featured .metric-label,.featured .metric-label span {color:var(--mini-muted)}
+.featured .metric-label,.featured .metric-label span,.featured .metric-details {color:var(--mini-muted)}
 .live {border-left-color:var(--focus)}
 .segments button.selected {color:var(--blue)}
 #composition-legend strong {color:var(--accent-strong)}

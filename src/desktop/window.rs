@@ -34,7 +34,7 @@ fn supports_integrated_titlebar(major: isize, apple_silicon: bool) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-pub(super) fn align_titlebar(window: &tao::window::Window, zoom: f64, collapsed: bool) {
+pub(super) fn align_titlebar(window: &tao::window::Window, collapsed: bool) {
     use objc2_app_kit::{
         NSAppearance, NSAppearanceCustomization, NSAppearanceNameAqua, NSAppearanceNameDarkAqua,
         NSWindow, NSWindowButton,
@@ -74,7 +74,7 @@ pub(super) fn align_titlebar(window: &tao::window::Window, zoom: f64, collapsed:
     }
     let button = close.frame();
     let mut frame = container.frame();
-    let center = if collapsed { 29.0 * zoom } else { 16.0 };
+    let center = if collapsed { 29.0 } else { 16.0 };
     let height = center + button.origin.y + button.size.height / 2.0;
     let top = native.frame().size.height - height;
     // AppKit may lay the titlebar out again on a resize. Only write when it

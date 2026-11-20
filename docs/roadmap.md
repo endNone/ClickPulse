@@ -14,7 +14,7 @@ Release 0.2.1 adds daily and manual update checks, verified installation with ex
 
 ## Current development (not yet released)
 
-The 0.3.1 release introduced background memory reduction, smaller font assets and Linux packages. Work after that release includes daily shortcut statistics and references, share-card export/copy, a combined keyboard/mouse Heatmap, collapsible navigation, startup data recovery and safer removal. See [CHANGELOG](../CHANGELOG.md) for the proposed release grouping; these local changes are not a published version.
+The 0.3.1 release introduced background memory reduction, smaller font assets and Linux packages. Work after that release includes daily shortcut statistics and the web Shortcut Atlas, daily and weekly report cards, a combined keyboard/mouse Heatmap, collapsible navigation, startup data recovery and safer removal. See [CHANGELOG](../CHANGELOG.md) for the release summary; these local changes are not a published version.
 
 The current audit also hardens storage worker failures and import validation, updater rollback/cleanup, Windows session transitions, frozen read-only views, idle status updates and dependency-license packaging. Native edge-case acceptance remains a release gate; unit tests and cross-compilation do not replace it.
 
@@ -23,7 +23,7 @@ The current audit also hardens storage worker failures and import validation, up
 1. Extend Windows hardware coverage for physical special keys, sign-out/sign-in, multi-display DPI, upgrades and removal. Record publisher-trust behavior with Smart App Control separately from capture results.
    Extend desktop, Input Monitoring, physical-input and upgrade coverage on Intel Mac hardware.
 2. For each new version, repeat Checks, Packages and Release candidate verification against its exact tagged source. Keep platform assets, corresponding source and checksums together; published release tags remain immutable.
-3. Evaluate signing and notarization when distribution arrangements change. The current preview uses Mac ad-hoc signing and unsigned Windows portable ZIPs.
+3. Evaluate Developer ID signing and notarization when distribution arrangements change. From 0.3.2, public Mac builds use a fixed self-signed certificate (preserving Input Monitoring across updates) while Windows portable ZIPs remain unsigned.
 4. Keep English screenshots current after interface changes; the overview now reads the project version automatically. Maintain the first-party Homebrew/Scoop sources and validate installation/removal on both Mac architectures and Windows. Developer ID signing/notarization and Windows trusted signing are still needed to reduce first-launch security friction.
 5. Keep package dependencies, hardware coverage and known limitations current in release notes.
 

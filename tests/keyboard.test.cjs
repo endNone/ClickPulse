@@ -176,13 +176,15 @@ test('Linux uses PC physical identities and Super labels',()=>{
   assert.equal(linux.byId.get('control-right').vk[0],62);
 });
 
-test('full-size automatically exposes navigation and numpad, conserving all counts',()=>{
+test('only the full-size choice exposes the navigation cluster and numpad, conserving all counts',()=>{
   for(const platform of ['macos','windows','linux']){
     const model=K.create(platform);
     assert.equal(model.distribution({physical:[{code:0,count:1}]}).fullSize,false);
-    assert.equal(model.distribution({physical:[{code:123,count:1}]}).fullSize,true);
+    assert.equal(model.distribution({physical:[{code:123,count:1}]}).fullSize,false);
     assert.equal(model.distribution({physical:[{code:123,count:1}]},'history','compact').fullSize,false);
-    const view=model.distribution({physical:[{code:82,count:10},{code:72,count:4},{code:10,count:3},{code:999,count:2}]});
+    const stats={physical:[{code:82,count:10},{code:72,count:4},{code:10,count:3},{code:999,count:2}]};
+    assert.equal(model.distribution(stats).fullSize,false);
+    const view=model.distribution(stats,'history','full_size');
     assert.equal(view.fullSize,true);
     const cells=view.rows.flat();assert.equal(new Set(cells.map(k=>k.id)).size,cells.length);
     assert.equal(cells.find(k=>k.id==='num0').colSpan,2);
@@ -197,6 +199,27 @@ test('full-size automatically exposes navigation and numpad, conserving all coun
   }
 });
 
+
+test('Mac full-size frame moves the physical Fn key beside Home and keeps Help distinct',()=>{
+  const physical=[{code:63,count:7},{code:114,count:3}];
+  const history={history_available:true,history_since_fix:physical.map(k=>({...k,code:2**40+k.code}))};
+  for(const stats of [{physical},history]){
+    const full=K.distribution(stats,'history','full_size').rows.flat();
+    const fn=full.filter(k=>k.id==='fn');
+    assert.equal(fn.length,1);
+    assert.deepEqual([fn[0].zone,fn[0].column,fn[0].row,fn[0].label,fn[0].count],['navigation',1,1,'fn',7]);
+    assert.equal(full.find(k=>k.id==='home'&&k.row===1).column,2);
+    const help=full.find(k=>k.id==='help');
+    assert.equal(help.supplemental,true);
+    assert.equal(help.count,3);
+    const compact=K.distribution(stats,'history','compact').rows[5];
+    assert.equal(compact[0].id,'fn');
+    assert.equal(compact[0].count,7);
+  }
+  const pc=K.create('windows').distribution({physical:[{code:114,count:3}]},'history','full_size');
+  const insert=pc.rows.flat().find(k=>k.zone==='navigation'&&k.row===1&&k.column===1);
+  assert.deepEqual([insert.id,insert.count],['insert',3]);
+});
 
 test('Mac numeric keypad places equals beside Clear and gives plus and minus separate rows',()=>{
   for(const physical of [[],[{code:81,count:1},{code:104,count:3}]]){
@@ -257,4 +280,11 @@ test('keycap counts use the active locale and reuse numeric formatters',()=>{
   assert.equal(keyboard.compact(12345,'fr'),'12,3k');
   assert.equal(keyboard.compact(1234,'fr'),new Intl.NumberFormat('fr').format(1234));
   assert.equal(keyboard.compact(1234567,'de'),'1,23M');
+  const beforeShort=constructed;
+  for(const locale of Object.keys(require('../ui/locales.json'))){
+    for(const [value,label] of [[0,'0'],[999,'999'],[1000,'1k'],[10000,'10k'],[280000,'280k'],[999999,'1M']]){
+      assert.equal(keyboard.compact(value,locale,true),label,locale);
+    }
+  }
+  assert.equal(constructed,beforeShort);
 });

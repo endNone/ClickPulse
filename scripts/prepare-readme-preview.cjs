@@ -64,7 +64,7 @@ snapshot.hourly.forEach((h,i)=>{
 assert.deepEqual(sum(snapshot.hourly),snapshot.windows[3].counts);
 assert.equal(physical.reduce((n,k)=>n+k.count,0), lifetime.keyboard);
 assert.deepEqual(sum(history), lifetime);
-const scripts = ['i18n.js','themes.js','dropdown.js','history.js','history-scatter.js','keyboard.js','sport.js','shortcuts-catalog.js','date-picker.js','insights.js','app.js','presentation.js'];
+const scripts = ['i18n.js','themes.js','dropdown.js','history.js','history-scatter.js','keyboard.js','sport.js','shortcuts-catalog.js','date-picker.js','report-facts.js','report-recipes.js','insights.js','app.js','presentation.js'];
 const styles = ['style.css','history.css','compact.css','themes.css','dropdown.css','sport.css','insights.css'];
 const fonts = [['ClickPulse UI','Inter.woff2'],['ClickPulse Mono','NotoSansMono.woff2']];
 fs.mkdirSync(path.join(output,'fonts'),{recursive:true});
@@ -91,10 +91,14 @@ const boot = `(() => {
   }
   const view = {today_period:options.get('period')==='rolling_24h'?'rolling_24h':'calendar_day',timezone:options.get('timezone')||'system',timezones:[...new Set(['UTC',...(Intl.supportedValuesOf?.('timeZone')||['America/Los_Angeles','America/New_York','Europe/London','Asia/Shanghai','Asia/Tokyo','Asia/Kathmandu','Australia/Sydney'])])],compact:options.get('page') === 'mini',pinned:true,visible:true,locale,language_preference:locale,theme:'blue',sport_enabled:options.get('sport')==='1',sport_visible:options.get('sport')==='1'};
   const layoutStorageKey='clickpulse.preview.keyboardLayout';
+  const chartStorageKey='clickpulse.preview.keyboardView';
   let savedLayout;
-  try {savedLayout=localStorage.getItem(layoutStorageKey);}catch {}
+  try {
+    savedLayout=localStorage.getItem(layoutStorageKey);
+    if(localStorage.getItem(chartStorageKey)==='treemap')view.keyboard_view='treemap';
+  }catch {}
   const layout=options.get('layout')||savedLayout;
-  if(['auto','compact','full_size'].includes(layout))view.keyboard_layout=layout;
+  view.keyboard_layout=layout==='full_size'?'full_size':'compact';
   const snapshot = ${JSON.stringify(snapshot)};
   snapshot.shortcuts=[{platform:'macos',modifiers:4,key:123,count:450},{platform:'macos',modifiers:4,key:48,count:80},{platform:'macos',modifiers:8,key:8,count:342},{platform:'macos',modifiers:8,key:9,count:298},{platform:'macos',modifiers:8,key:6,count:125},{platform:'macos',modifiers:8,key:0,count:96},{platform:'macos',modifiers:8,key:1,count:84},{platform:'macos',modifiers:8,key:48,count:73},{platform:'macos',modifiers:8,key:3,count:61},{platform:'macos',modifiers:8,key:7,count:48},{platform:'macos',modifiers:12,key:21,count:34},{platform:'macos',modifiers:12,key:6,count:26},{platform:'macos',modifiers:8,key:13,count:18},{platform:'macos',modifiers:9,key:7,count:12}];
   const baseline=JSON.parse(JSON.stringify(snapshot));
@@ -125,21 +129,17 @@ const boot = `(() => {
     });
   }
   projectTimeZone();
-  // Preview-only dated counters; do not present the all-time example as today's usage.
-  function projectShareShortcut(day){
-    day=day||snapshot.now.slice(0,10);
-    const counts=snapshot.history_days.find(row=>row.day===day)?.counts;
-    snapshot.share_shortcut={day,top:counts?.keyboard?{platform:'macos',modifiers:8,key:8,count:Math.max(1,Math.floor(counts.keyboard/80))}:null};
-  }
-  projectShareShortcut();
   window.ipc = {postMessage(message){
     const request = JSON.parse(message);
-    if(request.action === 'session_state')projectShareShortcut(request.state?.insights?.share_day);
     if(request.action === 'language'){view.locale = createClickPulseI18n(window.clickpulseMessages,request.language==='system'?locale:request.language).locale;view.language_preference=request.language;}
     if(request.action === 'theme')view.theme=request.theme;
     if(request.action === 'keyboard_layout'){
       view.keyboard_layout=request.layout;
       try {localStorage.setItem(layoutStorageKey,request.layout);}catch {}
+    }
+    if(request.action === 'keyboard_view'){
+      view.keyboard_view=request.view;
+      try {localStorage.setItem(chartStorageKey,request.view);}catch {}
     }
     if(request.action === 'ui_scale')view.ui_scale=request.scale;
     if(request.action === 'today_period')view.today_period=request.period;

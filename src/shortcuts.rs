@@ -24,7 +24,49 @@ pub struct Chord {
     pub key: u32,
 }
 
+/// US physical codes used to label the supported logical shortcut keys.
+pub(crate) fn us_character_key(ch: char) -> Option<u32> {
+    const LETTERS: [u32; 26] = [
+        0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46, 45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7, 16,
+        6,
+    ];
+    const DIGITS: [u32; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
+    match ch.to_ascii_lowercase() {
+        c @ 'a'..='z' => Some(LETTERS[(c as u8 - b'a') as usize]),
+        c @ '0'..='9' => Some(DIGITS[(c as u8 - b'0') as usize]),
+        '-' => Some(27),
+        '=' => Some(24),
+        '[' => Some(33),
+        ']' => Some(30),
+        ';' => Some(41),
+        '\'' => Some(39),
+        ',' => Some(43),
+        '.' => Some(47),
+        '/' => Some(44),
+        '\\' => Some(42),
+        '`' => Some(50),
+        _ => None,
+    }
+}
+
 impl Chord {
+    /// A layout lookup is permitted only for the character key of an eligible chord.
+    pub fn with_layout(
+        key: u32,
+        modifiers: u8,
+        platform: &str,
+        translate: impl FnOnce(u32) -> Option<char>,
+    ) -> Option<Self> {
+        let physical = Self::new(key, modifiers, platform)?;
+        if !matches!(physical.key, 0..=35 | 37..=47 | 50) {
+            return Some(physical);
+        }
+        let logical = translate(physical.key)
+            .and_then(us_character_key)
+            .unwrap_or(physical.key);
+        Self::new(logical, physical.modifiers, platform)
+    }
+
     pub fn new(key: u32, modifiers: u8, platform: &str) -> Option<Self> {
         // Print Screen and Pause have multiple native PC scan-code sequences.
         let key = match key {
@@ -155,7 +197,7 @@ pub fn read(conn: &Connection) -> Result<Vec<ShortcutCount>> {
     } else {
         return Ok(Vec::new());
     };
-    read_grouped(conn, table, None, 6001, false)
+    read_grouped(conn, table, None, 6001, None)
 }
 
 /// Inclusive recording-local dates, matching daily_totals. Undated preview
@@ -173,13 +215,7 @@ pub fn read_range(conn: &Connection, from_day: &str, to_day: &str) -> Result<Vec
     if !table_exists(conn, "shortcut_daily")? {
         return Ok(Vec::new());
     }
-    read_grouped(
-        conn,
-        "shortcut_daily",
-        Some((from_day, to_day)),
-        6001,
-        false,
-    )
+    read_grouped(conn, "shortcut_daily", Some((from_day, to_day)), 6001, None)
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -193,13 +229,36 @@ pub struct DailyTop {
 pub fn read_top_for_day(conn: &Connection, day: chrono::NaiveDate) -> Result<DailyTop> {
     let day = day.to_string();
     let top = if table_exists(conn, "shortcut_daily")? {
-        read_grouped(conn, "shortcut_daily", Some((&day, &day)), 1, true)?
-            .into_iter()
-            .next()
+        read_grouped(
+            conn,
+            "shortcut_daily",
+            Some((&day, &day)),
+            1,
+            Some(std::env::consts::OS),
+        )?
+        .into_iter()
+        .next()
     } else {
         None
     };
     Ok(DailyTop { day, top })
+}
+
+pub(crate) fn read_ranked_range(
+    conn: &Connection,
+    start: chrono::NaiveDate,
+    end: chrono::NaiveDate,
+) -> Result<Vec<ShortcutCount>> {
+    if !table_exists(conn, "shortcut_daily")? {
+        return Ok(Vec::new());
+    }
+    read_grouped(
+        conn,
+        "shortcut_daily",
+        Some((&start.to_string(), &end.to_string())),
+        5,
+        Some(std::env::consts::OS),
+    )
 }
 
 fn read_grouped(
@@ -207,7 +266,7 @@ fn read_grouped(
     table: &str,
     range: Option<(&str, &str)>,
     limit: usize,
-    exclude_shift_only: bool,
+    report_platform: Option<&str>,
 ) -> Result<Vec<ShortcutCount>> {
     // Bound the grouped output, not the per-origin/per-day input rows.
     let filter = if range.is_some() {
@@ -215,15 +274,16 @@ fn read_grouped(
     } else {
         ""
     };
-    let shift_filter = if exclude_shift_only {
-        " AND modifiers<>4"
+    let report_filter = if report_platform.is_some() {
+        " AND platform=? AND modifiers<>4"
     } else {
         ""
     };
-    let mut statement = conn.prepare_cached(&format!("SELECT platform,modifiers,code,sum(cnt) AS total FROM {table} WHERE cnt>0{filter}{shift_filter} GROUP BY platform,modifiers,code ORDER BY total DESC,platform,modifiers,code LIMIT {limit}"))?;
+    let mut statement = conn.prepare_cached(&format!("SELECT platform,modifiers,code,sum(cnt) AS total FROM {table} WHERE cnt>0{filter}{report_filter} GROUP BY platform,modifiers,code ORDER BY total DESC,platform,modifiers,code LIMIT {limit}"))?;
     let bounds: Vec<&str> = range
         .into_iter()
         .flat_map(|(from, to)| [from, to])
+        .chain(report_platform)
         .collect();
     let rows = statement.query_map(rusqlite::params_from_iter(bounds), |r| {
         Ok(ShortcutCount {

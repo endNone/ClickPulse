@@ -4,24 +4,30 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(super) struct InsightsState {
-    pub shortcut_library: bool,
+    #[serde(rename = "shortcut_library", skip_serializing)]
+    _legacy_library: bool,
     // Accept older session payloads. The renderer now uses the native platform.
     #[serde(skip_serializing)]
     shortcut_system: String,
     pub shortcut_rows: u16,
-    pub shortcut_show_shift: bool,
+    #[serde(rename = "shortcut_show_shift", skip_serializing)]
+    _legacy_show_shift: bool,
     pub share_style: String,
+    pub share_period: clickpulse::report::Period,
     pub share_day: Option<String>,
+    pub share_start: Option<chrono::NaiveDate>,
 }
 impl Default for InsightsState {
     fn default() -> Self {
         Self {
-            shortcut_library: false,
+            _legacy_library: false,
             shortcut_system: String::new(),
             shortcut_rows: 100,
-            shortcut_show_shift: false,
+            _legacy_show_shift: false,
             share_style: "blue".into(),
+            share_period: Default::default(),
             share_day: None,
+            share_start: None,
         }
     }
 }
@@ -32,9 +38,20 @@ impl InsightsState {
             "" | "macos" | "windows" | "linux"
         ) && (100..=6000).contains(&self.shortcut_rows)
             && self.shortcut_rows.is_multiple_of(100)
-            && matches!(self.share_style.as_str(), "blue" | "paper" | "ink")
+            && matches!(
+                self.share_style.as_str(),
+                "blue" | "paper" | "ink" | "pine" | "clay" | "lavender" | "rose"
+            )
             && self.share_day.as_ref().is_none_or(|day| {
                 day.len() == 10 && chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d").is_ok()
+            })
+            && self.share_start.is_none_or(|start| {
+                (1..=9999).contains(&chrono::Datelike::year(&start))
+                    && (self.share_period != clickpulse::report::Period::Weekly
+                        || self
+                            .share_day
+                            .as_deref()
+                            .is_none_or(|end| start.to_string().as_str() <= end))
             })
     }
 }
@@ -48,7 +65,9 @@ pub(super) struct SessionState {
     pub calendar_range: String,
     pub history_range: String,
     pub history_page: u32,
-    pub keyboard_view: String,
+    // Old renderers included the chart view here; the preference now owns it.
+    #[serde(default, rename = "keyboard_view", skip_serializing)]
+    _legacy_keyboard_view: Option<clickpulse::presentation::KeyboardView>,
     // Accept old renderer state; Heatmap no longer has a device tab to restore.
     #[serde(default, skip_serializing)]
     pub heatmap_page: Option<String>,
@@ -67,7 +86,7 @@ impl Default for SessionState {
             calendar_range: "365".into(),
             history_range: "all".into(),
             history_page: 0,
-            keyboard_view: "layout".into(),
+            _legacy_keyboard_view: None,
             heatmap_page: None,
             sidebar_collapsed: None,
             scroll_top: 0,
@@ -76,20 +95,26 @@ impl Default for SessionState {
     }
 }
 impl SessionState {
-    pub fn share_day(
+    pub fn report_selection(
         &self,
         zone: clickpulse::timezone::TimeZonePreference,
-    ) -> Option<chrono::NaiveDate> {
+    ) -> Option<clickpulse::report::Selection> {
         (self.page == "share").then(|| {
-            self.insights
+            let day = self
+                .insights
                 .share_day
                 .as_deref()
                 .and_then(|day| chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d").ok())
-                .unwrap_or_else(|| zone.at(chrono::Local::now()).date_naive())
+                .unwrap_or_else(|| zone.at(chrono::Local::now()).date_naive());
+            clickpulse::report::Selection::new(
+                day,
+                self.insights.share_period,
+                self.insights.share_start.filter(|start| *start <= day),
+            )
         })
     }
     pub fn wants_shortcuts(&self) -> bool {
-        self.page == "shortcuts" && !self.insights.shortcut_library
+        self.page == "shortcuts"
     }
     pub fn valid(&self) -> bool {
         matches!(
@@ -106,7 +131,6 @@ impl SessionState {
             && valid_range(&self.calendar_range, true)
             && valid_range(&self.history_range, false)
             && self.history_page <= 100_000
-            && matches!(self.keyboard_view.as_str(), "layout" | "treemap")
             && self
                 .heatmap_page
                 .as_deref()
@@ -124,20 +148,11 @@ fn valid_range(value: &str, recent: bool) -> bool {
 mod tests {
     use super::*;
     #[test]
-    fn shortcut_scope_follows_the_visible_activity_and_shift_choice_stays_in_session() {
+    fn shortcut_scope_follows_the_visible_activity() {
         let mut state = SessionState::default();
         assert!(!state.wants_shortcuts());
-        assert!(!state.insights.shortcut_show_shift);
         state.page = "shortcuts".into();
         assert!(state.wants_shortcuts());
-        state.insights.shortcut_show_shift = true;
-        let restored: SessionState =
-            serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
-        assert!(restored.insights.shortcut_show_shift);
-        assert!(restored.wants_shortcuts());
-        state.insights.shortcut_library = true;
-        assert!(!state.wants_shortcuts());
-        state.insights.shortcut_library = false;
         for page in ["overview", "history", "keys", "mouse", "share", "settings"] {
             state.page = page.into();
             assert!(!state.wants_shortcuts());
@@ -151,10 +166,16 @@ mod tests {
         assert!(old.valid());
         assert_eq!(old.insights.share_style, "blue");
         assert_eq!(old.insights.shortcut_rows, 100);
-        value["insights"] = serde_json::json!({"shortcut_library":true,"shortcut_system":"linux","share_style":"ink","share_day":"2026-11-16"});
+        value["insights"] = serde_json::json!({"shortcut_library":true,"shortcut_system":"linux","shortcut_show_shift":true,"share_style":"ink","share_day":"2026-11-16"});
         let restored: SessionState = serde_json::from_value(value.clone()).unwrap();
         assert!(restored.valid());
         assert_eq!(restored.insights.share_day.as_deref(), Some("2026-11-16"));
+        assert!(
+            serde_json::to_value(&restored.insights)
+                .unwrap()
+                .get("shortcut_show_shift")
+                .is_none()
+        );
         assert!(
             serde_json::to_value(&restored.insights)
                 .unwrap()
@@ -230,6 +251,17 @@ mod tests {
         }
         value["sidebar_collapsed"] = "true".into();
         assert!(serde_json::from_value::<SessionState>(value).is_err());
+    }
+
+    #[test]
+    fn report_style_options_are_valid_session_choices() {
+        let mut state = SessionState::default();
+        for style in ["blue", "paper", "ink", "pine", "clay", "lavender", "rose"] {
+            state.insights.share_style = style.into();
+            assert!(state.valid(), "{style}");
+        }
+        state.insights.share_style = "unknown".into();
+        assert!(!state.valid());
     }
 
     #[test]

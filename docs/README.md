@@ -1,5 +1,7 @@
 # Documentation
 
+**English** · [简体中文](zh-CN/README.md)
+
 ## Getting started
 
 | Guide | Covers |

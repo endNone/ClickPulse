@@ -1,3 +1,5 @@
+//! Event codes for counts and heatmaps are physical. On macOS and Windows, only an
+//! eligible shortcut carries a layout-resolved key ID. No typed characters are stored.
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};

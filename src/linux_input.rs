@@ -1,5 +1,6 @@
 //! Linux evdev codes mapped to the existing cross-platform physical identities.
-//! No keymap, text, cursor coordinates or window metadata are consulted.
+//! Counts, heatmaps and shortcuts use physical US key positions on Linux.
+//! No characters, layouts, cursor coordinates or window metadata are stored.
 use crate::input::{Device, KeyTracker};
 
 pub fn canonical_key(code: u16) -> u32 {

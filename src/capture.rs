@@ -1,4 +1,6 @@
-//! Passive macOS capture. Reads physical codes only; never reads text or cursor coordinates.
+//! Physical counts are independent of layout. Only eligible shortcuts consult a layout snapshot.
+mod layout;
+pub use layout::initialize_shortcut_layout;
 mod caps_lock;
 use std::{
     cell::RefCell,
@@ -32,6 +34,14 @@ unsafe extern "C" {
     fn CGPreflightListenEventAccess() -> bool;
     fn CGRequestListenEventAccess() -> bool;
     fn CGEventTapEnable(tap: *const c_void, enable: bool);
+}
+
+/// Interpret the modifier flags and physical keycode of a keyboard press.
+pub fn keyboard_shortcut(code: u32, flags: u64) -> Option<crate::shortcuts::Chord> {
+    let modifiers = crate::shortcuts::mac_flags(flags);
+    crate::shortcuts::Chord::with_layout(code, modifiers, "macos", |key| {
+        layout::character(key, modifiers)
+    })
 }
 
 pub fn request_permission() -> bool {
@@ -189,7 +199,7 @@ pub(crate) fn spawn(
                             && let Some((device, code)) = input
                         {
                             let input = InputEvent {
-                                shortcut: (device == Device::Keyboard).then(|| crate::shortcuts::Chord::new(code, crate::shortcuts::mac_flags(event.get_flags().bits()), "macos")).flatten(),
+                                shortcut: (device == Device::Keyboard).then(|| keyboard_shortcut(code, event.get_flags().bits())).flatten(),
                                 ts_ms: chrono::Utc::now().timestamp_millis(),
                                 device,
                                 code,

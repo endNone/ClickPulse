@@ -1,10 +1,7 @@
 //! Optional renderer; capture, updates and data tasks live in desktop.rs.
 use super::UiEvent;
 use anyhow::Result;
-use clickpulse::{
-    localization::Locale,
-    presentation::{Preferences, UiScale},
-};
+use clickpulse::{localization::Locale, presentation::Preferences};
 use std::{
     cell::Cell,
     sync::Arc,
@@ -26,9 +23,6 @@ struct RenderedView {
 
 #[derive(Default)]
 pub(super) struct VisibleWebView {
-    zoom: Cell<f64>,
-    keyboard_zoom: Cell<f64>,
-    window_unit: Cell<f64>,
     inner: Option<RenderedView>,
     active: Cell<bool>,
     ready: Cell<bool>,
@@ -48,8 +42,6 @@ impl VisibleWebView {
         }
         self.generation = self.generation.wrapping_add(1);
         self.inner = Some(create(window, proxy, locale, preferences, self.generation)?);
-        self.zoom.set(0.0);
-        self.set_zoom(window, preferences);
         self.active.set(true);
         self.ready.set(false);
         self.hidden_since.set(None);
@@ -57,38 +49,6 @@ impl VisibleWebView {
     }
     pub fn mark_ready(&self) {
         self.ready.set(true);
-        self.keyboard_zoom.set(0.0);
-        self.window_unit.set(0.0);
-    }
-    pub fn set_zoom(&self, window: &Window, preferences: &Preferences) {
-        let width = window
-            .inner_size()
-            .to_logical::<f64>(window.scale_factor())
-            .width;
-        let zoom = preferences.ui_scale.factor(width, preferences.compact);
-        if (self.zoom.get() - zoom).abs() > 0.001
-            && let Some(view) = &self.inner
-            && view.inner.zoom(zoom).is_ok()
-        {
-            self.zoom.set(zoom);
-        }
-        // Window-driven automatic zoom must not resize the physical keyboard.
-        // Explicit user scaling still applies. Publish only when changed and
-        // ready, including after a renderer recreation or hidden-window resize.
-        let keyboard_zoom = keyboard_zoom(preferences.ui_scale, self.zoom.get());
-        // The Mac sidebar control shares a row with native traffic lights,
-        // whose size and position stay fixed even when the page is enlarged.
-        let window_unit = 1.0 / self.zoom.get().max(1.0);
-        if self.is_ready()
-            && ((self.keyboard_zoom.get() - keyboard_zoom).abs() > 0.0001
-                || (self.window_unit.get() - window_unit).abs() > 0.0001)
-            && self.evaluate_script(&format!(
-                "document.documentElement.style.setProperty('--keyboard-zoom','{keyboard_zoom}');document.documentElement.style.setProperty('--window-unit','{window_unit}px');"
-            )).is_ok()
-        {
-            self.keyboard_zoom.set(keyboard_zoom);
-            self.window_unit.set(window_unit);
-        }
     }
     pub fn is_ready(&self) -> bool {
         self.is_active() && self.ready.get()
@@ -96,7 +56,7 @@ impl VisibleWebView {
     #[cfg(target_os = "macos")]
     pub fn sync_titlebar(&self, window: &Window, compact: bool, collapsed: bool) {
         if !compact && self.is_active() {
-            super::window::align_titlebar(window, self.zoom.get().max(1.0), collapsed);
+            super::window::align_titlebar(window, collapsed);
         }
     }
     pub fn accepts(&self, generation: u64) -> bool {
@@ -168,13 +128,6 @@ impl VisibleWebView {
     }
 }
 
-fn keyboard_zoom(scale: UiScale, applied_zoom: f64) -> f64 {
-    if scale == UiScale::Auto && applied_zoom > 0.0 {
-        1.0 / applied_zoom
-    } else {
-        1.0
-    }
-}
 // Wry 0.55's GTK IPC signal captures a strong WebView clone. The view owns
 // its user-content manager, so destroying the widget alone leaves a cycle and
 // keeps its WebContext/network process alive. Disconnect only this owned IPC
@@ -328,7 +281,7 @@ fn create(
                             .replace(
                                 "/*__SCRIPT__*/",
                                 &format!(
-                                    "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+                                    "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
                                     include_str!("../../ui/i18n.js"),
                                     include_str!("../../ui/themes.js"),
                                     include_str!("../../ui/dropdown.js"),
@@ -338,6 +291,8 @@ fn create(
                                     include_str!("../../ui/sport.js"),
                                     include_str!("../../ui/shortcuts-catalog.js"),
                                     include_str!("../../ui/date-picker.js"),
+                                    include_str!("../../ui/report-facts.js"),
+                                    include_str!("../../ui/report-recipes.js"),
                                     include_str!("../../ui/insights.js"),
                                     include_str!("../../ui/app.js"),
                                     include_str!("../../ui/presentation.js")
@@ -415,26 +370,6 @@ fn create(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn keyboard_size_is_stable_during_auto_resize_and_respects_manual_scale() {
-        for width in [900.0, 1160.0, 1334.0, 1600.0, 1920.0, 2560.0] {
-            for compact in [false, true] {
-                let zoom = UiScale::Auto.factor(width, compact);
-                assert!((44.0 * zoom * keyboard_zoom(UiScale::Auto, zoom) - 44.0).abs() < 0.001);
-            }
-            for scale in [
-                UiScale::Percent100,
-                UiScale::Percent115,
-                UiScale::Percent130,
-                UiScale::Percent150,
-            ] {
-                let zoom = scale.factor(width, false);
-                assert_eq!(keyboard_zoom(scale, zoom), 1.0);
-            }
-        }
-        assert_eq!(keyboard_zoom(UiScale::Auto, 0.0), 1.0);
-    }
-
     #[test]
     fn hidden_renderer_expires_only_when_idle_and_invisible() {
         let start = Instant::now();

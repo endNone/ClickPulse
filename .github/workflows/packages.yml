@@ -10,6 +10,12 @@ on:
         required: false
         default: ''
 
+    secrets:
+      MACOS_SIGNING_P12_BASE64:
+        required: false
+      MACOS_SIGNING_P12_PASSWORD:
+        required: false
+
 permissions:
   contents: read
 
@@ -45,6 +51,8 @@ jobs:
     timeout-minutes: 40
     env:
       RUSTUP_TOOLCHAIN: stable
+      # In a reusable workflow github.workflow_ref identifies its caller.
+      MACOS_REQUIRE_RELEASE_SIGNING: ${{ startsWith(github.workflow_ref, format('{0}/.github/workflows/release.yml@', github.repository)) && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,8 +70,17 @@ jobs:
       - name: Linux desktop dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libxdo-dev libdbus-1-dev
+      - name: Import release signing identity
+        if: runner.os == 'macOS' && env.MACOS_REQUIRE_RELEASE_SIGNING == '1'
+        env:
+          MACOS_SIGNING_P12_BASE64: ${{ secrets.MACOS_SIGNING_P12_BASE64 }}
+          MACOS_SIGNING_P12_PASSWORD: ${{ secrets.MACOS_SIGNING_P12_PASSWORD }}
+        run: python scripts/macos_signing.py import
       - name: Build packages
         run: python scripts/build.py --target ${{ matrix.rust-target }}
+      - name: Remove temporary release keychain
+        if: always() && runner.os == 'macOS' && env.MACOS_REQUIRE_RELEASE_SIGNING == '1'
+        run: python scripts/macos_signing.py cleanup
       - name: Upload packages and checksums
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

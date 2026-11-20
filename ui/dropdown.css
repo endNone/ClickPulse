@@ -12,14 +12,20 @@
 .settings-card .dropdown-label>span {line-height:1.4;overflow-wrap:anywhere}
 .settings-card .dropdown-caret {flex:none;color:var(--control-text)}
 .settings-card .dropdown-trigger[aria-expanded="true"] {background:var(--accent-soft);border-color:var(--focus)}
-.dropdown-menu {position:fixed;z-index:100;padding:5px;border:1px solid var(--control-border);border-radius:9px;background:var(--surface);box-shadow:0 10px 30px #172b4a20,0 2px 5px #172b4a0a;overflow:auto;overscroll-behavior:contain;font:400 var(--ui-micro-size,11px)/1.4 var(--sans);color:var(--control-text);scrollbar-width:thin}
+.dropdown-menu {position:fixed;z-index:100;padding:5px;border:1px solid var(--control-border);border-radius:9px;background:var(--surface);box-shadow:0 10px 30px #172b4a20,0 2px 5px #172b4a0a;overflow:auto;overscroll-behavior:contain;font:400 var(--ui-micro-size,1.1rem)/1.4 var(--sans);color:var(--control-text);scrollbar-width:thin}
 .dropdown-option {display:flex;align-items:center;gap:8px;min-height:32px;padding:7px 9px;border-radius:5px;cursor:pointer;white-space:nowrap}
 .dropdown-option span {flex:1}
 .dropdown-option.active {background:var(--control-hover)}
 .dropdown-option.selected {color:var(--accent-strong);font-weight:500}
 .dropdown-option svg {width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;visibility:hidden}
 .dropdown-option.selected svg {visibility:visible}
-.settings-menu {border-radius:12px;font-size:13px}
+.settings-menu {border-radius:12px;font-size:1.3rem}
 .settings-menu .dropdown-option {min-height:34px;padding:7px 10px;text-align:left;white-space:normal;overflow-wrap:anywhere}
+.searchable-menu {display:flex;flex-direction:column;overflow:hidden;gap:4px}
+.searchable-menu[data-placement="above"] {flex-direction:column-reverse}
+.dropdown-search {box-sizing:border-box;width:100%;min-width:0;flex:none;border:1px solid var(--control-border);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;padding:7px 9px}
+.dropdown-search:focus {outline:1px solid var(--focus);outline-offset:-1px}
+.dropdown-results {min-height:0;overflow-y:auto;scrollbar-width:thin;overscroll-behavior:contain}
+.dropdown-empty {padding:8px 9px;color:var(--muted)}
 .theme-swatch {width:10px;height:10px;display:inline-block;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1px #172b4a16}
 @media(prefers-reduced-motion:reduce) {.dropdown-caret {transition:none}}

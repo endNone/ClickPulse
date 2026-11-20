@@ -1,0 +1,29 @@
+name: Suggest a shortcut / 建议收录快捷键
+description: Suggest a documented default shortcut for the ClickPulse atlas.
+title: "[Shortcut] "
+body:
+  - type: input
+    id: platform
+    attributes:
+      label: Platform / 平台
+      placeholder: macos, windows, linux
+    validations:
+      required: true
+  - type: input
+    id: chord
+    attributes:
+      label: Key combination / 快捷键
+    validations:
+      required: true
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Common use and context / 常见用途及适用场景
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Official source URL / 官方来源链接
+    validations:
+      required: true

@@ -1,5 +1,5 @@
 (() => {
-  const view={timezone:'system',today_period:'calendar_day',compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:false,auto_check_updates:true,last_update_check:null};
+  const view={timezone:'system',today_period:'calendar_day',ui_scale:'100',compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:false,auto_check_updates:true,last_update_check:null};
   window.presentationView=view;
   const put=(id,value)=>window.setSelectableText($(id),value);
   const onWindows=window.clickpulsePlatform==='windows',onLinux=window.clickpulsePlatform==='linux';
@@ -56,6 +56,8 @@
     // layout in WebKit. Keep selections during live refreshes, not mode changes.
     if(typeof next.compact==='boolean'&&next.compact!==view.compact)window.getSelection?.()?.removeAllRanges();
     Object.assign(view,next);
+    if(view.ui_scale==='auto')view.ui_scale='100';
+    document.documentElement.dataset.fontSize=view.compact?'100':view.ui_scale;
     if(next.timezones)window.setTimeZoneChoices(next.timezones);
     if(next.timezone)window.setInterfaceTimeZone(next.timezone);
     if(next.locale)window.setInterfaceLanguage(next.locale,next.language_preference);

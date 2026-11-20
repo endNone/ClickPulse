@@ -59,17 +59,27 @@ pub enum TodayPeriod {
 #[serde(rename_all = "snake_case")]
 pub enum KeyboardLayout {
     #[default]
-    Auto,
+    #[serde(alias = "auto")]
     Compact,
     FullSize,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub enum UiScale {
+#[serde(rename_all = "snake_case")]
+pub enum KeyboardView {
     #[default]
-    #[serde(rename = "auto")]
-    Auto,
-    #[serde(rename = "100")]
+    Layout,
+    Treemap,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum UiScale {
+    #[serde(rename = "80")]
+    Percent80,
+    #[serde(rename = "90")]
+    Percent90,
+    #[default]
+    #[serde(rename = "100", alias = "auto")]
     Percent100,
     #[serde(rename = "115")]
     Percent115,
@@ -78,21 +88,6 @@ pub enum UiScale {
     #[serde(rename = "150")]
     Percent150,
 }
-impl UiScale {
-    pub fn factor(self, width: f64, compact: bool) -> f64 {
-        if compact {
-            return 1.0;
-        }
-        match self {
-            Self::Auto => ((width / 1160.0).clamp(1.0, 1.5) * 20.0).round() / 20.0,
-            Self::Percent100 => 1.0,
-            Self::Percent115 => 1.15,
-            Self::Percent130 => 1.3,
-            Self::Percent150 => 1.5,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
@@ -102,6 +97,7 @@ pub struct Preferences {
     pub timezone: crate::timezone::TimeZonePreference,
     pub today_period: TodayPeriod,
     pub keyboard_layout: KeyboardLayout,
+    pub keyboard_view: KeyboardView,
     pub ui_scale: UiScale,
     pub theme: Theme,
     pub close_action: CloseAction,
@@ -122,6 +118,7 @@ impl Default for Preferences {
             timezone: Default::default(),
             today_period: Default::default(),
             keyboard_layout: Default::default(),
+            keyboard_view: Default::default(),
             ui_scale: Default::default(),
             theme: Default::default(),
             close_action: Default::default(),
@@ -433,46 +430,51 @@ mod tests {
 mod display_preference_tests {
     use super::*;
     #[test]
-    fn scale_is_bounded_and_mini_always_uses_native_size() {
-        for (width, scale) in [
-            (900.0, 1.0),
-            (1160.0, 1.0),
-            (1334.0, 1.15),
-            (1920.0, 1.5),
-            (2560.0, 1.5),
-        ] {
-            assert!((UiScale::Auto.factor(width, false) - scale).abs() < 0.001);
-        }
-        for value in [
-            UiScale::Auto,
-            UiScale::Percent100,
-            UiScale::Percent115,
-            UiScale::Percent130,
-            UiScale::Percent150,
-        ] {
-            assert_eq!(value.factor(2560.0, true), 1.0);
-        }
+    fn old_preferences_use_default_display_options() {
         let defaults: Preferences = serde_json::from_str("{}").unwrap();
-        assert_eq!(defaults.keyboard_layout, KeyboardLayout::Auto);
-        assert_eq!(defaults.ui_scale, UiScale::Auto);
+        assert_eq!(defaults.keyboard_layout, KeyboardLayout::Compact);
+        let legacy: Preferences = serde_json::from_str(r#"{"keyboard_layout":"auto"}"#).unwrap();
+        assert_eq!(legacy.keyboard_layout, KeyboardLayout::Compact);
+        assert_eq!(defaults.keyboard_view, KeyboardView::Layout);
+        assert_eq!(defaults.ui_scale, UiScale::Percent100);
+    }
+
+    #[test]
+    fn font_size_preferences_keep_fixed_sizes_and_migrate_auto() {
+        for (saved, expected) in [
+            ("auto", "100"),
+            ("80", "80"),
+            ("90", "90"),
+            ("100", "100"),
+            ("115", "115"),
+            ("130", "130"),
+            ("150", "150"),
+        ] {
+            let prefs: Preferences =
+                serde_json::from_value(serde_json::json!({"ui_scale": saved})).unwrap();
+            assert_eq!(serde_json::to_value(prefs).unwrap()["ui_scale"], expected);
+        }
     }
 
     #[test]
     fn keyboard_layout_choices_survive_saving_and_reloading_preferences() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("presentation.json");
+        // An existing user's saved size must survive the new view preference.
+        std::fs::write(&path, r#"{"keyboard_layout":"full_size","theme":"teal"}"#).unwrap();
+        let mut prefs = Preferences::load_from(&path).unwrap().preferences;
+        assert_eq!(prefs.keyboard_layout, KeyboardLayout::FullSize);
+        assert_eq!(prefs.keyboard_view, KeyboardView::Layout);
         for layout in [KeyboardLayout::FullSize, KeyboardLayout::Compact] {
-            let prefs = Preferences {
-                keyboard_layout: layout,
-                ui_scale: UiScale::Percent130,
-                theme: Theme::Teal,
-                ..Default::default()
-            };
-            prefs.save_to(&path).unwrap();
-            let restored = Preferences::load_from(&path).unwrap().preferences;
-            assert_eq!(restored.keyboard_layout, layout);
-            assert_eq!(restored.ui_scale, UiScale::Percent130);
-            assert_eq!(restored.theme, Theme::Teal);
+            for view in [KeyboardView::Treemap, KeyboardView::Layout] {
+                prefs.keyboard_layout = layout;
+                prefs.keyboard_view = view;
+                prefs.save_to(&path).unwrap();
+                prefs = Preferences::load_from(&path).unwrap().preferences;
+                assert_eq!(prefs.keyboard_layout, layout);
+                assert_eq!(prefs.keyboard_view, view);
+                assert_eq!(prefs.theme, Theme::Teal);
+            }
         }
     }
 }

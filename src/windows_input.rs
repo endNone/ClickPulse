@@ -1,5 +1,5 @@
-//! Normalize physical PC scan codes to the shared keyboard identities. This
-//! never converts input to characters and is testable without native capture.
+//! Counts and heatmaps use physical scan codes. Only eligible shortcuts resolve a
+//! logical key through the foreground layout. No characters or layouts are saved.
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
@@ -12,6 +12,57 @@ const VK_SHIFT: u16 = 0x10;
 const VK_PAUSE: u16 = 0x13;
 const VK_NUMLOCK: u16 = 0x90;
 const MODIFIER_GRACE: Duration = Duration::from_millis(1500);
+
+/// Resolve a packet without access to the layout's OEM character table.
+pub fn shortcut_character(
+    make: u16,
+    flags: u16,
+    packet_vk: u16,
+    lookup: impl FnOnce(u32) -> Option<u16>,
+) -> Option<char> {
+    shortcut_character_with_oem(make, flags, packet_vk, lookup, |_| None)
+}
+
+/// Use the same foreground layout for both scan -> VK and OEM VK -> unshifted character.
+/// None from oem_character means there is no layout; a Windows result of zero or a
+/// dead key is an explicit lookup failure and falls back to the physical position.
+pub fn shortcut_character_with_oem(
+    make: u16,
+    flags: u16,
+    packet_vk: u16,
+    lookup: impl FnOnce(u32) -> Option<u16>,
+    oem_character: impl FnOnce(u16) -> Option<u32>,
+) -> Option<char> {
+    let prefix = if flags & 2 != 0 {
+        0xe000
+    } else if flags & 4 != 0 {
+        0xe100
+    } else {
+        0
+    };
+    let mapped = (make != 0)
+        .then(|| lookup(prefix | u32::from(make)))
+        .flatten();
+    let vk = mapped.filter(|vk| *vk != 0).unwrap_or(packet_vk);
+    match vk {
+        0x41..=0x5a | 0x30..=0x39 => char::from_u32(u32::from(vk)),
+        0xba..=0xc0 | 0xdb..=0xdf | 0xe2 => {
+            if let Some(value) = oem_character(vk) {
+                // MAPVK_VK_TO_CHAR sets bit 31 for dead keys. Never strip it.
+                return char::from_u32(value)
+                    .filter(|&ch| crate::shortcuts::us_character_key(ch).is_some());
+            }
+            match vk {
+                0xbd => Some('-'),
+                0xbb => Some('='),
+                0xbc => Some(','),
+                0xbe => Some('.'),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
 
 fn modifier_vk(key: u32) -> Option<u16> {
     match key {
@@ -49,16 +100,27 @@ impl WindowsKeyboard {
             .retain(|identity, _| self.held.contains_key(identity));
     }
 
-    /// Preserve Raw Input packet order for recent modifiers: a fast chord may
-    /// already be physically released when its queued packets are processed.
-    /// Only reconcile older state after a grace period; both time and the live
-    /// query are injected so boundary cases do not require a Windows desktop.
     pub fn shortcut(
         &mut self,
         device: usize,
         key: u32,
         now: Instant,
+        is_down: impl FnMut(u16) -> bool,
+    ) -> Option<crate::shortcuts::Chord> {
+        self.shortcut_with_layout(device, key, now, is_down, |_| None)
+    }
+
+    /// Preserve Raw Input packet order for recent modifiers: a fast chord may
+    /// already be physically released when its queued packets are processed.
+    /// Only reconcile older state after a grace period; both time and the live
+    /// query are injected so boundary cases do not require a Windows desktop.
+    pub fn shortcut_with_layout(
+        &mut self,
+        device: usize,
+        key: u32,
+        now: Instant,
         mut is_down: impl FnMut(u16) -> bool,
+        translate: impl FnOnce(u32) -> Option<char>,
     ) -> Option<crate::shortcuts::Chord> {
         if modifier_vk(key).is_some() {
             return None;
@@ -77,7 +139,12 @@ impl WindowsKeyboard {
         if keys.clone().any(|key| key == 61) {
             return None;
         }
-        crate::shortcuts::Chord::new(key, crate::shortcuts::modifiers(keys), "windows")
+        crate::shortcuts::Chord::with_layout(
+            key,
+            crate::shortcuts::modifiers(keys),
+            "windows",
+            translate,
+        )
     }
     /// Missing keyboard device identity is treated as software input only when
     /// opted in. Never apply this rule to mouse packets: Precision Touchpads

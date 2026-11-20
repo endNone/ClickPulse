@@ -1,6 +1,6 @@
 # Screenshot assets
 
-README.md introduces the keyboard and mouse statistics app with its overview screenshot. The later Screenshots section explains Mini mode before Sport mode, then shows the keyboard heatmap, treemap and history. The original Mini animation and original-speed, high-resolution Sport GIF are preserved. Public project images must use English, regardless of the surrounding documentation language. Every showcase uses the default deep blue theme; other color themes remain an App feature described in text. The overview was refreshed from the 0.2.1 interface, including the current hourly chart and no CSV export control. The preview reads its version from `Cargo.toml`; never hard-code an older release in the capture script.
+The eight project READMEs share English screenshots of the current development UI, captured with the default blue theme and generated activity. The overview shows the dashboard. The gallery includes Mini, Sport, the keyboard and mouse heatmaps, the treemap, history, shortcut statistics and daily and weekly reports. The preview reads its version from `Cargo.toml`.
 
 | Mini mode asset | Format |
 | --- | --- |
@@ -8,7 +8,7 @@ README.md introduces the keyboard and mouse statistics app with its overview scr
 | [GIF alternative](mini-desktop-en.gif) | The same desktop demonstration |
 | [Static preview](mini-blue-en.jpg) | High-density view of the floating panel |
 
-These are browser captures of the App's own HTML/CSS/JavaScript and unmodified bundled fonts, with generated data. They show interface content, without native OS window controls. Full pages render at twice the pixel density with a 1280-pixel logical width. The overview keeps the complete interface at 2560 pixels wide. Keyboard, treemap and history examples capture only their visible feature cards, excluding the sidebar, top toolbar, page heading and footer without changing the UI layout. All four README screenshots stay visible at full width under their own headings, without expandable sections, comparison tables or table-heading rows. Mini renders at three times the pixel density: a 960 × 624 image of the unchanged 320 × 208 logical layout, available above. Text and vector icons are rendered at the target density, rather than enlarging a compressed image. They are not native Windows validation evidence.
+Static screenshots use the app’s own HTML, CSS, JavaScript and bundled fonts at 2× pixel density. The overview shows the full interface. The feature images focus on the corresponding cards. The report image places two native 1080 × 1350 PNG exports side by side with a 40 px transparent gap. The README links to the full 2200 × 1350 image.
 
 The README's six SVG badges are local assets under `assets/badges/`: release version, Rust core, GPL-3.0-or-later license, macOS, Windows and Linux. The license badge uses compact text padding. Storage and network information remain in the privacy text instead of separate badges. Keep their facts consistent with installation status. The license badge links to the project LICENSE file and reflects the maintainer-approved GPL-3.0-or-later grant. Stars and a stable-release label require a published repository and release first.
 
@@ -26,13 +26,13 @@ Open `http://127.0.0.1:8768/?locale=en` in a browser. The preview defaults to En
 | Option | Values |
 | --- | --- |
 | `locale` | `en` for all public screenshots; `zh-CN` only for local translation checks |
-| `page` | `overview`, `history`, `keys`, `settings`, `mini` |
+| `page` | `overview`, `history`, `keys`, `shortcuts`, `share`, `settings`, `mini` |
 | `view` | `treemap` on the keys page; otherwise the physical layout |
 | `scale` | `2` or `3` to render at a higher pixel density; omitted for ordinary browsing |
 
-Capture after the `data-preview-ready="true"` attribute appears on `<html>` and fonts finish loading. For full pages use `?locale=en&page=overview&scale=2` (or another page), a 2560 × 1200 viewport, and a full-page capture. For mini use `?locale=en&page=mini&scale=3`, a 960 × 624 viewport, and a viewport capture. Without `scale`, mini requires a 320 × 208 viewport. Reset temporary viewport overrides afterwards. Save browser JPEG output directly with a `.jpg` suffix; do not regenerate UI elements or substitute fonts with an image tool.
+Wait for `data-preview-ready="true"` and `document.fonts.ready`. For the overview, use a 1280-pixel logical viewport at 2× device density. Extend the viewport to the content height and capture the full page so the sidebar reaches the bottom.
 
-For keyboard, treemap and history, find the bounding rectangle of the visible `.card` elements in the selected page. Use their combined bounds with 16 pixels of outer padding on each side for the browser screenshot's clip option. At the dimensions above, these examples start at x=464, y=318 and are 2052 pixels wide. This captures the actual feature content without surrounding navigation or duplicate page titles; do not hide controls in the App or stretch the cropped image. Keep overview and mini uncropped.
+For the full-size keyboard, use `?locale=en&page=keys&layout=full_size` and a 1440-pixel logical viewport so the entire number pad fits. Capture the keyboard, mouse and treemap cards individually. For history, include the daily chart and hourly scatter plot through its range selector. For shortcuts, capture the dashboard. For the reports, open `?locale=en&page=share&timezone=UTC` and use **Save PNG** for both periods. Use Blue for Daily and Ink for Weekly. Keep October 8, 2026 as the last day for both exports and use the default seven-day week. Place the complete Daily image on the left and Weekly on the right at their original sizes.
 
 The Settings screen appears only in the installation guide, not the README showcase.
 
@@ -80,7 +80,7 @@ ffmpeg -framerate 60 -i /path/to/frames/frame-%03d.jpg -vf 'fps=50,palettegen=st
 ffmpeg -framerate 60 -i /path/to/frames/frame-%03d.jpg -i /path/to/palette.png -filter_complex '[0:v]fps=50[v];[v][1:v]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle' -frames:v 450 -loop 0 -final_delay 2 docs/images/sport-desktop-en.gif
 ```
 
-Validate 2160 × 1360 dimensions, 450 frames, 20 ms per frame, 9,000 ms total duration and infinite looping. The selected GIF is approximately 10.4 MB. Its 50 fps timing fits GIF’s 10 ms time units without very short delays. The [WebP](sport-desktop-en.webp) remains an alternative at 2.5× speed; it is not the current README hero. Both formats and the static preview were refreshed from the current UI. This synthetic browser example is separate from native GUI or physical-input validation. The fixed-rank preview remains at `app.html?page=mini&locale=en&rank=SS`.
+Validate 2160 × 1360 dimensions, 450 frames, 20 ms per frame, 9,000 ms total duration and infinite looping. The README GIF uses the current Mini UI. The earlier Sport WebP, MP4 and still image are retained as alternatives.
 
 ## Sport video alternative
 
@@ -108,7 +108,7 @@ Final generation prompt:
 | --- | --- |
 | macOS first launch | [Apple’s Open Anyway screenshot](https://support.apple.com/en-us/102445), embedded from Apple’s website. |
 | `install-macos-permission.png` | Current English Settings interface with a simulated permission request, captured in the browser. |
-| `install-windows-first-launch.png` | Current Windows interface with generated data, captured in the browser. |
-| `install-windows-recording.png` | An existing native Windows screenshot showing 11 test keystrokes and 11 test clicks. |
+| `install-windows-first-launch.png` | Windows Overview rendered at 2× with demo data. The viewport ends in the gap below the complete hourly chart. |
+| `install-windows-recording.png` | Windows Mini rendered at 2× with a simulated recording state and 11 inputs per device. Its 320 × 208 logical window uses a 14 px corner radius with transparent corners. |
 
 App captures use the existing interface without modifying its layout. The Windows recording image demonstrates the status to look for; Windows has no separate input permission screen. Apple’s screenshot is credited in the guide and retains Apple’s rights.

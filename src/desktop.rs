@@ -19,6 +19,8 @@ mod ipc;
 mod refresh;
 mod session;
 mod share;
+mod shortcut_suggestion;
+mod star_reminder;
 mod storage_recovery;
 mod storage_status;
 mod updates;
@@ -58,7 +60,7 @@ enum UiEvent {
         id: u64,
         compact: bool,
         shortcuts: bool,
-        share_day: Option<chrono::NaiveDate>,
+        report_selection: Option<clickpulse::report::Selection>,
         result: std::result::Result<String, String>,
     },
     HistoryHours {
@@ -171,6 +173,10 @@ pub fn run(
     }
     #[allow(unused_mut)]
     let mut event_loop = event_builder.build();
+    #[cfg(target_os = "macos")]
+    if !demo && let Some(main) = objc2::MainThreadMarker::new() {
+        clickpulse::capture::initialize_shortcut_layout(main);
+    }
     #[cfg(target_os = "macos")]
     if options.background {
         event_loop.set_activation_policy(ActivationPolicy::Accessory);
@@ -342,6 +348,16 @@ pub fn run(
         }
     }
     let mut next_refresh = Instant::now();
+    let mut star_reminder = if profile_lock.is_some() {
+        clickpulse::platform::data_dir()
+            .and_then(|dir| star_reminder::StarReminder::load(&dir, Instant::now()))
+            .unwrap_or_else(|error| {
+                eprintln!("Cannot load GitHub Star reminder: {error:#}");
+                None
+            })
+    } else {
+        None
+    };
     let mut ready = false;
     let mut restore_pending = false;
     let mut session_state = session::SessionState::default();
@@ -354,6 +370,7 @@ pub fn run(
     let snapshot_proxy = ui_proxy;
     let mut snapshots = SnapshotGate::default();
     let mut sport_samples = SnapshotGate::default();
+    let mut history_hours = refresh::HistoryHoursDelivery::default();
     let mut last_sport_sample: Option<Instant> = None;
     let mut data_job: Option<u64> = None;
     let mut next_data_job = 0u64;
@@ -446,8 +463,7 @@ pub fn run(
                         eprintln!("error.stats: {error}");
                         "null".to_owned()
                     });
-                    let _ = webview
-                        .evaluate_script(&format!("window.receiveHistoryHours({id},{rows});"));
+                    history_hours.complete(generation, id, rows);
                 }
             }
             Event::UserEvent(UiEvent::SportSample { id, result }) => {
@@ -469,16 +485,16 @@ pub fn run(
                 id,
                 compact,
                 shortcuts,
-                share_day,
+                report_selection,
                 result,
             }) => {
                 if let Some(rerun) = snapshots.complete(id) {
                     refresh = rerun;
                     if compact != preferences.compact
                         || shortcuts != (!preferences.compact && session_state.wants_shortcuts())
-                        || share_day
+                        || report_selection
                             != (!preferences.compact)
-                                .then(|| session_state.share_day(preferences.timezone))
+                                .then(|| session_state.report_selection(preferences.timezone))
                                 .flatten()
                     {
                         refresh = true;
@@ -642,8 +658,8 @@ pub fn run(
                         Request::SessionState { state } => {
                             if state.valid() {
                                 if state.wants_shortcuts() != session_state.wants_shortcuts()
-                                    || state.share_day(preferences.timezone)
-                                        != session_state.share_day(preferences.timezone)
+                                    || state.report_selection(preferences.timezone)
+                                        != session_state.report_selection(preferences.timezone)
                                 {
                                     snapshots.invalidate();
                                     refresh = true;
@@ -678,6 +694,10 @@ pub fn run(
                             preferences.keyboard_layout = layout;
                             view_changed = true;
                             refresh = true;
+                        }
+                        Request::KeyboardView { view } => {
+                            preferences.keyboard_view = view;
+                            view_changed = true;
                         }
                         Request::UiScale { scale } => {
                             preferences.ui_scale = scale;
@@ -721,6 +741,24 @@ pub fn run(
                                 report_error(&webview, locale, "update.failed", &error);
                             }
                         }
+                        Request::SuggestShortcut {
+                            platform,
+                            modifiers,
+                            key,
+                        } => {
+                            let result = shortcut_suggestion::url(&platform, modifiers, key)
+                                .and_then(|url| clickpulse::platform::open_web_page(url.as_str()));
+                            if let Err(error) = result {
+                                eprintln!("Cannot open shortcut suggestion: {error}");
+                                toast(&webview, &locale.text("message.feedback_failed"));
+                            }
+                        }
+                        Request::ShortcutAtlas {} => {
+                            if let Err(error) = share::open_shortcut_atlas() {
+                                eprintln!("Cannot open shortcut atlas: {error}");
+                                toast(&webview, &locale.text("message.project_home_failed"));
+                            }
+                        }
                         Request::ShortcutReference { source } => {
                             if let Err(error) = share::open_reference(&source) {
                                 eprintln!("Cannot open shortcut reference: {error}");
@@ -740,15 +778,37 @@ pub fn run(
                             }
                         }
                         #[cfg(any(target_os = "macos", target_os = "windows"))]
-                        Request::CopyShareCard { png, day } => match share::copy(&png, &day) {
-                            Ok(()) => toast(&webview, &locale.text("share.copied")),
-                            Err(error) => {
-                                eprintln!("Card copy failed: {error}");
-                                toast(&webview, &locale.text("share.copy_failed"));
+                        Request::CopyShareCard { png, day } => {
+                            let result = share::copy(&png, &day);
+                            if let Some(reminder) = &mut star_reminder {
+                                reminder.on_export(Instant::now(), result.is_ok());
                             }
-                        },
-                        Request::SaveShareCard { png, day } => {
-                            match share::save(&window, &png, &day, &locale.text("share.save")) {
+                            match result {
+                                Ok(()) => toast(&webview, &locale.text("share.copied")),
+                                Err(error) => {
+                                    eprintln!("Card copy failed: {error}");
+                                    toast(&webview, &locale.text("share.copy_failed"));
+                                }
+                            }
+                        }
+                        Request::SaveShareCard {
+                            png,
+                            day,
+                            period,
+                            start,
+                        } => {
+                            let result = share::save(
+                                &window,
+                                &png,
+                                &day,
+                                &locale.text("share.save"),
+                                period,
+                                start,
+                            );
+                            if let Some(reminder) = &mut star_reminder {
+                                reminder.on_export(Instant::now(), matches!(result, Ok(true)));
+                            }
+                            match result {
                                 Ok(true) => toast(&webview, &locale.text("share.saved")),
                                 Ok(false) => {}
                                 Err(error) => {
@@ -870,6 +930,7 @@ pub fn run(
                             end,
                             timezone,
                         } => {
+                            history_hours.begin(generation, id);
                             if let Some(rt) = &runtime {
                                 let proxy = snapshot_proxy.clone();
                                 rt.request_history_hours(start, end, timezone, move |result| {
@@ -881,6 +942,8 @@ pub fn run(
                                         result: result.map_err(|error| format!("{error:#}")),
                                     });
                                 });
+                            } else {
+                                history_hours.complete(generation, id, "null".to_owned());
                             }
                         }
                         Request::SportSample {} => {
@@ -1115,6 +1178,12 @@ pub fn run(
             }
             Event::MainEventsCleared if Instant::now() >= next_refresh => {
                 refresh = true;
+                if let Some(reminder) = &mut star_reminder
+                    && let Err(error) = reminder.checkpoint(Instant::now(), false)
+                {
+                    eprintln!("Cannot save GitHub Star reminder: {error:#}");
+                    star_reminder = None;
+                }
                 next_refresh =
                     Instant::now() + refresh::interval(webview.is_active(), preferences.compact);
                 let now = chrono::Utc::now().timestamp();
@@ -1133,6 +1202,11 @@ pub fn run(
                 }
             }
             Event::LoopDestroyed => {
+                if let Some(reminder) = &mut star_reminder
+                    && let Err(error) = reminder.checkpoint(Instant::now(), true)
+                {
+                    eprintln!("Cannot save GitHub Star reminder on quit: {error:#}");
+                }
                 let was_paused = runtime.as_ref().is_some_and(|rt| rt.is_paused());
                 let saved = match runtime.take() {
                     Some(mut rt) => match rt.shutdown() {
@@ -1246,6 +1320,7 @@ pub fn run(
             Instant::now(),
             data_job.is_some() || updates.installing() || quit_after_data,
         ) {
+            history_hours = refresh::HistoryHoursDelivery::default();
             ready = false;
             snapshots.invalidate();
             sport_samples.invalidate();
@@ -1274,9 +1349,14 @@ pub fn run(
             quit_after_data = true;
             *flow = ControlFlow::WaitUntil(next_refresh);
         }
+        history_hours.deliver(webview.is_ready(), |id, rows| {
+            webview
+                .evaluate_script(&format!("window.receiveHistoryHours({id},{rows});"))
+                .is_ok()
+        });
         // A sheet attached to a hidden or Mini window can be inaccessible.
         // Keep the result until the full window is visible again.
-        if data_job.is_none()
+        let showed_data_notice = if data_job.is_none()
             && webview.is_ready()
             && visible
             && !preferences.compact
@@ -1288,24 +1368,33 @@ pub fn run(
                 }
                 DataNotice::Failed(error) => data_settings::show_error(&window, locale, &error),
             }
-        }
+            true
+        } else {
+            false
+        };
         if ready && webview.is_active() && !preferences.compact {
             updates.publish_notice(&webview);
         }
-        // Do not spend the one-time reminder on a hidden, minimized, inactive
-        // or Mini window. The pending version survives until a full view opens.
-        if ready
-            && visible
-            && !preferences.compact
-            && window.is_visible()
-            && !window.is_minimized()
-            && window.is_focused()
-            && updates.automatic_allowed()
-            && !updates.installing()
-            && data_job.is_none()
-            && !quit_after_data
-            && !matches!(*flow, ControlFlow::ExitWithCode(_))
+        // Only query native focus/visibility when a reminder is actually due.
+        let can_show_reminder = || {
+            !showed_data_notice
+                && ready
+                && webview.is_ready()
+                && visible
+                && !preferences.compact
+                && !window_close_requested
+                && !close_requested
+                && !updates.installing()
+                && data_job.is_none()
+                && !quit_after_data
+                && !matches!(*flow, ControlFlow::ExitWithCode(_))
+                && window.is_visible()
+                && !window.is_minimized()
+                && window.is_focused()
+        };
+        if updates.automatic_allowed()
             && let Some(version) = preferences.update_notifications.pending()
+            && can_show_reminder()
             && let Ok(version) = serde_json::to_string(version)
             && webview
                 .evaluate_script(&format!("window.receiveUpdateAvailable?.({version});"))
@@ -1313,8 +1402,22 @@ pub fn run(
         {
             preferences.update_notifications.mark_shown();
             view_changed = true;
+        } else if star_reminder
+            .as_ref()
+            .is_some_and(|reminder| reminder.due(Instant::now()))
+            && can_show_reminder()
+            && let Some(reminder) = star_reminder.take()
+        {
+            // Persist first so recreating the WebView or updating the app cannot repeat the invitation.
+            match reminder.mark_shown() {
+                Ok(()) => {
+                    if let Err(error) = webview.evaluate_script("window.receiveStarReminder();") {
+                        eprintln!("Cannot show GitHub Star reminder: {error}");
+                    }
+                }
+                Err(error) => eprintln!("Cannot save GitHub Star reminder: {error:#}"),
+            }
         }
-        webview.set_zoom(&window, &preferences);
         #[cfg(target_os = "macos")]
         webview.sync_titlebar(
             &window,
@@ -1338,7 +1441,7 @@ pub fn run(
             mini.set_text(locale.text("action.mini"));
             hide.set_text(locale.text("native.hide"));
             quit.set_text(locale.text("native.quit"));
-            let mut view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"today_period":preferences.today_period,"keyboard_layout":preferences.keyboard_layout,"ui_scale":preferences.ui_scale,"theme":preferences.theme,"maximized":window.is_maximized(),"fullscreen":window.fullscreen().is_some(),"close_action":preferences.close_action,"ignore_software_input":preferences.ignore_software_input,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
+            let mut view = serde_json::json!({"compact":preferences.compact,"pinned":preferences.pinned,"visible":visible,"locale":locale.code(),"language_preference":preferences.language,"timezone":preferences.timezone,"today_period":preferences.today_period,"keyboard_layout":preferences.keyboard_layout,"keyboard_view":preferences.keyboard_view,"ui_scale":preferences.ui_scale,"theme":preferences.theme,"maximized":window.is_maximized(),"fullscreen":window.fullscreen().is_some(),"close_action":preferences.close_action,"ignore_software_input":preferences.ignore_software_input,"sport_enabled":preferences.sport_enabled,"sport_visible":preferences.sport_visible,"auto_check_updates":preferences.auto_check_updates,"last_update_check":preferences.last_update_check});
             if webview.is_ready() {
                 if timezones_pending {
                     view["timezones"] =
@@ -1410,15 +1513,15 @@ pub fn run(
                         let proxy = snapshot_proxy.clone();
                         let compact = preferences.compact;
                         let shortcuts = !compact && session_state.wants_shortcuts();
-                        let share_day = (!compact)
-                            .then(|| session_state.share_day(preferences.timezone))
+                        let report_selection = (!compact)
+                            .then(|| session_state.report_selection(preferences.timezone))
                             .flatten();
                         let reply = move |result: anyhow::Result<String>| {
                             let _ = proxy.send_event(UiEvent::Snapshot {
                                 id,
                                 compact,
                                 shortcuts,
-                                share_day,
+                                report_selection,
                                 result: result.map_err(|error| format!("{error:#}")),
                             });
                         };
@@ -1428,7 +1531,7 @@ pub fn run(
                                 preferences.today_period,
                                 reply,
                             )
-                        } else if let Some(day) = share_day {
+                        } else if let Some(day) = report_selection {
                             rt.request_share_snapshot(preferences.timezone, day, reply)
                         } else {
                             rt.request_snapshot_for_view(preferences.timezone, shortcuts, reply)
@@ -1443,23 +1546,6 @@ pub fn run(
                     }
                 } else if demo {
                     let mut snapshot = demo_snapshot_in_timezone(demo_paused, preferences.timezone);
-                    if let Some(day) = session_state.share_day(preferences.timezone) {
-                        snapshot.stats.share_shortcut = Some(clickpulse::shortcuts::DailyTop {
-                            day: day.to_string(),
-                            top: snapshot
-                                .stats
-                                .history_days
-                                .iter()
-                                .find(|row| row.day == day.to_string())
-                                .filter(|row| row.counts.keyboard > 0)
-                                .map(|row| clickpulse::shortcuts::ShortcutCount {
-                                    platform: std::env::consts::OS.into(),
-                                    modifiers: if cfg!(target_os = "macos") { 8 } else { 1 },
-                                    key: 8,
-                                    count: (row.counts.keyboard / 80).max(1),
-                                }),
-                        });
-                    }
                     if !session_state.wants_shortcuts() {
                         snapshot.stats.shortcuts = None;
                     }
@@ -1713,7 +1799,7 @@ fn demo_snapshot_in_timezone(
         auto_start: false,
         demo: true,
         stats: Snapshot {
-            share_shortcut: None,
+            report: None,
             shortcuts: Some(vec![
                 clickpulse::shortcuts::ShortcutCount {
                     platform: std::env::consts::OS.into(),

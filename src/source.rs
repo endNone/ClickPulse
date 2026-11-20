@@ -104,8 +104,12 @@ impl LiveSource {
         range.read(&self.conn, MINUTE_COUNTS)
     }
 
-    pub fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
-        crate::shortcuts::read_top_for_day(&self.conn, day)
+    pub fn report(
+        &self,
+        selection: crate::report::Selection,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<crate::report::Report> {
+        selection.read(&self.conn, MINUTE_COUNTS, zone)
     }
 
     pub fn snapshot_for_view(

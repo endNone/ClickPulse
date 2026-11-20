@@ -36,8 +36,10 @@ const ClickPulseHistory = (() => {
     return days;
   }
 
-  function years(records) {
-    return [...new Set(records.map(record => record.day.slice(0, 4)))].sort().reverse();
+  function years(records, includeYear) {
+    const available = new Set(records.map(record => record.day.slice(0, 4)));
+    if (includeYear) available.add(includeYear);
+    return [...available].sort().reverse();
   }
 
   function sections(days) {
@@ -90,6 +92,17 @@ const ClickPulseHistory = (() => {
   function trendLabelIndices(length, limit = 5) {
     const count = Math.min(length, limit);
     return Array.from({length: count}, (_, i) => count === 1 ? 0 : Math.round(i * (length - 1) / (count - 1)));
+  }
+
+  // Keep each date on its own bar, shifting only enough to fit the plot edges.
+  function trendLabelOffsets(width, ticks) {
+    const left = ticks.map(({center, size}) => Math.max(0, Math.min(center - size / 2, width - size)));
+    for (let count = ticks.length; count > 0; count--) {
+      const indices = count === 1 ? [ticks.length - 1] : trendLabelIndices(ticks.length, count);
+      const fits = indices.every((i, n) => !n || left[i] >= left[indices[n - 1]] + ticks[indices[n - 1]].size + 8);
+      if (fits) return ticks.map(({center}, i) => indices.includes(i) ? left[i] - center : null);
+    }
+    return [];
   }
 
   // Approximate English-edition lengths, not a measure of written content.
@@ -158,6 +171,6 @@ const ClickPulseHistory = (() => {
     return markers;
   }
 
-  return { addDays, weekday, difference, bounds, recordedInRange, calendarDays, monthMarkers, years, sections, trend, paginate, countScale, trendLabelIndices, books, phraseCount, nextBook, nextPhrase, bookComparison };
+  return { addDays, weekday, difference, bounds, recordedInRange, calendarDays, monthMarkers, years, sections, trend, paginate, countScale, trendLabelIndices, trendLabelOffsets, books, phraseCount, nextBook, nextPhrase, bookComparison };
 })();
 if (typeof module !== 'undefined') module.exports = ClickPulseHistory;

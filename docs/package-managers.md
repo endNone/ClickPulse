@@ -1,5 +1,7 @@
 # Install with Homebrew or Scoop
 
+**English** · [简体中文](zh-CN/package-managers.md)
+
 These are **maintainer-owned** package sources in [endNone/ClickPulse](https://github.com/endNone/ClickPulse), maintained by Wuhan Zhang. They are not entries in Homebrew's central cask repository, Scoop Extras or winget. Both install the same versioned files published in GitHub Releases and verify SHA256 checksums.
 
 ## macOS: Homebrew Cask
@@ -14,7 +16,7 @@ The Cask selects Apple Silicon or Intel automatically and places `ClickPulse.app
 
 For a user-only installation, add `--appdir="$HOME/Applications"` to `brew install`. Keep that location for later upgrades and Input Monitoring access.
 
-The App is currently ad-hoc signed and **not notarized**. Homebrew does not notarize it or remove the first-launch requirement. Follow [macOS first launch and Input Monitoring](install-macos.md#2-allow-the-first-launch). The Cask does not disable Gatekeeper or remove quarantine attributes.
+Public macOS packages from 0.3.2 use the project's self-signed certificate and are **not notarized**. Homebrew does not notarize ClickPulse or remove the first-launch requirement. Follow [macOS first launch and Input Monitoring](install-macos.md#2-allow-the-first-launch). The Cask does not disable Gatekeeper or remove quarantine attributes.
 
 Quit ClickPulse before updating or removing it:
 

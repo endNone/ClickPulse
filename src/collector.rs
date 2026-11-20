@@ -202,8 +202,12 @@ impl CollectorDb {
         self.reader.history_hours(range)
     }
 
-    pub fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
-        self.reader.share_shortcut(day)
+    pub fn report(
+        &self,
+        selection: crate::report::Selection,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<crate::report::Report> {
+        self.reader.report(selection, zone)
     }
 
     pub fn snapshot_for_view(

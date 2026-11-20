@@ -1,32 +1,33 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 · 2026-11-20
 
-Suggested scope: prioritize stability and resource use in **0.3.2**; stage the larger interface and statistics additions for **0.3.3**. These are planning labels, not released versions or separately prepared builds. The current working tree still contains both groups.
-
-### Fixed
-
-- **0.3.2:** Recover unavailable or damaged storage without discarding existing files; distinguish temporary locks, permissions and databases from newer versions. Keep final buffered events through short shutdown lock conflicts.
-- **0.3.2:** Keep Mac and Linux login startup working after moving the app; keep windows within the available screen and disable unwanted Windows browser actions.
-- **0.3.2:** Restore safe default buttons in Mac and Linux confirmations, localized Windows recovery actions, and Linux recovery dialogs without requiring zenity. Reopen hidden or released windows after minimization.
-- **0.3.2:** Keep Windows recording when optional session/desktop notifications are unavailable. Correct Windows uninstall cleanup, preserve requested history and settings, and clean verified update staging and backups after successful updates.
-- **0.3.2:** Reduce duplicate database work, unchanged preference writes and frontend redraws. In a controlled 365-day synthetic-history benchmark, median full-snapshot time fell **73.8%** for standalone databases and **59.2%** for collector views; these are query/aggregation timings, not whole-app CPU or memory savings.
-- **0.3.2:** Reduce package size with thin LTO and separate debug symbols. Same-source build-profile comparisons measured **10.3%** smaller macOS ARM64 DMGs, **31.7%** smaller Ubuntu ARM64 ZIPs and **50.9%** smaller Windows x64 **MinGW cross-built** ZIPs. These compare private build profiles, not published versions; final release sizes and Windows MSVC savings still need measurement.
-- **0.3.2:** Restore tabular numerals, font spacing and white brand titles; correct Settings control sizes and overlay layering, calendar labels and translated accessibility text.
-- **0.3.2:** Keep update checks working after temporary GitHub rate limits; handle data handoff errors without crashing and reap external desktop launchers.
-- **0.3.2:** Preserve buffered data when background storage jobs cannot start, retain custom database folders and recovery backups during uninstall, and attempt every file restore if an update rolls back.
-- **0.3.2:** Freeze all read-only source views consistently while paused, including Mini and share cards; stop repeated heartbeat writes while recording is paused or unavailable.
-- **0.3.3:** Preserve fast Windows shortcut packet order; reconcile stale modifiers after 1.5 seconds, retain held keys across foreground changes, and reset state on secure-desktop or session changes. Search all available shortcut-title and context translations.
-- **0.3.3:** Release inactive share canvases without interrupting exports; wait for fonts, keep long footer text clear of the project link, and omit the top shortcut when its local-date basis differs from the card's selected time zone.
+> **macOS signing migration:** Public Mac builds now use a fixed self-signed certificate. When upgrading from 0.3.1 or earlier, remove the old ClickPulse entry in Input Monitoring and allow the updated app once; future releases signed with the same certificate keep that permission.
 
 ### New
 
-- **0.3.3:** Discover daily shortcut counts with an offline, source-linked reference library. Use **Show Shift combinations** to include Shift-only entries in the usage list; the choice lasts for the current session and recording is unchanged.
-- **0.3.3:** Create daily activity cards with the day's most-used shortcut and count when date bases agree. Save PNGs, or **copy the image** directly to the native clipboard on macOS and Windows.
-- **0.3.3:** Explore cumulative mouse-button usage and proportions below the keyboard in Heatmap, including individual buttons and distinct left/right Mac modifier keys.
-- **0.3.3:** Collapse the sidebar with its button or **⌘B** on Mac (**Ctrl+B** on Windows/Linux). Open the project from the footer GitHub icon and send feedback from Settings.
-- **0.3.3:** Choose the counter period, interface size and compact or full keyboard layout in reorganized Settings.
-- **0.3.3:** View a full year of activity with pale empty days and varied literary comparisons; keep recording quietly from the Mac menu bar after closing the window.
+- Track daily shortcut usage with a ranked overview, searchable list, non-US layout support (such as AZERTY, QWERTZ and Dvorak on macOS and Windows), and a link to the interactive cross-OS Shortcut Atlas on the web.
+- Create daily and weekly (2–31 day) activity report cards with a floating card-deck style switcher, per-day bars, PNG export, native clipboard copy on macOS and Windows, and multi-style AI prompt recipes.
+- Explore hourly input distributions in History with weekday filters, device toggles and a draggable time-range brush.
+- Inspect cumulative mouse-button usage and proportions below the keyboard in Heatmap, with theme-matched shading and distinct left/right Mac modifier keys.
+- Collapse the sidebar with its button or **⌘B** on Mac (**Ctrl+B** on Windows/Linux), open the project from the footer GitHub icon, and send feedback from Settings.
+- Choose the counter period and font size in Settings, switch between default and full-size layouts on Heatmap, and view a full year of activity with pale empty days and varied literary comparisons.
+- Keep recording quietly from the Mac menu bar after closing the window, and uninstall cleanly on Windows with explicit data-retention choices.
+
+### Improved
+
+- Speed up snapshot queries, reduce unchanged preference writes and unnecessary chart redraws, and trim release package sizes with thin LTO and separate debug symbols.
+- Refresh Treemap key counts, the themed mouse heatmap, and History charts with unified mouse colors for clearer visual hierarchy.
+- Recognize numeric keypad aliases for shortcut annotations and suggest missing shortcuts directly via the GitHub issue form.
+
+### Fixed
+
+- Recover unavailable or damaged storage safely without discarding existing files, preserve buffered events through short shutdown locks, and retain custom database folders and backups during uninstall.
+- Keep Mac and Linux login startup working after moving the app, keep windows inside available screens, and reopen hidden or released windows cleanly after minimization.
+- Restore safe default buttons in Mac and Linux confirmations, localized Windows recovery actions, and Linux recovery dialogs without requiring zenity.
+- Keep Windows recording when optional session notifications are unavailable, preserve fast shortcut packet order, and attempt full file rollback if an update fails.
+- Keep update checks working after temporary GitHub rate limits, freeze read-only views consistently while paused, and clean verified update staging and backups after successful updates.
+- Wait for fonts before exporting report cards, omit the top shortcut when the display time zone differs from recording-local dates, and release inactive canvases cleanly.
 
 ## 0.3.1 · 2026-11-15
 

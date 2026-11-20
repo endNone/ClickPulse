@@ -35,7 +35,7 @@ const n=value=>I.number(value);
 I.apply(document);
 $('theme-select').value=currentTheme;
 for(const option of $('theme-select').options)option.dataset.swatch=T.get(option.value).accent;
-const Dropdowns=ClickPulseDropdowns.create(document,window);
+const Dropdowns=ClickPulseDropdowns.create(document,window,t);
 const total=c=>(c?.keyboard||0)+(c?.mouse||0);
 const send=(action,values={})=>window.ipc?.postMessage(JSON.stringify({action,...values}));
 let miniData=null;
@@ -128,8 +128,8 @@ window.receiveHistoryHours=(id,rows)=>scatter.receive(id,rows);
 window.clearHistoryScatter=()=>scatter.clear();
 let calendarBook=H.nextBook(-1,Math.random()),calendarPhrase=H.nextPhrase(-1,Math.random());
 const titles={overview:'page.overview',history:'page.history',keys:'page.heatmap',shortcuts:'page.shortcuts',mouse:'page.heatmap',share:'page.share',settings:'page.settings'};
-const navTitles={...titles,shortcuts:'nav.shortcuts',share:'nav.share'};
-const insights=typeof ClickPulseInsights==='undefined'?null:ClickPulseInsights.create({document,window,I,send,toast:message=>window.toast(message)});
+const navTitles={...titles,share:'nav.share'};
+const insights=typeof ClickPulseInsights==='undefined'?null:ClickPulseInsights.create({document,window,I,send,syncDropdown:Dropdowns.sync,toast:message=>window.toast(message)});
 window.updateInsightsVisibility=()=>insights?.setWindowState(window.presentationView);
 const sportView=typeof ClickPulseSport==='undefined'?null:ClickPulseSport.createView({document,window,translate:t,formatSpeed:value=>I.decimal(value,1),send});
 window.receiveSport=sample=>sportView?.receive(recordingPaused===null?sample:{...sample,paused:recordingPaused});
@@ -223,21 +223,18 @@ window.renderTodayPeriod=()=>{
 $('language-select').addEventListener('change',event=>send('language',{language:event.target.value}));
 $('theme-select').addEventListener('change',event=>send('theme',{theme:event.target.value}));
 $('ui-scale-select').addEventListener('change',event=>send('ui_scale',{scale:event.target.value}));
-$('keyboard-layout-select').addEventListener('change',event=>send('keyboard_layout',{layout:event.target.value}));
 window.renderDisplaySettings=()=>{
-  $('ui-scale-select').value=window.presentationView?.ui_scale||'auto';Dropdowns.sync('ui-scale-select');
-  const value=window.presentationView?.keyboard_layout||'auto',select=$('keyboard-layout-select');
-  const changed=select.value!==value;select.value=value;Dropdowns.sync('keyboard-layout-select');
-  if(changed&&data){renderSignatures.delete('keyboard');renderKeyboard();}
+  $('ui-scale-select').value=window.presentationView?.ui_scale||'100';Dropdowns.sync('ui-scale-select');
 };
 const K=ClickPulseKeyboard;
 const onWindows=window.clickpulsePlatform==='windows',onLinux=window.clickpulsePlatform==='linux';
 const keyboardCells=new Map();
 let keyboardLayoutSignature='';
-let keyboardView='layout',keyboardDistribution=null;
+let keyboardDistribution=null;
+const usesKeyboardTreemap=()=>window.presentationView?.keyboard_view==='treemap';
 const keyboardBlocks=new Map();
 function updateKeyboardView(){
-  const blocks=keyboardView==='treemap';
+  const blocks=usesKeyboardTreemap();
   $('keyboard-layout').parentElement.hidden=blocks;
   $('keyboard-treemap').hidden=!blocks;
   $('keyboard-view-toggle').setAttribute('aria-pressed',String(blocks));
@@ -252,11 +249,12 @@ function updateKeyboardView(){
 $('keyboard-compact').addEventListener('click',()=>send('keyboard_layout',{layout:'compact'}));
 $('keyboard-full').addEventListener('click',()=>send('keyboard_layout',{layout:'full_size'}));
 $('keyboard-view-toggle').addEventListener('click',()=>{
-  keyboardView=keyboardView==='layout'?'treemap':'layout';updateKeyboardView();window.captureSessionState?.();
-  if(data)renderKeyboard();
+  const view=usesKeyboardTreemap()?'layout':'treemap';
+  window.receiveView({keyboard_view:view});
+  send('keyboard_view',{view});
 });
 if(typeof ResizeObserver==='function')new ResizeObserver(()=>{
-  if(page==='keys'&&keyboardView==='treemap'&&!window.presentationView?.compact&&keyboardDistribution)renderKeyboardTreemap(keyboardDistribution);
+  if(page==='keys'&&usesKeyboardTreemap()&&!window.presentationView?.compact&&keyboardDistribution)renderKeyboardTreemap(keyboardDistribution);
 }).observe($('keyboard-treemap'));
 const renderSignatures=new Map();
 window.setInterfaceTheme=name=>{
@@ -290,9 +288,14 @@ function toggleSidebar(){
   renderSidebar();syncSettingsNavigation();window.captureSessionState?.();
 }
 $('sidebar-toggle').addEventListener('click',toggleSidebar);
-$('project-home').addEventListener('click',()=>window.clickpulsePreview
+const openProjectHome=()=>window.clickpulsePreview
   ?window.open('https://github.com/endNone/ClickPulse','_blank','noopener')
-  :send('project_home'));
+  :send('project_home');
+$('project-home').addEventListener('click',openProjectHome);
+const starNotice=$('star-notice');
+window.receiveStarReminder=()=>{starNotice.hidden=false;};
+$('star-dismiss').addEventListener('click',()=>{starNotice.hidden=true;});
+$('star-open').addEventListener('click',()=>{starNotice.hidden=true;openProjectHome();});
 $('send-feedback').addEventListener('click',()=>window.clickpulsePreview
   ?window.open('https://github.com/endNone/ClickPulse/issues/new/choose','_blank','noopener')
   :send('send_feedback'));
@@ -331,16 +334,11 @@ for(const id of ['permission','settings-permission'])$(id).addEventListener('cli
 $('storage-directory').addEventListener('click',()=>send('storage_directory'));
 $('import-history').addEventListener('click',()=>send('import_history'));
 $('reveal').addEventListener('click',()=>send('reveal'));
-function setCalendarRange(value){
-  calendarRange=value;
-  const select=$('calendar-range-select');select.value=value;Dropdowns.sync(select);
+$('calendar-range-select').addEventListener('change',event=>{
+  calendarRange=event.target.value;
+  Dropdowns.sync(event.target);
   if(data)renderCalendar();
   window.captureSessionState?.();
-}
-$('calendar-range-select').addEventListener('change',event=>setCalendarRange(event.target.value));
-$('calendar-range-reset').addEventListener('click',()=>{
-  setCalendarRange('365');
-  $('calendar-range-select-trigger').focus();
 });
 $('history-range-select').addEventListener('change',event=>{historyRange=event.target.value;historyPage=0;if(data)renderHistory();window.captureSessionState?.();});
 $('history-prev').addEventListener('click',()=>{historyPage--;if(data)renderHistory();window.captureSessionState?.();});
@@ -373,7 +371,7 @@ window.renderMiniSnapshot=()=>{
 let pendingSessionState=null,pendingSessionScroll=null,lastSessionState='',scrollStateTimer;
 window.captureSessionState=()=>{
   if(pendingSessionState||pendingSessionScroll||window.presentationView?.compact||window.presentationView?.visible===false)return;
-  const state={page,settings_section:settingsSection,trend_days:range,calendar_range:calendarRange,history_range:historyRange,history_page:historyPage,keyboard_view:keyboardView,sidebar_collapsed:sidebarCollapsed,scroll_top:Math.max(0,Math.round(document.querySelector('main').scrollTop||0))};
+  const state={page,settings_section:settingsSection,trend_days:range,calendar_range:calendarRange,history_range:historyRange,history_page:historyPage,sidebar_collapsed:sidebarCollapsed,scroll_top:Math.max(0,Math.round(document.querySelector('main').scrollTop||0))};
   if(insights)state.insights=insights.sessionState();
   const encoded=JSON.stringify(state);
   if(encoded!==lastSessionState){lastSessionState=encoded;send('session_state',{state});}
@@ -424,7 +422,7 @@ function applySessionState(state){
   insights?.restoreSession(state.insights);
   page=state.page==='mouse'?'keys':state.page;range=state.trend_days;settingsSection=state.settings_section;
   sidebarCollapsed=state.sidebar_collapsed===true;
-  historyPage=state.history_page;keyboardView=state.keyboard_view;
+  historyPage=state.history_page;
   document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==page);
   document.querySelectorAll('[data-range]').forEach(b=>{const selected=Number(b.dataset.range)===range;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});
   for(const [id,value,recent] of [['calendar-range-select',state.calendar_range,true],['history-range-select',state.history_range,false]]){
@@ -463,6 +461,8 @@ window.receive=snapshot=>{
     for(const key of ['today','week','lifetime']){
       const counts=key==='today'?summary?.counts:data[key],prefix=key==='today'&&summary?.approximate?'≈ ':'';
       setSelectableText($(key),counts?prefix+n(total(counts)):'—');
+      const keyboard=counts?prefix+n(counts.keyboard):'—',mouse=counts?prefix+n(counts.mouse):'—';
+      setSelectableText($(key+'-detail'),`Key ${keyboard}\nMouse ${mouse}`);
     }
     renderChanged('windows',data.windows,()=>renderWindows(data.windows));
     renderChanged('hourly',data.hourly||[],()=>renderHourly(data.hourly||[]));
@@ -474,7 +474,7 @@ window.receive=snapshot=>{
     updateRangeOptions($('history-range-select'),false);historyRange=$('history-range-select').value;
     renderHistory();
   }else if(page==='keys'){
-    renderChanged('keyboard',[data.keyboard_stats||data.top_keys,window.presentationView?.keyboard_layout||'auto'],renderKeyboard);
+    renderChanged('keyboard',[data.keyboard_stats||data.top_keys,window.presentationView?.keyboard_layout,usesKeyboardTreemap()],renderKeyboard);
   }
   insights?.render(page,data);
   if(restoring)restoreSessionScroll(restoring);
@@ -518,6 +518,30 @@ function renderSettingsBody(){
 }
 const svgNode=(tag,attrs={})=>{const node=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const[key,value]of Object.entries(attrs))node.setAttribute(key,String(value));return node};
 const svgText=(text,x,y,attrs={})=>{const el=svgNode('text',{x,y,...attrs});el.textContent=text;return el};
+const axisObservers=new WeakMap();
+function observeTrendLabels(container,axis){
+  if(typeof ResizeObserver!=='function')return;
+  axisObservers.get(container)?.disconnect();
+  const labels=Array.from(axis.children);
+  const observer=new ResizeObserver(()=>{
+    const width=axis.getBoundingClientRect().width;
+    if(!width)return;
+    const ticks=labels.map(label=>({
+      center:parseFloat(label.style.left)*width/100,
+      size:label.getBoundingClientRect().width
+    }));
+    const offsets=H.trendLabelOffsets(width,ticks);
+    labels.forEach((label,i)=>{
+      const offset=offsets[i];
+      label.style.visibility=offset===null?'hidden':'';
+      if(offset!==null)label.style.transform='translateX('+offset+'px)';
+    });
+  });
+  axisObservers.set(container,observer);
+  observer.observe(axis);
+  // Observe the labels too: a new font or text size can change them at a fixed window width.
+  for(const label of labels)observer.observe(label);
+}
 let hourlyNodes=null;
 function renderHourly(hours){
   const container=$('hourly-chart'),keys=hours.map((h,i)=>i?h.start_ms:h.end_ms-3600000).join(','),
@@ -555,7 +579,7 @@ function renderHourly(hours){
   chart.hours=hours;chart.description=description;
   const scaleKey=I.locale+':'+ceiling;
   if(chart.scaleKey!==scaleKey){chart.scaleKey=scaleKey;
-  container.style.setProperty('--trend-gutter',Math.max(56,...ticks.map(value=>n(value).length*6+12))+'px');
+  container.style.setProperty('--trend-gutter',Math.max(5.6,...ticks.map(value=>n(value).length*0.6+1.2))+'rem');
   chart.plot.style.gridTemplateColumns=`repeat(${Math.max(1,hours.length)},minmax(0,1fr))`;
   chart.yAxis.replaceChildren(...ticks.map(value=>{
     const label=document.createElement('span');label.textContent=n(value);label.style.top=(1-value/ceiling)*100+'%';return label;
@@ -575,6 +599,7 @@ function renderHourly(hours){
     label.className='trend-date';label.style.left=(i+.5)/hours.length*100+'%';
     time.textContent=I.date(h.start_ms,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'});date.textContent=I.date(h.start_ms,{month:'short',day:'numeric'});label.append(time,date);return label;
   }));
+  observeTrendLabels(container,chart.xAxis);
   }
   chart.empty.hidden=hours.some(h=>total(h.counts)>0);chart.empty.textContent=t('common.empty');
   updateHourlyDetail();
@@ -599,8 +624,9 @@ function renderWindows(windows){
   });
 }
 const trendNodes=new WeakMap();
-function renderTrend(container,days){
-  const layout=JSON.stringify([I.locale,currentTheme,days.map(d=>[d.day,d.start,d.end,d.grouping])]);
+function renderTrend(container,days,mouseColor){
+  const mouseFill=mouseColor||T.get(currentTheme).mouse;
+  const layout=JSON.stringify([I.locale,currentTheme,mouseFill,days.map(d=>[d.day,d.start,d.end,d.grouping])]);
   let chart=trendNodes.get(container);
   if(!chart||chart.layout!==layout){
     const svg=svgNode('svg',{viewBox:'0 0 600 132',preserveAspectRatio:'none',class:'trend-plot',role:'img','aria-label':t('chart.aria')});
@@ -608,25 +634,26 @@ function renderTrend(container,days){
     yAxis.className='trend-y-axis';xAxis.className='trend-x-axis';empty.className='empty-label';empty.textContent=t('common.empty');
     const grid=svgNode('g');svg.append(grid);
     const width=600/Math.max(1,days.length),barWidth=Math.min(26,width*.6),palette=T.get(currentTheme);
-    const bars=days.map((d,i)=>[palette.accent,palette.mouse].map(color=>{
+    const bars=days.map((d,i)=>[palette.accent,mouseFill].map(color=>{
       const node=svgNode('rect',{x:i*width+(width-barWidth)/2,width:barWidth,rx:1.4,fill:color}),title=svgNode('title');node.append(title);svg.append(node);return {node,title};
     }));
     const multipleYears=new Set(days.map(d=>(d.start||d.day).slice(0,4))).size>1;
     for(const i of H.trendLabelIndices(days.length)){
       const d=days[i],date=d.start||d.day,monthly=d.grouping==='month',label=document.createElement('span');
-      label.className='trend-date'+(days.length>1&&i===0?' first':days.length>1&&i===days.length-1?' last':'');
+      label.className='trend-date';
       label.style.left=(i+.5)/days.length*100+'%';
       const primary=document.createElement('span');primary.textContent=I.day(date,monthly?{month:'short'}:{month:'short',day:'numeric'});label.append(primary);
       if(monthly||multipleYears){const year=document.createElement('small');year.textContent=I.day(date,{year:'numeric'});label.append(year)}
       xAxis.append(label);
     }
     container.replaceChildren(svg,yAxis,xAxis,empty);
+    observeTrendLabels(container,xAxis);
     chart={layout,grid,yAxis,bars,empty,counts:[]};trendNodes.set(container,chart);
   }
   const {ceiling,ticks}=H.countScale(Math.max(0,...days.map(d=>total(d.counts))));
   const scaleChanged=chart.ceiling!==ceiling;
   if(scaleChanged){
-    container.style.setProperty('--trend-gutter',Math.max(56,...ticks.map(value=>n(value).length*6+12))+'px');
+    container.style.setProperty('--trend-gutter',Math.max(5.6,...ticks.map(value=>n(value).length*0.6+1.2))+'rem');
     chart.grid.replaceChildren(...ticks.map(value=>svgNode('line',{x1:0,x2:600,y1:(1-value/ceiling)*132,y2:(1-value/ceiling)*132,stroke:'var(--line)','stroke-width':1,'vector-effect':'non-scaling-stroke'})));
     chart.yAxis.replaceChildren(...ticks.map(value=>{const label=document.createElement('span');label.textContent=n(value);label.style.top=(1-value/ceiling)*100+'%';return label;}));
     chart.ceiling=ceiling;
@@ -661,6 +688,8 @@ function renderDonut(counts){
       const arc=svgNode('circle',{cx:85,cy:85,r:51,fill:'none',stroke:color,'stroke-width':13,transform:'rotate(-90 85 85)'}),title=svgNode('title');
       arc.append(title);svg.append(arc);return {arc,title};
     });
+    const percent=svgText('',85,85,{'text-anchor':'middle','dominant-baseline':'central','aria-hidden':'true',class:'composition-percent'});
+    svg.append(percent);
     $('donut').replaceChildren(svg);
     const legend=$('composition-legend');
     const labels=entries.map(([label,,color])=>{
@@ -668,9 +697,10 @@ function renderDonut(counts){
       dot.className='composition-dot';dot.style.backgroundColor=color;name.append(dot,label);node.append(count,name);return {node,count};
     });
     legend.replaceChildren(...labels.map(label=>label.node));
-    donutNodes={layout,svg,arcs,labels};
+    donutNodes={layout,svg,arcs,labels,percent};
   }
   donutNodes.svg.setAttribute('aria-label',entries.map(describe).join(', '));
+  setSelectableText(donutNodes.percent,all?I.percent(counts.keyboard/all,0):'—');
   let offset=0;
   entries.forEach((entry,index)=>{
     const value=entry[1],description=describe(entry),length=all?value/all*circ:0,arc=donutNodes.arcs[index];
@@ -680,11 +710,7 @@ function renderDonut(counts){
   });
 }
 function updateRangeOptions(select,isCalendar){
-  const years=H.years(data.history_days);
-  if(isCalendar){
-    const currentYear=data.now.slice(0,4);
-    if(!years.includes(currentYear))years.unshift(currentYear);
-  }
+  const years=H.years(data.history_days,isCalendar?data.now.slice(0,4):undefined);
   const options=isCalendar
     ? [['365',t('common.past_year')],...years.map(year=>[year,year])]
     : [['all',t('common.all_history')],...years.map(year=>[year,t('common.year',{year})])];
@@ -696,34 +722,27 @@ function updateRangeOptions(select,isCalendar){
   Dropdowns.sync(select);
 }
 function renderCalendar(){
-  $('calendar-range-reset').hidden=calendarRange==='365';
   const today=data.now.split('T')[0],bounds=H.bounds(data.history_days,today,calendarRange);
   const days=H.calendarDays(data.history_days,bounds.start,bounds.end);
-  const firstYear=bounds.start.slice(0,4),lastYear=bounds.end.slice(0,4);
-  const sections=calendarRange==='365'?[{year:firstYear===lastYear?firstYear:firstYear+'–'+lastYear,days}]:H.sections(days);
   const layout=I.locale+':'+calendarRange+':'+bounds.start+':'+bounds.end;
   if(calendarLayout!==layout){
     calendarCells=new Map();
-    $('heatmap').replaceChildren(...sections.map(section=>{
-      const block=document.createElement('div');block.className='calendar-year';
-      const label=document.createElement('div');label.className='calendar-year-label';
-      const year=document.createElement('strong');year.textContent=t('common.year',{year:section.year});
-      const period=document.createElement('span');period.textContent=I.day(section.days[0].day,{month:'short',day:'numeric'})+' — '+I.day(section.days[section.days.length-1].day,{month:'short',day:'numeric'});label.append(year,period);
-      const months=document.createElement('div');months.className='calendar-months';
-      const body=document.createElement('div');body.className='calendar-body';
-      const weekdays=document.createElement('div');weekdays.className='calendar-weekdays';
-      for(const text of I.weekdays().map((day,index)=>index%2===0?day:'')){const el=document.createElement('span');el.textContent=text;weekdays.append(el)}
-      const grid=document.createElement('div');grid.className='heatmap';
-      const first=section.days[0].day,padding=H.weekday(first);
-      for(let i=0;i<padding;i++){const cell=document.createElement('div');cell.className='heat-cell blank';grid.append(cell)}
-      for(const marker of H.monthMarkers(section.days,month=>I.month(month))){
-        const el=document.createElement('span');el.textContent=marker.label;el.style.left=marker.left+'px';months.append(el);
-      }
-      for(const d of section.days){
-        const cell=document.createElement('div');cell.dataset.day=d.day;grid.append(cell);calendarCells.set(d.day,cell);
-      }
-      body.append(weekdays,grid);block.append(label,months,body);return block;
-    }));
+    const block=document.createElement('div');block.className='calendar-year';
+    const months=document.createElement('div');months.className='calendar-months';
+    const body=document.createElement('div');body.className='calendar-body';
+    const weekdays=document.createElement('div');weekdays.className='calendar-weekdays';
+    for(const text of I.weekdays().map((day,index)=>index%2===0?day:'')){const el=document.createElement('span');el.textContent=text;weekdays.append(el)}
+    const grid=document.createElement('div');grid.className='heatmap';
+    const padding=H.weekday(bounds.start);
+    for(let i=0;i<padding;i++){const cell=document.createElement('div');cell.className='heat-cell blank';grid.append(cell)}
+    for(const marker of H.monthMarkers(days,month=>I.month(month))){
+      const el=document.createElement('span');el.textContent=marker.label;el.style.left=marker.left+'px';months.append(el);
+    }
+    for(const d of days){
+      const cell=document.createElement('div');cell.dataset.day=d.day;grid.append(cell);calendarCells.set(d.day,cell);
+    }
+    body.append(weekdays,grid);block.append(months,body);
+    $('heatmap').replaceChildren(block);
     calendarLayout=layout;
     if(calendarRange==='365')$('heatmap').scrollLeft=$('heatmap').scrollWidth;
   }
@@ -759,11 +778,10 @@ function renderHistory(){
   if(signature===historySignature)return;
   historySignature=signature;
   const days=H.calendarDays(records,bounds.start,bounds.end),trend=H.trend(days);
-  const granularity=t(days.length>370?'history.monthly':days.length>90?'history.weekly':'history.daily');
-  $('history-range').textContent=t('history.range',{start:I.day(bounds.start),end:I.day(bounds.end),grouping:granularity});
+  $('history-range').textContent=t('history.range',{start:I.day(bounds.start),end:I.day(bounds.end)});
   const keyboard=records.reduce((sum,d)=>sum+d.counts.keyboard,0),mouse=records.reduce((sum,d)=>sum+d.counts.mouse,0);
   $('history-summary').textContent=t('history.summary',{days:n(pagination.total),count:n(keyboard+mouse),keyboard:n(keyboard),mouse:n(mouse)});
-  renderTrend($('history-chart'),trend);
+  renderTrend($('history-chart'),trend,'#e5a00d');
   const table=$('history-table');
   if(table.children.length!==pagination.rows.length)table.replaceChildren(...pagination.rows.map(()=>{
     const tr=document.createElement('tr');for(let i=0;i<4;i++)tr.append(document.createElement('td'));return tr;
@@ -772,11 +790,12 @@ function renderHistory(){
   $('history-prev').disabled=historyPage===0;$('history-next').disabled=historyPage+1>=pagination.pages;
   $('history-page-info').textContent=pagination.total?t('history.pagination',{start:n(historyPage*30+1),end:n(Math.min((historyPage+1)*30,pagination.total)),count:n(pagination.total),page:n(historyPage+1),pages:n(pagination.pages)}):t('common.empty_history');
 }
+const arrowIds=['up','left','down','right'];
 function renderKeyboard(){
   const stats=data.keyboard_stats||{physical:data.top_keys};
-  const view=K.distribution(stats,'history',window.presentationView?.keyboard_layout||'auto');
+  const view=K.distribution(stats,'history',window.presentationView?.keyboard_layout);
   keyboardDistribution=view;updateKeyboardView();
-  if(keyboardView==='treemap'){
+  if(usesKeyboardTreemap()){
     renderKeyboardTreemap(view);return;
   }
   // Keep the hardware layout fixed; additional recorded keys remain in Treemap.
@@ -789,7 +808,7 @@ function renderKeyboard(){
     const main=document.createElement('div');main.className='keyboard-main';
     const clusters=[];
     for(const [index,row] of rows.entries()){
-      const arrowIds=['up','left','down','right'],arrows=row.filter(key=>arrowIds.includes(key.id));
+      const arrows=row.filter(key=>arrowIds.includes(key.id));
       const node=document.createElement('div');node.className='keyboard-row'+(index===0?' function-row':row.some(key=>key.supplemental)?' supplemental-row':arrows.length?' modifier-row':'');
       function createCell(key){
         const cell=document.createElement('div');cell.className='keyboard-key';cell.style.setProperty('--key-width',key.width);cell.dataset.key=key.id;cell.tabIndex=0;cell.setAttribute('role','img');
@@ -822,7 +841,7 @@ function renderKeyboard(){
     cell.style.setProperty('--key-bg',hex);cell.style.setProperty('--key-text',T.textFor(hex));
     const label=key.zone?key.label.replace(/^Num /,''):key.label;
     cell.firstElementChild.textContent=label;
-    cell.lastElementChild.textContent=K.compact(key.count,I.locale,view.fullSize||['up','left','down','right'].includes(key.id));
+    cell.lastElementChild.textContent=K.compact(key.count,I.locale,arrowIds.includes(key.id));
     const detail=t('keys.tooltip',{key:label,count:n(key.count),percent:I.percent(view.total?key.count/view.total:0)});
     cell.title=detail;cell.setAttribute('aria-label',detail);
   }
@@ -844,7 +863,9 @@ function renderKeyboardTreemap(view){
       if(keyboardBlocks.has(key.id))return keyboardBlocks.get(key.id);
       const cell=document.createElement('div');cell.className='keyboard-block';cell.dataset.key=key.id;cell.tabIndex=0;cell.setAttribute('role','img');
       const surface=document.createElement('span');surface.className='keyboard-block-surface';
-      const label=document.createElement('span');label.className='keyboard-block-label';label.textContent=key.label;surface.append(label);cell.append(surface);
+      const label=document.createElement('span');label.className='keyboard-block-label';label.textContent=key.label;
+      const count=document.createElement('span');count.className='keyboard-block-count';
+      surface.append(label,count);cell.append(surface);
       keyboardBlocks.set(key.id,cell);return cell;
     }));
     if(!keys.length){const empty=document.createElement('div');empty.className='empty-label';container.append(empty);}
@@ -853,10 +874,16 @@ function renderKeyboardTreemap(view){
   for(const key of K.treemap(keys,width,height)){
     const cell=keyboardBlocks.get(key.id),color=keyColor(key.count,max);
     for(const [name,value]of [['left',key.x/width],['top',key.y/height],['width',key.w/width],['height',key.h/height]])cell.style[name]=value*100+'%';
-    cell.style.setProperty('--block-gap',Math.min(.75,key.w*.1,key.h*.1)+'px');
+    cell.style.setProperty('--block-gap',Math.min(1,key.w*.1,key.h*.1)+'px');
     cell.style.setProperty('--block-font',Math.min(24,Math.max(11,Math.min(key.w,key.h)/4))+'px');
     cell.style.setProperty('--key-bg',color);cell.style.setProperty('--key-text',T.textFor(color));
-    cell.firstElementChild.firstElementChild.hidden=key.w<Math.max(28,key.label.length*8+8)||key.h<18;
+    const surface=cell.firstElementChild;
+    const hideLabel=key.w<Math.max(28,key.label.length*8+8)||key.h<18;
+    surface.firstElementChild.hidden=hideLabel;
+    const countEl=surface.lastElementChild;
+    const compactText=K.compact(key.count,I.locale,true);
+    countEl.textContent=compactText;
+    countEl.hidden=hideLabel||key.w<Math.max(46,compactText.length*8+12)||key.h<42;
     const detail=t('keys.tooltip',{key:key.label,count:n(key.count),percent:I.percent(view.total?key.count/view.total:0)});
     cell.title=detail;cell.setAttribute('aria-label',detail);
   }

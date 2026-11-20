@@ -29,7 +29,7 @@ class Element {
   closest(){return null;}
   contains(node){return this===node||this.children.some(child=>child.contains?.(node));}
 }
-function app(platform='macos',legacyWebKit=false,reducedMotion=false,random=()=>0){
+function app(platform='macos',legacyWebKit=false,reducedMotion=false,random=()=>0,history=H,canvasContext){
   let document,now=0;
   const intervals=new Map();let timerId=0;
   const nodes=new Map(),get=id=>{
@@ -48,10 +48,10 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false,random=()=>
   document={listeners:{},addEventListener(event,handler){const previous=this.listeners[event];this.listeners[event]=previous?event=>{previous(event);handler(event);}:handler;},documentElement:root,body:new Element(),getElementById:id=>['page-description','date','status','today-scope','legacy-note','export','history-export','settings-pause','recording-description','quit','sport-open-mini','refresh-time','calendar-description'].includes(id)?null:get(id),
     querySelector(selector){return get(selector==='header'?'header':selector==='.sidebar'?'sidebar':'main');},
     querySelectorAll(selector){return selector==='nav button[data-page]'?nav:selector==='[data-settings-section]'?settingsLinks:selector==='.page'?pages:selector==='[data-range]'?ranges:[];},
-    createElement(){const node=new Element();node.ownerDocument=document;return node;},createElementNS(){const node=new Element();node.ownerDocument=document;return node;}};
+    createElement(tag){const node=new Element();node.ownerDocument=document;if(tag==='canvas'&&canvasContext)node.getContext=()=>canvasContext;return node;},createElementNS(){const node=new Element();node.ownerDocument=document;return node;}};
   const window={ipc:{postMessage(){}},presentationView:{compact:false},clickpulsePlatform:platform,clickpulseMessages:messages,clickpulseLocale:'en'};
   Object.assign(window,{matchMedia:()=>({matches:reducedMotion,addEventListener(){}}),performance:{now:()=>now},setInterval(handler,ms){const id=++timerId;intervals.set(id,{handler,ms});return id;},clearInterval(id){intervals.delete(id);}});
-  const context=vm.createContext({Element,document,window,setTimeout,clearTimeout,createClickPulseI18n:createI18n,...(legacyWebKit?{}:{ClickPulseSport:Sport,ClickPulseThemes:Themes,ClickPulseDropdowns:Dropdowns,ClickPulseI18n:createI18n(messages,'en',platform),ClickPulseHistory:H,ClickPulseKeyboard:K.create(platform)})});
+  const context=vm.createContext({Element,document,window,setTimeout,clearTimeout,createClickPulseI18n:createI18n,...(legacyWebKit?{}:{ClickPulseSport:Sport,ClickPulseThemes:Themes,ClickPulseDropdowns:Dropdowns,ClickPulseI18n:createI18n(messages,'en',platform),ClickPulseHistory:history,ClickPulseKeyboard:K.create(platform)})});
   context.literaryRandom=random;
   vm.runInContext('Math.random=literaryRandom;',context);
   if(legacyWebKit){
@@ -65,6 +65,27 @@ function app(platform='macos',legacyWebKit=false,reducedMotion=false,random=()=>
   vm.runInContext(readFileSync('ui/presentation.js','utf8'),context);
   return {window,get,root,context,intervals,settingsLinks,jumpTo(id){settingsLinks.find(b=>b.dataset.settingsSection===id).fire();},setTime(value){now=value;},selectRange(days){ranges.find(button=>Number(button.dataset.range)===days).fire();},navigate(page){nav.find(button=>button.dataset.page===page).fire();}};
 }
+
+test('the full window restores its chosen font size after leaving Mini',()=>{
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform);
+    for(const next of [{},{ui_scale:'auto'}]){
+      a.window.receiveView(next);
+      assert.equal(a.root.dataset.fontSize,'100');
+      assert.equal(a.get('ui-scale-select').value,'100');
+    }
+    for(const scale of ['80','90','100','115','130','150']){
+      a.window.receiveView({ui_scale:scale});
+      assert.equal(a.root.dataset.fontSize,scale);
+      a.window.receiveView({compact:true});
+      assert.equal(a.root.dataset.fontSize,'100');
+      a.window.receiveView({visible:false});
+      a.window.receiveView({visible:true,compact:false});
+      assert.equal(a.root.dataset.fontSize,scale);
+      assert.equal(a.get('ui-scale-select').value,scale);
+    }
+  }
+});
 
 test('Mini-only startup accepts counts without history and preserves the full snapshot across expansion',()=>{
   const a=app();a.window.receiveView({compact:true});
@@ -96,10 +117,14 @@ test('counter period switches Overview and Mini together without changing calend
   for(const platform of ['macos','windows','linux']){
     const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
     const full=snapshot();full.windows.push({seconds:86400,counts:{keyboard:250,mouse:50},approximate:true});
+    full.lifetime={keyboard:45678,mouse:9012};
     full.timezone='America/Los_Angeles';
     a.window.receiveView({today_period:'calendar_day',timezone:full.timezone});a.window.receive(full);
     assert.equal(a.get('timezone-row').hidden,false);
     assert.equal(a.get('today').textContent,'120');
+    assert.equal(a.get('today-detail').textContent,'Key 100\nMouse 20');
+    assert.equal(a.get('week-detail').textContent,'Key 100\nMouse 20');
+    assert.equal(a.get('lifetime-detail').textContent,'Key 45,678\nMouse 9,012');
     a.get('today-period-select').value='rolling_24h';a.get('today-period-select').fire('change');
     assert.deepEqual(sent.at(-1),{action:'today_period',period:'rolling_24h'});
     a.window.receiveView({today_period:'rolling_24h'});
@@ -107,6 +132,7 @@ test('counter period switches Overview and Mini together without changing calend
     assert.equal(a.window.presentationView.timezone,'America/Los_Angeles');
     assert.equal(a.get('today-label').textContent,messages.en['metric.last24']);
     assert.equal(a.get('today').textContent,'≈ 300');
+    assert.equal(a.get('today-detail').textContent,'Key ≈ 250\nMouse ≈ 50');
     assert.equal(a.get('week').textContent,'120');assert.equal(full.today.keyboard,100);
     a.window.receiveView({compact:true});assert.equal(a.get('mini-today').textContent,'≈ 300');
     a.window.receiveMini({timezone:full.timezone,today_period:'calendar_day',today:{keyboard:999,mouse:0},capture:{listening:true}});
@@ -116,6 +142,7 @@ test('counter period switches Overview and Mini together without changing calend
     assert.equal(a.get('mini-keyboard').textContent,'≈ 260');
     a.window.receiveView({locale:'zh-CN',compact:false});
     assert.equal(a.get('today-label').textContent,'最近 24 小时');
+    assert.equal(a.get('lifetime-detail').textContent,'Key 45,678\nMouse 9,012');
     assert.equal(a.get('today-period-select').value,'rolling_24h');
     a.window.receiveView({today_period:'calendar_day'});
     assert.equal(a.get('timezone-row').hidden,false);
@@ -246,7 +273,10 @@ test('Heatmap is one page and retains the keyboard view across navigation and re
     a.navigate('overview');assert.equal(a.get('keys').hidden,true);
     const state=sent.filter(m=>m.action==='session_state').at(-1).state;
     assert.equal(state.heatmap_page,undefined,'the removed device choice is no longer saved');
+    const choice=sent.find(message=>message.action==='keyboard_view');
+    assert.equal(choice.view,'treemap');
     const b=app(platform);b.window.restoreSessionState(state);b.window.receive(snapshot());b.navigate('keys');
+    b.window.receiveView({keyboard_view:choice.view});
     assert.equal(b.get('keys').hidden,false);assert.equal(b.get('keyboard-treemap').hidden,false);
     a.navigate('keys');assert.equal(a.get('keyboard-treemap').hidden,false);
     assert.equal(a.context.document.body.dataset.sidebarCollapsed,'false');
@@ -340,7 +370,7 @@ test('the app starts and renders history without Safari 15.4 built-ins',()=>{
   s.history_days=[{day:'2025-12-31',counts:{keyboard:3,mouse:1}},...s.history_days];
   a.window.receive(s);
   assert.equal(a.get('heatmap').children.length,1);
-  assert.match(a.get('heatmap').children[0].children[0].children[1].textContent,/Oct 8 .* Oct 7/);
+  assert.deepEqual(a.get('heatmap').children[0].children.map(node=>node.className),['calendar-months','calendar-body']);
   assert.equal(a.get('active-days').textContent,'2 active days');
   a.navigate('history');
   assert.equal(a.get('history-table').children[0].children[3].textContent,'120');
@@ -693,11 +723,34 @@ test('history processing stays visible across language switches and blocks overl
   assert.equal(a.get('takeover').disabled,true);
 });
 
-test('the Windows heatmap automatically adds navigation and a number pad when used',()=>{
+test('keyboard layouts show the same count precision on shared keys and the number pad',()=>{
+  const counts=[{code:0,count:12345},{code:1,count:4321},{code:2,count:1234567},
+    {code:123,count:12345},{code:86,count:12345}];
+  for(const platform of ['macos','windows','linux']){
+    const a=app(platform);
+    a.window.receive({...snapshot(),keyboard_stats:{physical:counts}});
+    a.navigate('keys');
+    const labels=()=>new Map(keyCells(a).map(cell=>[cell.dataset.key,cell.lastElementChild.textContent]));
+    const original=labels();
+    assert.equal(original.get('A'),'12.3k');
+    assert.equal(original.get('S'),'4,321');
+    assert.equal(original.get('D'),'1.23M');
+    a.window.receiveView({keyboard_layout:'full_size'});
+    const full=labels();
+    for(const [id,count] of original){
+      if(full.has(id))assert.equal(full.get(id),count,platform+' '+id);
+    }
+    assert.equal(full.get('num4'),original.get('A'));
+  }
+});
+test('recorded number-pad keys do not change the default Windows heatmap layout',()=>{
   const a=app('windows'),s=snapshot();a.navigate('keys');
   a.window.receive({...s,keyboard_stats:{physical:[]}});
   assert.equal(a.get('keyboard-layout').children.length,6);
   a.window.receive({...s,keyboard_stats:{physical:[{code:115,count:100},{code:86,count:40},{code:49,count:2},{code:999,count:3}]}});
+  assert.equal(a.get('keyboard-compact').attributes['aria-pressed'],'true');
+  assert.ok(!keyCells(a).some(cell=>cell.dataset.key==='num4'));
+  a.window.receiveView({keyboard_layout:'full_size'});
   assert.equal(a.get('keyboard-layout').children[0].className,'keyboard-main');
   assert.ok(keyCells(a).some(cell=>cell.dataset.key==='home'));
   assert.ok(keyCells(a).some(cell=>cell.dataset.key==='num4'));
@@ -706,7 +759,8 @@ test('the Windows heatmap automatically adds navigation and a number pad when us
   assert.equal(keyCells(a).filter(cell=>cell.dataset.key==='num4').length,0);
   assert.equal(a.get('keyboard-layout').children.length,6);
 });
-test('header layout choices use saved preferences and stay in sync with Settings and restored views',()=>{
+test('keyboard layout is chosen on the heatmap and restored from saved preferences',()=>{
+  assert.doesNotMatch(readFileSync('ui/index.html','utf8'),/id="keyboard-layout-select"/);
   for(const platform of ['macos','windows','linux']){
     const a=app(platform),s=snapshot(),sent=[];
     s.keyboard_stats={physical:[{code:0,count:25}]};
@@ -717,22 +771,23 @@ test('header layout choices use saved preferences and stay in sync with Settings
       a.get(button).fire();
       assert.deepEqual(sent.at(-1),{action:'keyboard_layout',layout});
       a.window.receiveView({keyboard_layout:layout});
-      assert.equal(a.get('keyboard-layout-select').value,layout);
       assert.equal(a.get(button).attributes['aria-pressed'],'true');
       assert.equal(keyCells(a).some(key=>key.dataset.key==='num0'),layout==='full_size');
       a.window.receiveView({compact:true});a.window.receiveView({compact:false,locale:'zh-CN'});
       a.navigate('overview');a.navigate('keys');
       assert.equal(a.get(button).attributes['aria-pressed'],'true');
-      a.get('keyboard-view-toggle').fire();assert.equal(a.get('keyboard-layout-mode').hidden,true);
-      a.get('keyboard-view-toggle').fire();assert.equal(a.get('keyboard-layout-mode').hidden,false);
-      const restored=app(platform);restored.window.receiveView({keyboard_layout:layout});
-      restored.window.receive(s);restored.navigate('keys');
-      assert.equal(restored.get(button).attributes['aria-pressed'],'true');
+      for(const view of ['treemap','layout']){
+        a.get('keyboard-view-toggle').fire();
+        assert.deepEqual(sent.at(-1),{action:'keyboard_view',view});
+        const saved={keyboard_layout:layout,keyboard_view:view};
+        a.window.receiveView(saved);
+        const restored=app(platform);restored.window.receiveView(saved);
+        restored.window.receive(s);restored.navigate('keys');
+        assert.equal(restored.get(button).attributes['aria-pressed'],'true');
+        assert.equal(restored.get('keyboard-layout-mode').hidden,view==='treemap');
+        assert.equal(restored.get('keyboard-treemap').hidden,view!=='treemap');
+      }
     }
-    a.get('keyboard-layout-select').value='full_size';a.get('keyboard-layout-select').fire('change');
-    assert.deepEqual(sent.at(-1),{action:'keyboard_layout',layout:'full_size'});
-    a.window.receiveView({keyboard_layout:'full_size'});
-    assert.equal(a.get('keyboard-full').attributes['aria-pressed'],'true');
   }
 });
 test('refresh only draws the selected page and skips unchanged charts',()=>{
@@ -761,19 +816,27 @@ test('activity mix compares lifetime keyboard and mouse totals regardless of but
   a.window.receive(s);
   assert.deepEqual(legend(),[['Keyboard','100'],['Mouse','20']]);
   const svg=a.get('donut').children[0];
-  assert.ok(svg.children.every(node=>node.attributes.cx==='85')); // circles, no center text
+  const percent=svg.children.at(-1);
+  assert.equal(percent.textContent,'83%');
   assert.equal(svg.children.filter(node=>node.attributes['stroke-dasharray']).length,2);
   assert.match(svg.attributes['aria-label'],/Mouse: 20 \(16\.7%\)/);
   // Older histories can have fewer per-button counts than total clicks.
   a.window.receive({...s,mouse_buttons:{left:5,right:2}});
   assert.equal(a.get('donut').replacements,1);
   assert.deepEqual(legend()[1],['Mouse','20']);
+  a.window.receive({...s,lifetime:{keyboard:100,mouse:100}});
+  assert.equal(percent.textContent,'50%');
+  assert.equal(a.get('donut').replacements,1);
+  for(const [keyboard,mouse,expected] of [[0,1,'0%'],[1,0,'100%']]){
+    a.window.receive({...s,lifetime:{keyboard,mouse}});
+    assert.equal(a.get('donut').children[0].children.at(-1).textContent,expected);
+  }
   for(const locale of Object.keys(messages)){
     a.window.receiveView({locale});
     assert.deepEqual(legend().map(([label])=>label),[messages[locale]['common.keyboard'],messages[locale]['common.mouse']]);
   }
   a.window.receive({...s,lifetime:{keyboard:0,mouse:0}});
-  assert.equal(a.get('donut').children[0].children.length,1);
+  assert.equal(a.get('donut').children[0].children.at(-1).textContent,'—');
   assert.deepEqual(legend().map(([,count])=>count),['0','0']);
 });
 test('a page visited after hidden updates receives the latest keyboard counts',()=>{
@@ -787,20 +850,20 @@ test('a page visited after hidden updates receives the latest keyboard counts',(
   assert.equal(a.get('keyboard-layout').replacements,1);
 });
 test('extended keys refresh while unresolved history never creates a key in either language',()=>{
-  const a=app(),s=snapshot();a.window.receive(s);a.navigate('keys');
+  const a=app(),s=snapshot();a.window.receiveView({keyboard_layout:'full_size'});a.window.receive(s);a.navigate('keys');
   const next={...s,keyboard_stats:{physical:[{code:0,count:100},{code:115,count:4},{code:999,count:7}]}};
   a.window.receive(next);
   const cells=()=>keyCells(a);
-  assert.equal(a.get('keyboard-layout').replacements,2);
+  assert.equal(a.get('keyboard-layout').replacements,1);
   assert.equal(cells().find(cell=>cell.dataset.key==='home').lastElementChild.textContent,'4');
   assert.equal(cells().some(cell=>cell.dataset.key==='other'),false);
   assert.equal(cells().find(cell=>cell.dataset.key==='A').lastElementChild.textContent,'100');
   a.window.receiveView({locale:'zh-CN',language_preference:'system'});
   assert.equal(cells().some(cell=>cell.dataset.key==='other'),false);
-  assert.equal(a.get('keyboard-layout').replacements,2);
+  assert.equal(a.get('keyboard-layout').replacements,1);
   a.window.receive(s);
   assert.equal(cells().some(cell=>cell.dataset.key==='other'),false);
-  assert.equal(a.get('keyboard-layout').replacements,3);
+  assert.equal(a.get('keyboard-layout').replacements,1);
 });
 test('unknown history appearing or disappearing changes the total without rearranging the keyboard',()=>{
   const a=app(),s=snapshot();a.window.receive(s);a.navigate('keys');
@@ -840,7 +903,7 @@ test('past-year calendar pads missing dates in one cross-year grid and retains a
   const a=app(),s=snapshot(),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
   s.history_days=[{day:'2023-03-01',counts:{keyboard:700000,mouse:9000}},...s.history_days];
   a.window.receive(s);
-  const cells=()=>a.get('heatmap').children.flatMap(section=>section.children[2].children[1].children).filter(cell=>cell.dataset.day);
+  const cells=()=>a.get('heatmap').children.flatMap(section=>section.lastElementChild.children[1].children).filter(cell=>cell.dataset.day);
   assert.equal(a.get('calendar-range-select').value,'365');assert.equal(a.get('heatmap').children.length,1);
   assert.equal(cells().length,365);assert.equal(cells()[0].dataset.day,'2025-10-08');
   assert.equal(cells().at(-1).dataset.day,'2026-10-07');
@@ -853,11 +916,10 @@ test('past-year calendar pads missing dates in one cross-year grid and retains a
   const select=a.get('calendar-range-select');select.value='2023';select.fire('change');
   assert.match(a.get('calendar-range').textContent,/709,000 events/);
   assert.deepEqual(select.children.filter(option=>!option.hidden).map(option=>option.textContent),['2026','2023']);
-  assert.equal(a.get('calendar-range-reset').hidden,false);
-  a.get('calendar-range-reset').fire();
-  assert.equal(select.value,'365');
-  assert.equal(a.get('calendar-range-reset').hidden,true);
-  assert.match(a.get('calendar-range').textContent,/120 events/);
+  assert.equal(sent.at(-1).state.calendar_range,'2023');
+  b.window.restoreSessionState(sent.at(-1).state);b.window.receive(s);
+  assert.equal(b.get('calendar-range-select').value,'2023');
+  assert.match(b.get('calendar-range').textContent,/709,000 events/);
   for(const legacy of ['90','all']){
     b.window.restoreSessionState({...saved,calendar_range:legacy});b.window.receive(s);
     assert.equal(b.get('calendar-range-select').value,'365');
@@ -1110,6 +1172,21 @@ test('time zone choices persist across locale changes and stale-zone snapshots a
   }
 });
 
+test('the Star invitation keeps focus and only an explicit GitHub action opens the browser',()=>{
+  const a=app(),sent=[];
+  a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
+  const field=a.get('shortcut-search');field.focus();
+  a.window.receiveStarReminder();
+  assert.equal(a.get('star-notice').hidden,false);
+  assert.equal(field.ownerDocument.activeElement,field);
+  a.get('star-dismiss').fire();
+  assert.equal(a.get('star-notice').hidden,true);
+  assert.deepEqual(sent,[]);
+  a.window.receiveStarReminder();a.get('star-open').fire();
+  assert.equal(a.get('star-notice').hidden,true);
+  assert.deepEqual(sent,[{action:'project_home'}]);
+});
+
 test('manual checks remain available and an offered update never installs without a click',()=>{
   for(const platform of ['macos','windows']){
     const a=app(platform),sent=[];a.window.ipc.postMessage=m=>sent.push(JSON.parse(m));
@@ -1305,12 +1382,15 @@ test('recreated views restore navigation and filters after fresh data arrives',(
 test('recreation restores history, trend and keyboard choices and clamps removed year filters',()=>{
   for(const page of ['overview','history','keys']){
     const a=app(),sent=[];a.window.ipc.postMessage=body=>sent.push(JSON.parse(body));
-    a.window.restoreSessionState({page,settings_section:'personalization-settings',trend_days:90,calendar_range:'90',history_range:'1000',history_page:100,keyboard_view:'treemap',scroll_top:120});
+    a.window.receiveView({keyboard_view:'treemap'});
+    // A stale session from an old renderer cannot override the saved choice.
+    a.window.restoreSessionState({page,settings_section:'personalization-settings',trend_days:90,calendar_range:'90',history_range:'1000',history_page:100,keyboard_view:'layout',scroll_top:120});
     a.window.receive(snapshot());
     assert.equal(a.get(page).hidden,false);
     assert.equal(a.get('history-range-select').value,'all');
     a.window.captureSessionState();
-    assert.equal(sent.at(-1).state.trend_days,90);assert.equal(sent.at(-1).state.keyboard_view,'treemap');
+    assert.equal(sent.at(-1).state.trend_days,90);assert.ok(!('keyboard_view' in sent.at(-1).state));
+    if(page==='keys')assert.equal(a.get('keyboard-treemap').hidden,false);
     assert.equal(sent.at(-1).state.calendar_range,'365');
     if(page==='history')assert.ok(sent.at(-1).state.history_page<100);
     const count=sent.length;a.window.receiveView({visible:false});a.get('main').scrollTop=0;a.window.captureSessionState();
@@ -1413,7 +1493,7 @@ test('hourly details clear on keyboard focus leaving the chart, not when moving 
 
 test('live input updates the existing charts and only one calendar tooltip',()=>{
   const a=app(),s=snapshot();a.window.receive(s);
-  const countTooltips=()=>a.get('heatmap').children.flatMap(section=>section.children[2].children[1].children).filter(cell=>cell.dataset.day);
+  const countTooltips=()=>a.get('heatmap').children.flatMap(section=>section.lastElementChild.children[1].children).filter(cell=>cell.dataset.day);
   const cells=countTooltips(),oldTitles=cells.map(cell=>cell.title),trend=a.get('trend-chart').children[0],donut=a.get('donut').children[0],windows=a.get('windows').children[0];
   let tooltipWrites=0;
   for(const cell of cells){let title=cell.title;Object.defineProperty(cell,'title',{get:()=>title,set:value=>{tooltipWrites++;title=value;}});}
@@ -1426,7 +1506,7 @@ test('live input updates the existing charts and only one calendar tooltip',()=>
 
 test('calendar rescaling updates all colors while unchanged day descriptions stay intact',()=>{
   const a=app(),s=snapshot();s.history_days.unshift({day:'2026-10-06',counts:{keyboard:90,mouse:10}});a.window.receive(s);
-  const cells=()=>a.get('heatmap').children.flatMap(section=>section.children[2].children[1].children).filter(cell=>cell.dataset.day);
+  const cells=()=>a.get('heatmap').children.flatMap(section=>section.lastElementChild.children[1].children).filter(cell=>cell.dataset.day);
   const prior=cells().map(cell=>[cell,cell.title,cell.className]);
   const rows=s.history_days.map((row,index)=>index===s.history_days.length-1?{...row,counts:{keyboard:100000,mouse:0}}:row);
   a.window.receive({...s,history_days:rows});
@@ -1525,4 +1605,120 @@ test('History loads past hour buckets on demand and updates today from existing 
   assert.equal(a.get('scatter-status').textContent,messages.en['common.loading']);
   a.navigate('overview');a.window.receiveHistoryHours(requests[1].id,[]);
   a.navigate('history');assert.equal(requests.length,3);
+});
+
+test('History resumes a suspended query, rejects its late reply, and retries a failed read',()=>{
+  const a=app(), s=snapshot(), requests=[];
+  a.window.ipc.postMessage=body=>{const r=JSON.parse(body);if(r.action==='history_hours')requests.push(r);};
+  s.history_days.unshift({day:'2026-10-05',counts:{keyboard:7,mouse:1}});
+  a.window.receive(s);a.navigate('history');
+  const first=requests[0];
+  a.window.receiveView({visible:false});a.window.receiveView({visible:true});
+  assert.equal(requests.length,2);
+  a.window.receiveHistoryHours(first.id,[['2026-10-05',0,7,1]]);
+  assert.equal(a.get('scatter-status').textContent,messages.en['common.loading']);
+  a.window.receiveHistoryHours(requests[1].id,null);
+  assert.equal(a.get('scatter-status').textContent,messages.en['error.stats']);
+  vm.runInContext('const failedAt=Date.now();Date.now=()=>failedAt+16000;',a.context);
+  a.window.receive(s);assert.equal(requests.length,3);
+  a.window.receiveHistoryHours(requests[2].id,[['2026-10-05',0,7,1]]);
+  assert.equal(a.get('scatter-plot').hidden,false);
+});
+
+test('live hour changes reuse the historical points and bitmap',()=>{
+  const days=['2026-10-03','2026-10-04','2026-10-05'];
+  let arcs=0,oldDays=0;
+  const history={...H,weekday(day){if(days.includes(day))oldDays++;return H.weekday(day);}};
+  const ctx=new Proxy({arc(){arcs++;},measureText(){return {width:30};}}, {get:(obj,key)=>obj[key]??(()=>{})});
+  const a=app('macos',false,false,()=>0,history,ctx), s=snapshot(), plot=a.get('scatter-plot');
+  s.history_days.unshift(...days.map(day=>({day,counts:{keyboard:40,mouse:80}})));
+  s.hours=[{keyboard:3,mouse:0}];
+  const requests=[];a.window.ipc.postMessage=msg=>{const r=JSON.parse(msg);if(r.action==='history_hours')requests.push(r);};
+  plot.clientWidth=1150;plot.clientHeight=210;plot.getContext=()=>ctx;
+  a.window.getComputedStyle=()=>({getPropertyValue:()=>'#123',fontFamily:'sans-serif'});
+  a.window.receive(s);a.navigate('history');
+  a.window.receiveHistoryHours(requests[0].id,days.flatMap(day=>[[day,0,10,0],[day,10,30,80]]));
+  const full=arcs;assert.equal(full,10);
+  const oldCalls=oldDays;assert(oldCalls>=days.length);arcs=0;
+  a.window.receive({...s,hours:[{keyboard:4,mouse:0}]});
+  assert.equal(oldDays,oldCalls);assert.equal(arcs,1);
+  const tip=a.get('scatter-tip');
+  const key=key=>plot.listeners.keydown({key,preventDefault(){}});
+  key('Escape');key('ArrowDown');assert.match(tip.textContent,/10$/);
+  key('Escape');key('ArrowUp');assert.match(tip.textContent,/4$/);
+  arcs=0;a.window.receive({...s,hours:[{keyboard:900,mouse:0}]});
+  assert.equal(arcs,full,'a new vertical scale moves every point');
+  assert.equal(oldDays,oldCalls);
+});
+
+test('calendar years stay descending when a future record exists and this year is missing',()=>{
+  const a=app(),s=snapshot();
+  s.history_days=['2025-01-01','2029-01-01'].map(day=>({day,counts:{keyboard:2,mouse:1}}));
+  a.window.receive(s);
+  const options=a.get('calendar-range-select').children.filter(o=>!o.hidden);
+  assert.deepEqual(options.map(o=>o.textContent),['2029','2026','2025']);
+});
+test('History starts with both series and keeps the last selected device visible',()=>{
+  const a=app(), s=snapshot();
+  s.hours=[s.today];
+  a.window.receive(s);
+  a.navigate('history');
+  const keyboard=a.get('scatter-keyboard'), mouse=a.get('scatter-mouse');
+  const selection=()=>[keyboard,mouse].map(button=>button.attributes['aria-pressed']);
+  assert.deepEqual(selection(),['true','true']);
+  for(const [first,last] of [[mouse,keyboard],[keyboard,mouse]]){
+    first.fire();
+    assert.equal(last.attributes['aria-disabled'],'true');
+    last.fire();
+    assert.equal(last.attributes['aria-pressed'],'true');
+    assert.equal(first.attributes['aria-pressed'],'false');
+    assert.equal(a.get('scatter-plot').hidden,false);
+    first.fire();
+    assert.deepEqual(selection(),['true','true']);
+    assert.equal(last.attributes['aria-disabled'],'false');
+  }
+});
+
+test('hour range zooms, pans, and expands back to the full day without changing filters',()=>{
+  const a=app(), s=snapshot(), requests=[];
+  a.window.ipc.postMessage=body=>requests.push(JSON.parse(body).action);
+  s.hours=Array.from({length:24},(_,hour)=>({keyboard:hour===8?7:0,mouse:hour===16?3:0}));
+  a.window.receive(s);
+  a.navigate('history');
+  const track=a.get('scatter-track'), period=a.get('scatter-period');
+  const plot=a.get('scatter-plot'), from=a.get('scatter-from'), to=a.get('scatter-to');
+  const key=(handle,key)=>handle.listeners.keydown({key,preventDefault(){}});
+  track.getBoundingClientRect=()=>({left:0,width:240});
+  track.setPointerCapture=()=>{};
+  function drag(target,start,end){
+    track.listeners.pointerdown({target,clientX:start*10,button:0,pointerId:1,preventDefault(){}});
+    track.listeners.pointermove({clientX:end*10,pointerId:1});
+    track.listeners.pointerup({pointerId:1});
+  }
+  a.get('scatter-mouse').fire();
+  const reads=requests.filter(action=>action==='history_hours').length;
+  assert.equal(track.dataset.full,'true');
+  drag(track,9,8);
+  assert.equal(period.textContent,'08:00 – 09:00');
+  assert.equal(plot.hidden,false);
+  key(from,'End'); key(to,'Home');
+  assert.equal(from.attributes['aria-valuemax'],'8');
+  assert.equal(to.attributes['aria-valuemin'],'9');
+  drag(track,8.5,24);
+  assert.equal(period.textContent,'23:00 – 24:00');
+  assert.equal(plot.hidden,true);
+  assert.equal(a.get('scatter-range').hidden,false);
+  drag(track,23.5,0);
+  assert.equal(period.textContent,'00:00 – 01:00');
+  drag(to,1,9);
+  assert.equal(plot.hidden,false);
+  key(from,'ArrowRight');
+  assert.equal(period.textContent,'01:00 – 09:00');
+  a.window.receive({...s,hours:s.hours.slice()});
+  assert.equal(period.textContent,'01:00 – 09:00');
+  key(from,'Home'); key(to,'End');
+  assert.equal(period.textContent,'00:00 – 24:00');
+  assert.equal(track.dataset.full,'true');
+  assert.equal(a.get('scatter-mouse').attributes['aria-pressed'],'false');
+  assert.equal(requests.filter(action=>action==='history_hours').length,reads);
 });

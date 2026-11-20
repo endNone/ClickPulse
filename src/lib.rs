@@ -37,6 +37,7 @@ pub mod capture;
 pub mod linux_input;
 
 pub mod removal;
+pub mod report;
 
 pub mod shortcuts;
 

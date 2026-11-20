@@ -148,3 +148,13 @@ test('hourly scatter keeps dates distinct and filters weekdays, devices and zero
   assert.equal(simulated.reduce((sum,row)=>sum+row[2],0),1837);
   assert.equal(simulated.reduce((sum,row)=>sum+row[3],0),419);
 });
+
+test('trend dates respond to measured label widths while keeping the endpoints when they fit',()=>{
+  const centers=[10,80,150,220,290];
+  const offsets=size=>H.trendLabelOffsets(300,centers.map(center=>({center,size})));
+  assert.deepEqual(offsets(36),[-10,-18,-18,-18,-26]);
+  assert.deepEqual(offsets(78),[-10,null,-39,null,-68]);
+  assert.deepEqual(H.trendLabelOffsets(90,[{center:10,size:64},{center:80,size:72}]),[null,-62]);
+  assert.deepEqual(H.trendLabelOffsets(300,[{center:150,size:45}]),[-22.5]);
+  assert.deepEqual(H.trendLabelOffsets(300,[]),[]);
+});

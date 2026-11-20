@@ -1,4 +1,4 @@
-<p align="center"><img src="../../assets/clickpulse-blue-cursor-v3.png" width="72" alt="ClickPulse"></p>
+<p align="center"><img src="../../assets/clickpulse-readme.svg" width="72" alt="ClickPulse"></p>
 
 <h1 align="center">ClickPulse</h1>
 
@@ -9,7 +9,7 @@
 <p align="center">ClickPulse は、キーボードとマウスの使用状況を日ごとの統計、履歴、ヒートマップで表示するオフラインのデスクトップアプリです。</p>
 
 <p align="center">
-  <a href="#インストール"><img src="../../assets/badges/preview.svg" height="24" alt="パッケージをダウンロード"></a>
+  <a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2"><img src="../../assets/badges/preview.svg" height="24" alt="パッケージをダウンロード"></a>
   <a href="../development.md"><img src="../../assets/badges/rust.svg" height="24" alt="Rust"></a>
   <a href="../../LICENSE"><img src="../../assets/badges/license.svg" height="24" alt="GPL-3.0-or-later"></a>
   <br>
@@ -18,11 +18,99 @@
   <a href="../install-linux.md"><img src="../../assets/badges/linux.svg" height="24" alt="Linux · Ubuntu 22.04 / 24.04"></a>
 </p>
 
-<p align="center"><a href="https://github.com/endNone/ClickPulse/releases/latest">パッケージをダウンロード</a> · <a href="../development.md">ソースからビルド</a></p>
+<p align="center"><a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">v0.3.2</a> · <a href="../development.md">ソースからビルド</a> · <a href="https://endnone.github.io/ClickPulse/">ショートカット事典</a></p>
 
 <p align="center">キー入力とクリックの統計は端末内に保存されます。アカウント登録は不要で、テレメトリも収集しません。</p>
 
-<p align="center">更新の確認とダウンロードの際は GitHub に接続します。自動確認は設定でオフにできます。</p>
+<p align="center">新しいバージョンの確認とアップデートのダウンロードの際は GitHub に接続します。自動確認は設定でオフにできます。</p>
+
+## 機能
+
+- 推移グラフとカレンダーで、日々の活動パターンを確認できます。
+- キーボードのヒートマップとツリーマップで、よく使うキーが分かります。
+- 履歴から任意の日を選んで、その日の活動を振り返れます。
+- 保存先の変更や、別のパソコンの履歴との統合ができます。
+- 4 種類のテーマ、8 種類の表示言語、集計に使うタイムゾーンを選べます。
+
+## インストール
+
+- **macOS 12+** (Apple Silicon / Intel) · [DMG をダウンロード](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Windows 10 / 11** (x64) · [ポータブル版 ZIP をダウンロード](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Linux** (Ubuntu 22.04 / 24.04) · [Linux 版をダウンロード](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+
+### Homebrew または Scoop でインストール
+
+**macOS · Homebrew**
+
+```sh
+brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
+brew install --cask endnone/clickpulse/clickpulse
+```
+
+**Windows · Scoop**
+
+```powershell
+scoop bucket add clickpulse https://github.com/endNone/ClickPulse
+scoop install clickpulse
+```
+
+macOS 版は Apple の公証を受けておらず、Windows 版は未署名です。初回起動時に OS が実行をブロックすることがあります。
+
+OS 別インストールガイド · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
+
+## Mini モード
+
+小さなフローティングウィンドウで、他のアプリを使いながら入力回数を確認できます。
+
+[![Mini モード](../images/mini-desktop-en.webp)](../images/mini-desktop-en.webp)
+
+## Sport モード
+
+Mini ウィンドウの稲妻ボタンを押すと、入力やクリックの速さに反応するアニメーションが有効になります。
+
+[![Sport モード](../images/sport-desktop-en.gif)](../images/sport-desktop-en.gif)
+
+## 概要
+
+[![概要](../images/overview-en.jpg)](../images/overview-en.jpg)
+
+## スクリーンショット
+
+### キーボードヒートマップ
+
+[![キーボードヒートマップ](../images/keyboard-en.jpg)](../images/keyboard-en.jpg)
+
+### マウスボタンの使用割合
+
+[![マウスボタンの使用割合](../images/mouse-en.jpg)](../images/mouse-en.jpg)
+
+### キー使用頻度のツリーマップ
+
+[![キー使用頻度のツリーマップ](../images/treemap-en.jpg)](../images/treemap-en.jpg)
+
+### 履歴
+
+[![履歴](../images/history-en.jpg)](../images/history-en.jpg)
+
+### ショートカットの使用統計
+
+[![ショートカットの使用統計](../images/shortcuts-en.jpg)](../images/shortcuts-en.jpg)
+
+### 日次・週次アクティビティレポート
+
+<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="左は時間別の入力回数を示す日次レポート、右は日別の入力回数を示す週次レポート"></a></p>
+
+### AI 生成ポスターの例
+
+<p align="center">
+  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="水墨画風の週間レポート"></a>
+  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="ポップアート風の日次レポート"></a>
+</p>
+
+<p align="center">
+  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="ドット絵風の日次レポート"></a>
+  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="バウハウス風の週間レポート"></a>
+</p>
 
 ## ダウンロードサイズとメモリ使用量
 
@@ -46,75 +134,9 @@ v0.3.1 のデスクトップ版はどのパッケージも 7.3 MB 未満です�
 
 入力の記録をオフにし、アプリ本体と画面表示に使うプロセスの合計を 5 回測定した中央値です。通常ウィンドウの表示言語は英語です。macOS は physical footprint、Windows は USS、Ubuntu はソフトウェアレンダリング時の PSS を使用しています。 [v0.3.1 のダウンロードと測定結果](https://github.com/endNone/ClickPulse/releases/tag/v0.3.1).
 
-## 概要
-
-[![概要](../images/overview-en.jpg)](../images/overview-en.jpg)
-
-## 機能
-
-- 推移グラフとカレンダーで、日々の活動パターンを確認できます。
-- キーボードのヒートマップとツリーマップで、よく使うキーが分かります。
-- 履歴から任意の日を選んで、その日の活動を振り返れます。
-- 保存先の変更や、別のパソコンの履歴との統合ができます。
-- 4 種類のテーマ、8 種類の表示言語、集計に使うタイムゾーンを選べます。
-
-## インストール
-
-- **macOS 12+** (Apple Silicon / Intel) · [DMG をダウンロード](https://github.com/endNone/ClickPulse/releases/latest)
-- **Windows 10 / 11** (x64) · [ポータブル版 ZIP をダウンロード](https://github.com/endNone/ClickPulse/releases/latest)
-- **Linux** (Ubuntu 22.04 / 24.04) · [Linux 版をダウンロード](https://github.com/endNone/ClickPulse/releases/latest)
-
-### Homebrew または Scoop でインストール
-
-**macOS · Homebrew**
-
-```sh
-brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
-brew install --cask endnone/clickpulse/clickpulse
-```
-
-**Windows · Scoop**
-
-```powershell
-scoop bucket add clickpulse https://github.com/endNone/ClickPulse
-scoop install clickpulse
-```
-
-macOS 版は Apple の公証を受けておらず、Windows 版は未署名です。初回起動時に OS が実行をブロックすることがあります。
-
-OS 別インストールガイド · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
-
-## スクリーンショット
-
-画像にはすべてデモデータを使用しています。
-
-### Mini モード
-
-小さなフローティングウィンドウで、他のアプリを使いながら入力回数を確認できます。
-
-[![Mini モード](../images/mini-desktop-en.webp)](../images/mini-desktop-en.webp)
-
-### Sport モード
-
-Mini ウィンドウの稲妻ボタンを押すと、入力やクリックの速さに反応するアニメーションが有効になります。
-
-[![Sport モード](../images/sport-desktop-en.gif)](../images/sport-desktop-en.gif)
-
-### キーボードヒートマップ
-
-[![キーボードヒートマップ](../images/keyboard-en.jpg)](../images/keyboard-en.jpg)
-
-### キー使用頻度のツリーマップ
-
-[![キー使用頻度のツリーマップ](../images/treemap-en.jpg)](../images/treemap-en.jpg)
-
-### 履歴
-
-[![履歴](../images/history-en.jpg)](../images/history-en.jpg)
-
 ## ライセンス
 
-コードのライセンスは [GPL-3.0-or-later](../../LICENSE) です。v0.3.2 以降、ClickPulse の名称とアイコンはこの許諾の対象外で、GPLv3 の第 7(c) 項および第 7(e) 項に基づく[追加条項](../../TRADEMARKS.md)が適用されます。それ以前のリリースには公開時の条項が適用されます。
+コードのライセンスは [GPL-3.0-or-later](../../LICENSE) です。ClickPulse の名称とアイコンはこの許諾の対象外で、GPLv3 の第 7(c) 項および第 7(e) 項に基づく[追加条項](../../TRADEMARKS.md)が適用されます。それ以前のリリースには公開時の条項が適用されます。
 
 ## 関連リンク
 
@@ -123,7 +145,7 @@ Mini ウィンドウの稲妻ボタンを押すと、入力やクリックの速
 
 ## GitHub スター数の推移
 
-ClickPulse が役に立ったら、[GitHub でスター](https://github.com/endNone/ClickPulse)を付けていただけるとうれしいです 🌟
+ClickPulse が役に立ったら、GitHub でスターを付けていただけるとうれしいです 🌟
 
 <p align="center"><a href="https://www.star-history.com/#endNone/ClickPulse&amp;Date"><img src="https://api.star-history.com/image?repos=endNone/ClickPulse&amp;type=Date" width="800" alt="GitHub スター数の推移"></a></p>
 

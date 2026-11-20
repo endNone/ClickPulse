@@ -48,6 +48,16 @@ test('picker selects past dates, keeps future days disabled and restores focus',
   assert.equal(a.get('share-date-value').textContent,'Nov 9, 2026');
 });
 
+test('weekly date captions use the locale’s numeric date and daily captions return to short month names',()=>{
+  const a=harness({value:'2026-11-14',max:'2026-11-20',locale:'zh-CN'});
+  a.input.dataset.numericDate='true';a.picker.sync();
+  assert.equal(a.get('share-date-value').textContent,'2026/11/14');
+  a.I.setLocale('en');a.picker.sync();assert.equal(a.get('share-date-value').textContent,'11/14/2026');
+  a.input.dataset.numericDate='false';a.picker.sync();
+  assert.equal(a.get('share-date-value').textContent,'Nov 14, 2026');
+  assert.equal(a.input.value,'2026-11-14');
+});
+
 test('Today is the supplied reporting-zone date, not the computer UTC date',()=>{
   const a=harness({value:'2026-11-16',max:'2026-11-19',zone:'America/Los_Angeles'});
   a.picker.open();a.today().fire('click');assert.equal(a.input.value,'2026-11-19');assert.equal(a.changed(),1);
@@ -87,4 +97,16 @@ test('new day and locale changes use all eight complete catalogs',()=>{
     a.input.max='2026-12-01';a.picker.sync();assert.equal(a.next().disabled,false);
     a.next().fire('click');assert.equal(a.next().disabled,true);assert.equal(a.input.value,'2026-11-18');
   }
+});
+
+test('a weekly date picker clamps both bounds and distinguishes the allowed end from today',()=>{
+ const a=harness({value:'2026-11-12',max:'2026-11-16'});
+ a.input.min='2026-11-11';a.input.dataset.today='2026-11-18';a.picker.open();
+ assert(a.day('2026-11-10').disabled);assert(a.day('2026-11-17').disabled);
+ assert(a.previous().disabled);assert(a.today().disabled);
+ assert.equal(a.day('2026-11-16').attributes['aria-current'],undefined);
+ assert.equal(a.day('2026-11-18').attributes['aria-current'],'date');
+ a.key(a.day('2026-11-12'),'PageUp');
+ assert.equal(a.document.activeElement.dataset.day,'2026-11-11');
+ a.day('2026-11-16').fire('click');assert.equal(a.input.value,'2026-11-16');
 });

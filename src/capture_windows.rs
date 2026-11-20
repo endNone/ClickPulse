@@ -1,5 +1,5 @@
 //! Passive Windows Raw Input listener on a dedicated message-only window.
-//! Read scan codes and button transitions only; no text or pointer coordinates.
+//! Counts use scan codes. Only eligible shortcuts consult the foreground layout.
 use crate::{
     input::{Device, InputEvent},
     runtime::{CaptureStatus, Command},
@@ -22,10 +22,41 @@ use windows_sys::Win32::{
     Foundation::{ERROR_CLASS_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, WPARAM},
     System::{LibraryLoader::GetModuleHandleW, RemoteDesktop::*},
     UI::{
-        Accessibility::*, Input::KeyboardAndMouse::GetAsyncKeyState, Input::*,
+        Accessibility::*,
+        Input::KeyboardAndMouse::{
+            GetAsyncKeyState, GetKeyboardLayout, HKL, MAPVK_VK_TO_CHAR, MAPVK_VSC_TO_VK_EX,
+            MapVirtualKeyExW,
+        },
+        Input::*,
         WindowsAndMessaging::*,
     },
 };
+
+fn foreground_layout() -> Option<HKL> {
+    unsafe {
+        let window_layout = |window: HWND| {
+            if window.is_null() {
+                return None;
+            }
+            let tid = GetWindowThreadProcessId(window, null_mut());
+            if tid == 0 {
+                return None;
+            }
+            let layout = GetKeyboardLayout(tid);
+            (!layout.is_null()).then_some(layout)
+        };
+        // The focused control can belong to a different thread than its host window.
+        let mut info = GUITHREADINFO {
+            cbSize: size_of::<GUITHREADINFO>() as u32,
+            ..Default::default()
+        };
+        let focused = GetGUIThreadInfo(0, &mut info) != 0;
+        focused
+            .then(|| window_layout(info.hwndFocus))
+            .flatten()
+            .or_else(|| window_layout(GetForegroundWindow()))
+    }
+}
 
 struct Listener {
     keys: WindowsKeyboard,
@@ -122,11 +153,36 @@ impl Listener {
                     key.VKey,
                     self.ignore_software_input.load(Ordering::Relaxed),
                 ) {
-                    let shortcut = self.keys.shortcut(
+                    if self.paused.load(Ordering::Relaxed)
+                        || self.storage_blocked.load(Ordering::Relaxed)
+                        || self.stop.load(Ordering::Relaxed)
+                    {
+                        return;
+                    }
+                    let shortcut = self.keys.shortcut_with_layout(
                         raw.header.hDevice as usize,
                         code,
                         Instant::now(),
                         |vk| unsafe { GetAsyncKeyState(i32::from(vk)) < 0 },
+                        |_| {
+                            let layout = foreground_layout();
+                            crate::windows_input::shortcut_character_with_oem(
+                                key.MakeCode,
+                                key.Flags,
+                                key.VKey,
+                                |scan| {
+                                    u16::try_from(unsafe {
+                                        MapVirtualKeyExW(scan, MAPVK_VSC_TO_VK_EX, layout?)
+                                    })
+                                    .ok()
+                                },
+                                |vk| {
+                                    Some(unsafe {
+                                        MapVirtualKeyExW(u32::from(vk), MAPVK_VK_TO_CHAR, layout?)
+                                    })
+                                },
+                            )
+                        },
                     );
                     self.enqueue(Device::Keyboard, code, shortcut);
                 }

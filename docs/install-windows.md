@@ -1,5 +1,7 @@
 # Install on Windows
 
+**English** · [简体中文](zh-CN/install-windows.md)
+
 ## 1. Download
 
 [Download the portable ZIP](https://github.com/endNone/ClickPulse/releases/latest) for Windows 10/11 x64, or use [Scoop](package-managers.md#windows-scoop-bucket).
@@ -17,7 +19,7 @@ ClickPulse isn't signed yet. If **Microsoft Defender SmartScreen** appears, sele
 
 Windows needs no additional keyboard or mouse permission. Check that **Recording** appears, then type and click to see the counts increase.
 
-![Recording status in the Windows Mini window](images/install-windows-recording.png)
+<a href="images/install-windows-recording.png"><img src="images/install-windows-recording.png" width="320" alt="Recording status in the Windows Mini window"></a>
 
 ## Common questions
 

@@ -14,6 +14,7 @@ import sys
 import tempfile
 import tomllib
 from third_party import rust_notices, asset_notices
+from macos_signing import sign_app
 from release import source_revision
 from release_symbols import build_release, stage_binary, record_packaged_binary
 
@@ -94,8 +95,14 @@ def main():
         (resources/'THIRD-PARTY-NOTICES.txt').write_text(asset_notices(ROOT)+rust_notices(metadata, ROOT), encoding='utf-8')
         shutil.copytree(ROOT/'assets/localizations', resources, dirs_exist_ok=True)
         run([sys.executable, 'scripts/make_icon.py', str(resources/'ClickPulseLogo.icns')])
-        run(['codesign', '--force', '--sign', '-', '--identifier', 'app.clickpulse.desktop', str(app)])
-        run(['codesign', '--verify', '--deep', '--strict', str(app)])
+        signing = sign_app(app, ROOT, environment)
+        permission_note = (
+            'When upgrading from 0.3.1 or an earlier ad-hoc build, grant Input Monitoring once more. '
+            'Remove the old ClickPulse entry, add the updated app and reopen it. Later releases '
+            'use the same signing identity to retain this permission.'
+            if signing['signing'] == 'self-signed' else
+            'This ad-hoc development build may require Input Monitoring access again after replacement.'
+        )
         record_packaged_binary(symbol_manifest, contents/'MacOS/clickpulse')
         (stage/'Install Guide.txt').write_text(f'''ClickPulse {version} / macOS 12+ / {chip} ({arch})
 
@@ -108,7 +115,8 @@ Enable ClickPulse under Privacy & Security > Input Monitoring, then Quit & Reope
 Confirm Recording and increasing counts.
 
 Quit the old App before replacing it in the same location for an update.
-This is an ad-hoc preview without Apple notarization; updated builds may need a new permission grant.
+This build is not notarized by Apple.
+{permission_note}
 Do not delete statistics to fix permissions.
 History and preferences remain in ~/Library/Application Support/ClickPulse when the App is replaced or removed.
 
@@ -118,7 +126,7 @@ Full installation guide: docs/install-macos.md in the source repository.
                  for file in sorted(stage.rglob('*')) if file.is_file()}
         manifest = {'version': version, 'internal_build': int(info['CFBundleVersion']), 'target': target,
                     'source_revision': source_revision(ROOT),
-                    'signing': 'ad-hoc', 'notarized': False, 'code_license': 'GPL-3.0-or-later', 'files': files}
+                    **signing, 'notarized': False, 'code_license': 'GPL-3.0-or-later', 'files': files}
         (stage/'build-manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
         create_zip(stage, temp/(name+'.zip'))
         (stage/'Applications').symlink_to('/Applications', target_is_directory=True)

@@ -93,7 +93,7 @@ pub struct Snapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shortcuts: Option<Vec<crate::shortcuts::ShortcutCount>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub share_shortcut: Option<crate::shortcuts::DailyTop>,
+    pub report: Option<crate::report::Report>,
     pub now: String,
     pub today: Counts,
     pub week: Counts,
@@ -390,8 +390,12 @@ impl EventDb {
         range.read(&self.conn, MINUTE_COUNTS)
     }
 
-    pub fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
-        crate::shortcuts::read_top_for_day(&self.conn, day)
+    pub fn report(
+        &self,
+        selection: crate::report::Selection,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<crate::report::Report> {
+        selection.read(&self.conn, MINUTE_COUNTS, zone)
     }
 
     pub fn snapshot_for_view(

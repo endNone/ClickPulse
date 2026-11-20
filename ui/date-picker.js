@@ -42,7 +42,9 @@ const ClickPulseDatePicker=(()=>{
     trigger.setAttribute('aria-controls',panel.id);trigger.setAttribute('aria-expanded','false');
     let month='',focused='',signature='';
     const bound=()=>valid(input.max)?input.max:'';
-    const clamp=day=>day<minimum?minimum:day>bound()?bound():day;
+    const lower=()=>valid(input.min)?input.min:minimum;
+    const today=()=>input.dataset.today||bound();
+    const clamp=day=>day<lower()?lower():day>bound()?bound():day;
     const isOpen=()=>opened===controller;
     function position(){
       const rect=trigger.getBoundingClientRect(),margin=8,gap=8,width=Math.min(296,window.innerWidth-margin*2);
@@ -54,7 +56,7 @@ const ClickPulseDatePicker=(()=>{
     function render(focus=false){
       monthLabel.textContent=I.day(month+'-01',{year:'numeric',month:'long'});
       previous.setAttribute('aria-label',I.t('date.previous_month'));next.setAttribute('aria-label',I.t('date.next_month'));
-      previous.disabled=month==='0001-01';next.disabled=month>=bound().slice(0,7);todayButton.textContent=I.t('date.today');
+      previous.disabled=month<=lower().slice(0,7);todayButton.disabled=today()>bound()||today()<lower();next.disabled=month>=bound().slice(0,7);todayButton.textContent=I.t('date.today');
       const weekdays=document.createElement('div');weekdays.className='date-picker-week';weekdays.setAttribute('role','row');
       for(const name of I.weekdays()){
         const el=document.createElement('span');el.className='date-picker-weekday';el.setAttribute('role','columnheader');el.textContent=name;weekdays.append(el);
@@ -66,10 +68,10 @@ const ClickPulseDatePicker=(()=>{
           const cell=document.createElement('div');cell.setAttribute('role','gridcell');week.append(cell);if(!day)continue;
           const button=document.createElement('button'),selected=day===input.value;
           button.type='button';button.className='date-picker-day';button.dataset.day=day;button.textContent=I.number(Number(day.slice(-2)));
-          button.disabled=day>bound();button.tabIndex=day===focused&&!button.disabled?0:-1;
+          button.disabled=day>bound()||day<lower();button.tabIndex=day===focused&&!button.disabled?0:-1;
           button.classList.toggle('outside-month',day.slice(0,7)!==month);button.classList.toggle('selected',selected);
           cell.setAttribute('aria-selected',String(selected));cell.setAttribute('aria-disabled',String(button.disabled));button.setAttribute('aria-label',I.day(day,{weekday:'long',year:'numeric',month:'long',day:'numeric'}));
-          if(day===bound())button.setAttribute('aria-current','date');
+          if(day===today())button.setAttribute('aria-current','date');
           button.addEventListener('click',()=>choose(day));cell.append(button);if(day===focused)focusButton=button;
         }
         rows.push(week);
@@ -78,14 +80,14 @@ const ClickPulseDatePicker=(()=>{
     }
     function sync(){
       const max=bound(),selected=valid(input.value)?input.value:max;
-      caption.textContent=selected?I.day(selected,{year:'numeric',month:'short',day:'numeric'}):I.t('common.loading');
+      caption.textContent=selected?I.day(selected,{year:'numeric',month:input.dataset.numericDate==='true'?'numeric':'short',day:'numeric'}):I.t('common.loading');
       trigger.disabled=!max||input.disabled;
-      const current=JSON.stringify([selected,max,I.locale]);
+      const current=JSON.stringify([selected,lower(),max,today(),I.locale]);
       if(current===signature)return;signature=current;
       if(isOpen()){
         if(trigger.disabled){close();return;}
         // Live snapshots must not reset the month the user is browsing.
-        focused=clamp(focused||selected);if(month>max.slice(0,7))month=max.slice(0,7);
+        focused=clamp(focused||selected);month=focused.slice(0,7);
         render(panel.contains(document.activeElement)&&document.activeElement?.dataset.day!==undefined);position();
       }
     }
@@ -99,13 +101,13 @@ const ClickPulseDatePicker=(()=>{
       panel.hidden=true;trigger.setAttribute('aria-expanded','false');if(isOpen())opened=null;if(restore)trigger.focus({preventScroll:true});
     }
     function choose(day){
-      if(!valid(day)||day>bound())return;
+      if(!valid(day)||day>bound()||day<lower())return;
       input.value=day;close(true);input.dispatchEvent(new window.Event('change',{bubbles:true}));sync();
     }
     const controller={sync,open,close,panel,trigger};
     trigger.addEventListener('click',()=>isOpen()?close():open());
     trigger.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();open();}});
-    todayButton.addEventListener('click',()=>choose(bound()));
+    todayButton.addEventListener('click',()=>choose(today()));
     panel.addEventListener('keydown',event=>{
       if(event.isComposing)return;
       if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close(true);return;}

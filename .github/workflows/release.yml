@@ -46,11 +46,14 @@ jobs:
     uses: ./.github/workflows/packages.yml
     with:
       ref: ${{ needs.version.outputs.revision }}
+    secrets:
+      MACOS_SIGNING_P12_BASE64: ${{ secrets.MACOS_SIGNING_P12_BASE64 }}
+      MACOS_SIGNING_P12_PASSWORD: ${{ secrets.MACOS_SIGNING_P12_PASSWORD }}
 
   prepare:
     name: Verify and assemble release assets
     needs: [version, packages]
-    runs-on: ubuntu-24.04
+    runs-on: macos-15
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

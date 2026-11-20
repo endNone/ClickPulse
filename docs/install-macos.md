@@ -1,5 +1,7 @@
 # Install on macOS
 
+**English** · [简体中文](zh-CN/install-macos.md)
+
 ## 1. Download
 
 [Download the DMG](https://github.com/endNone/ClickPulse/releases/latest) for macOS 12 or later, or use [Homebrew](package-managers.md#macos-homebrew-cask).
@@ -13,7 +15,7 @@ Apple chip (M1 or later) → arm64; Intel → x64.
 
 ## 2. First launch
 
-ClickPulse isn't signed by a verified publisher yet. If macOS blocks it:
+Starting with 0.3.2, public Mac packages use the project's self-signed certificate. Apple does not notarize these builds. If macOS blocks the first launch:
 
 1. Open **System Settings → Privacy & Security**.
 2. Select **Open Anyway** beside ClickPulse, authenticate, then select **Open**.
@@ -50,7 +52,9 @@ Download the app again. If the alert persists, [report the problem](https://gith
 
 <a id="4-update-and-refresh-access"></a>
 
-**Not recording after an update?** Quit ClickPulse. In Input Monitoring, remove its entry with **−**, add the updated app with **+**, enable it, then reopen.
+**Updating from 0.3.1 or earlier?** The signing identity changes with 0.3.2. Allow Input Monitoring once more. Later public releases use the same identity so macOS can keep the grant.
+
+**To renew access:** Quit ClickPulse. In Input Monitoring, remove its entry with **−**, add the updated app with **+**, enable it, then reopen.
 
 **How do I update?** Open **Settings → Application → Check for updates**, then **Update & restart**. Daily checks can be turned off. Version 0.2.0 or earlier needs one manual update.
 

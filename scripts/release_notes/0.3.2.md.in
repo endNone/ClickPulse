@@ -1,0 +1,22 @@
+See which shortcuts you use most, explore when you type and click, and turn a day or a week of activity into a shareable report.
+
+{access}## Downloads
+
+Choose a package for your system below.
+
+{downloads}
+## What’s new
+
+- **Shortcuts.** See your most-used shortcuts and look up their common uses in the [Shortcut Atlas](https://endnone.github.io/ClickPulse/). On macOS and Windows, shortcut recognition follows the active keyboard layout for supported character keys.
+- **Reports.** Create a daily report or a weekly report covering the last seven days by default. You can also choose a range of 2–31 days. Save the card as a PNG, copy the image on macOS or Windows, or copy a prompt to design your own poster.
+- **History and heatmaps.** Compare hourly keyboard and mouse activity by weekday, zoom in on a time range, and see which physical mouse buttons you use most.
+
+## Upgrading on macOS
+
+If you’re upgrading from 0.3.1 or earlier, open **System Settings → Privacy & Security → Input Monitoring**. Remove the old ClickPulse entry, then add the updated app and enable it. Future versions signed with the same certificate should keep this permission. Updating keeps your history and settings.
+
+The Mac app uses a fixed self-signed certificate and hasn’t been notarized by Apple. The Windows app is unsigned.
+
+[macOS installation guide]({base}install-macos.md) · [Windows installation guide]({base}install-windows.md) · [Ubuntu installation guide]({base}install-linux.md) · [Full changelog](https://github.com/{repository}/blob/v{version}/CHANGELOG.md)
+
+Thanks to @YFzi for suggesting improvements to ClickPulse.

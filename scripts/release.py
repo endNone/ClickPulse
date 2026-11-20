@@ -9,9 +9,10 @@ import re
 import shutil
 import subprocess
 import tempfile
-import tomllib
-import zipfile
 import xml.etree.ElementTree as ET
+import zipfile
+
+import macos_signing
 
 ROOT = Path(__file__).resolve().parent.parent
 VERSION = r'(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)'
@@ -29,6 +30,9 @@ def source_revision(root):
 
 
 def release_plan(root, tag=None, require_tag=False):
+    # The Ubuntu 22.04 packager imports source_revision on Python 3.10.
+    import tomllib
+
     package = tomllib.loads((root/'Cargo.toml').read_text(encoding='utf-8'))['package']
     version = package['version']
     if not re.fullmatch(VERSION, version):
@@ -158,6 +162,12 @@ def release_notes(version, repository, revision, private=False, *, artwork_revis
     downloads = release_downloads(version, repository, artwork_revision=artwork_revision)
     base = f'https://github.com/{repository}/blob/v{version}/docs/'
     access = '\nThis private preview requires a GitHub account with repository access.\n' if private else ''
+    if version == '0.3.2':
+        template = ROOT/'scripts'/'release_notes'/'0.3.2.md.in'
+        return template.read_text(encoding='utf-8').format(
+            downloads=downloads, base=base, repository=repository, version=version,
+            access=access.strip()+'\n\n' if private else '',
+        )
     linux_guide = f' · [Ubuntu guide]({base}install-linux.md)' if tuple(map(int, version.split('.'))) >= (0, 3, 0) else ''
     highlights = '- Local keyboard and mouse activity statistics. Fully offline.\n'
     changes = (f'- See the [changelog](https://github.com/{repository}/blob/v{version}/CHANGELOG.md) for this release.\n')
@@ -173,6 +183,12 @@ def release_notes(version, repository, revision, private=False, *, artwork_revis
                    '- Recover recording automatically after temporary storage failures.\n'
                    '- Ignore recognized software-generated input with an optional setting.\n'
                    '- Keep Windows startup and package-manager upgrades working reliably.\n')
+    launch = "The app isn't signed yet; macOS and Windows may ask you to allow first launch."
+    if tuple(map(int, version.split('.'))) >= (0, 3, 2):
+        launch = ('Mac releases use a fixed self-signed certificate. When upgrading from 0.3.1 or earlier, '
+                  'remove the old ClickPulse entry in System Settings → Privacy & Security → Input Monitoring, '
+                  'add the new app and grant access once. Later updates using the same identity retain access. '
+                  'macOS may still ask you to allow first launch. Windows packages are unsigned.')
     return f'''## What's new
 
 {highlights}
@@ -185,7 +201,7 @@ def release_notes(version, repository, revision, private=False, *, artwork_revis
 {changes}
 ## Getting started
 
-The app isn't signed yet; macOS and Windows may ask you to allow first launch.
+{launch}
 [macOS guide]({base}install-macos.md) · [Windows guide]({base}install-windows.md){linux_guide}
 
 Your history and preferences stay in place when you update.
@@ -225,6 +241,8 @@ def prepare_release(root, packages, output, tag, revision, repository, private=F
         manifest = verify_archive(packages/(mac+'.zip'), mac, 'build-manifest.json', plan, 'ClickPulse.app/Contents/Resources/LICENSE.txt', license_bytes)
         if json.loads((packages/(mac+'.manifest.json')).read_text(encoding='utf-8')) != manifest:
             raise ValueError('Mac external manifest does not match the App ZIP.')
+        macos_signing.verify_packages(packages/(mac+'.zip'), packages/(mac+'.dmg'), mac, manifest,
+                                     macos_signing.fingerprints(root))
         manifests.append((mac, manifest, {target}))
     for linux,target in linux_targets:
         manifest = verify_archive(packages/(linux+'.zip'), linux, 'build-manifest.json', plan, 'LICENSE.txt', license_bytes)

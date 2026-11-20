@@ -1,5 +1,7 @@
 # Ubuntu installation
 
+**English** · [简体中文](zh-CN/install-linux.md)
+
 ClickPulse for Linux targets Ubuntu 22.04 and 24.04. Choose ARM64 for an Apple Silicon VM, or x64 for an Intel/AMD PC. Tests on one architecture do not establish support for the other.
 
 ## Install

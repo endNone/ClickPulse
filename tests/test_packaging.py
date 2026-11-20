@@ -20,6 +20,14 @@ from windows_imports import imported_libraries, verify_static_crt
 
 class PackagingTests(unittest.TestCase):
 
+    def test_linux_packager_can_start_without_tomllib(self):
+        # Jammy's system Python predates tomllib. Simulate that on newer CI runners.
+        subprocess.run([sys.executable, '-c',
+                        "import sys; sys.modules['tomllib']=None; "
+                        "sys.path.insert(0, 'scripts'); import package_linux; "
+                        "sys.argv=['package_linux.py','--help']; package_linux.main()"],
+                       cwd=ROOT, check=True, capture_output=True)
+
     def test_bundled_asset_notices_include_complete_lucide_license_and_fonts(self):
         notices = asset_notices(ROOT)
         self.assertIn('Inter and Noto Sans Mono', notices)

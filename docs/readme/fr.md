@@ -1,4 +1,4 @@
-<p align="center"><img src="../../assets/clickpulse-blue-cursor-v3.png" width="72" alt="ClickPulse"></p>
+<p align="center"><img src="../../assets/clickpulse-readme.svg" width="72" alt="ClickPulse"></p>
 
 <h1 align="center">ClickPulse</h1>
 
@@ -9,7 +9,7 @@
 <p align="center">ClickPulse est une application de bureau qui présente votre activité au clavier et à la souris sous forme de statistiques quotidiennes, d’historique et de cartes de chaleur. Elle fonctionne hors ligne.</p>
 
 <p align="center">
-  <a href="#installation"><img src="../../assets/badges/preview.svg" height="24" alt="Télécharger l’application"></a>
+  <a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2"><img src="../../assets/badges/preview.svg" height="24" alt="Télécharger l’application"></a>
   <a href="../development.md"><img src="../../assets/badges/rust.svg" height="24" alt="Rust"></a>
   <a href="../../LICENSE"><img src="../../assets/badges/license.svg" height="24" alt="GPL-3.0-or-later"></a>
   <br>
@@ -18,11 +18,99 @@
   <a href="../install-linux.md"><img src="../../assets/badges/linux.svg" height="24" alt="Linux · Ubuntu 22.04 / 24.04"></a>
 </p>
 
-<p align="center"><a href="https://github.com/endNone/ClickPulse/releases/latest">Télécharger l’application</a> · <a href="../development.md">Compiler depuis les sources</a></p>
+<p align="center"><a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">v0.3.2</a> · <a href="../development.md">Compiler depuis les sources</a> · <a href="https://endnone.github.io/ClickPulse/">Encyclopédie des raccourcis</a></p>
 
 <p align="center">Vos statistiques de frappe et de clic restent sur votre appareil. Aucun compte, aucune télémétrie.</p>
 
-<p align="center">La recherche et le téléchargement des mises à jour passent par GitHub. Vous pouvez désactiver la recherche automatique dans les paramètres.</p>
+<p align="center">L’application se connecte à GitHub pour vérifier si une nouvelle version est disponible et télécharger les mises à jour. Vous pouvez désactiver la recherche automatique dans les paramètres.</p>
+
+## Fonctionnalités
+
+- Repérez vos périodes d’activité grâce aux tendances et au calendrier.
+- Retrouvez les touches les plus utilisées sur la carte de chaleur et le diagramme en rectangles.
+- Consultez l’historique pour revoir l’activité d’une journée précise.
+- Déplacez vos données ou fusionnez-les avec l’historique d’un autre ordinateur.
+- Choisissez parmi quatre thèmes et huit langues, et définissez le fuseau horaire de vos statistiques.
+
+## Installation
+
+- **macOS 12+** (Apple Silicon / Intel) · [Télécharger le DMG](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Windows 10 / 11** (x64) · [Télécharger le ZIP portable](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Linux** (Ubuntu 22.04 / 24.04) · [Télécharger la version Linux](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+
+### Installer avec Homebrew ou Scoop
+
+**macOS · Homebrew**
+
+```sh
+brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
+brew install --cask endnone/clickpulse/clickpulse
+```
+
+**Windows · Scoop**
+
+```powershell
+scoop bucket add clickpulse https://github.com/endNone/ClickPulse
+scoop install clickpulse
+```
+
+La version macOS n’est pas notariée par Apple et la version Windows n’est pas signée. Le système peut bloquer le premier lancement.
+
+Guides d’installation · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
+
+## Mode Mini
+
+Gardez vos compteurs à l’écran dans une petite fenêtre flottante pendant que vous utilisez d’autres applications.
+
+[![Mode Mini](../images/mini-desktop-en.webp)](../images/mini-desktop-en.webp)
+
+## Mode Sport
+
+Le bouton en forme d’éclair de la fenêtre Mini active des animations qui réagissent à votre rythme de frappe et de clic.
+
+[![Mode Sport](../images/sport-desktop-en.gif)](../images/sport-desktop-en.gif)
+
+## Vue d’ensemble
+
+[![Vue d’ensemble](../images/overview-en.jpg)](../images/overview-en.jpg)
+
+## Captures d’écran
+
+### Carte de chaleur du clavier
+
+[![Carte de chaleur du clavier](../images/keyboard-en.jpg)](../images/keyboard-en.jpg)
+
+### Répartition des clics par bouton
+
+[![Répartition des clics par bouton](../images/mouse-en.jpg)](../images/mouse-en.jpg)
+
+### Répartition des frappes par touche
+
+[![Répartition des frappes par touche](../images/treemap-en.jpg)](../images/treemap-en.jpg)
+
+### Historique
+
+[![Historique](../images/history-en.jpg)](../images/history-en.jpg)
+
+### Statistiques des raccourcis clavier
+
+[![Statistiques des raccourcis clavier](../images/shortcuts-en.jpg)](../images/shortcuts-en.jpg)
+
+### Rapports d’activité quotidiens et hebdomadaires
+
+<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="À gauche, les saisies par heure dans le rapport quotidien. À droite, les saisies par jour dans le rapport hebdomadaire."></a></p>
+
+### Exemples d’affiches générées par IA
+
+<p align="center">
+  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="Rapport hebdomadaire au lavis"></a>
+  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="Rapport quotidien pop art"></a>
+</p>
+
+<p align="center">
+  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="Rapport quotidien en pixel art"></a>
+  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="Rapport hebdomadaire de style Bauhaus"></a>
+</p>
 
 ## Taille du téléchargement et mémoire utilisée
 
@@ -46,75 +134,9 @@ Tous les paquets de bureau de la v0.3.1 pèsent moins de 7,3 MB. Au démarrage e
 
 Médiane de cinq mesures pour l’application et ses processus d’affichage, avec l’enregistrement des entrées désactivé et la fenêtre principale en anglais. Les mesures utilisent l’empreinte physique sous macOS, l’USS sous Windows et le PSS sous Ubuntu avec rendu logiciel. [Téléchargements et mesures de la v0.3.1](https://github.com/endNone/ClickPulse/releases/tag/v0.3.1).
 
-## Vue d’ensemble
-
-[![Vue d’ensemble](../images/overview-en.jpg)](../images/overview-en.jpg)
-
-## Fonctionnalités
-
-- Repérez vos périodes d’activité grâce aux tendances et au calendrier.
-- Retrouvez les touches les plus utilisées sur la carte de chaleur et le diagramme en rectangles.
-- Consultez l’historique pour revoir l’activité d’une journée précise.
-- Déplacez vos données ou fusionnez-les avec l’historique d’un autre ordinateur.
-- Choisissez parmi quatre thèmes et huit langues, et définissez le fuseau horaire de vos statistiques.
-
-## Installation
-
-- **macOS 12+** (Apple Silicon / Intel) · [Télécharger le DMG](https://github.com/endNone/ClickPulse/releases/latest)
-- **Windows 10 / 11** (x64) · [Télécharger le ZIP portable](https://github.com/endNone/ClickPulse/releases/latest)
-- **Linux** (Ubuntu 22.04 / 24.04) · [Télécharger la version Linux](https://github.com/endNone/ClickPulse/releases/latest)
-
-### Installer avec Homebrew ou Scoop
-
-**macOS · Homebrew**
-
-```sh
-brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
-brew install --cask endnone/clickpulse/clickpulse
-```
-
-**Windows · Scoop**
-
-```powershell
-scoop bucket add clickpulse https://github.com/endNone/ClickPulse
-scoop install clickpulse
-```
-
-La version macOS n’est pas notariée par Apple et la version Windows n’est pas signée. Le système peut bloquer le premier lancement.
-
-Guides d’installation · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
-
-## Captures d’écran
-
-Toutes les captures présentent des données de démonstration.
-
-### Mode Mini
-
-Gardez vos compteurs à l’écran dans une petite fenêtre flottante pendant que vous utilisez d’autres applications.
-
-[![Mode Mini](../images/mini-desktop-en.webp)](../images/mini-desktop-en.webp)
-
-### Mode Sport
-
-Le bouton en forme d’éclair de la fenêtre Mini active des animations qui réagissent à votre rythme de frappe et de clic.
-
-[![Mode Sport](../images/sport-desktop-en.gif)](../images/sport-desktop-en.gif)
-
-### Carte de chaleur du clavier
-
-[![Carte de chaleur du clavier](../images/keyboard-en.jpg)](../images/keyboard-en.jpg)
-
-### Répartition des frappes par touche
-
-[![Répartition des frappes par touche](../images/treemap-en.jpg)](../images/treemap-en.jpg)
-
-### Historique
-
-[![Historique](../images/history-en.jpg)](../images/history-en.jpg)
-
 ## Licence
 
-Le code est distribué sous licence [GPL-3.0-or-later](../../LICENSE). À partir de la version v0.3.2, le nom ClickPulse et ses icônes sont exclus de cette autorisation. Des [conditions supplémentaires](../../TRADEMARKS.md) s’appliquent conformément aux articles 7(c) et 7(e) de la GPLv3. Les versions antérieures conservent leurs conditions d’origine.
+Le code est distribué sous licence [GPL-3.0-or-later](../../LICENSE). Le nom ClickPulse et ses icônes sont exclus de cette autorisation. Des [conditions supplémentaires](../../TRADEMARKS.md) s’appliquent conformément aux articles 7(c) et 7(e) de la GPLv3. Les versions antérieures conservent leurs conditions d’origine.
 
 ## Pour aller plus loin
 
@@ -123,7 +145,7 @@ Le code est distribué sous licence [GPL-3.0-or-later](../../LICENSE). À partir
 
 ## Évolution des étoiles sur GitHub
 
-Si ClickPulse vous est utile, pensez à lui laisser [une étoile sur GitHub](https://github.com/endNone/ClickPulse) 🌟
+Si ClickPulse vous est utile, pensez à lui laisser une étoile sur GitHub 🌟
 
 <p align="center"><a href="https://www.star-history.com/#endNone/ClickPulse&amp;Date"><img src="https://api.star-history.com/image?repos=endNone/ClickPulse&amp;type=Date" width="800" alt="Évolution des étoiles sur GitHub"></a></p>
 

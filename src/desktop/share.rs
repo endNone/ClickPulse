@@ -85,6 +85,8 @@ pub(super) fn save(
     encoded: &str,
     day: &str,
     title: &str,
+    period: clickpulse::report::Period,
+    start: Option<chrono::NaiveDate>,
 ) -> Result<bool> {
     let card = decode_card(encoded, day)?;
     // Validation uses the same decoded pixels as Copy; release them before the dialog.
@@ -94,7 +96,14 @@ pub(super) fn save(
         .set_parent(window)
         .set_title(title)
         .add_filter("PNG", &["png"])
-        .set_file_name(format!("ClickPulse-{day}.png"))
+        .set_file_name(if period == clickpulse::report::Period::Weekly {
+            match start {
+                Some(start) => format!("ClickPulse-Weekly-{start}_{day}.png"),
+                None => format!("ClickPulse-Weekly-{day}.png"),
+            }
+        } else {
+            format!("ClickPulse-{day}.png")
+        })
         .save_file()
     else {
         return Ok(false);
@@ -102,9 +111,27 @@ pub(super) fn save(
     write_card(&path, &card.png)?;
     Ok(true)
 }
+pub(super) fn open_shortcut_atlas() -> Result<()> {
+    clickpulse::platform::open_web_page("https://endnone.github.io/ClickPulse/")
+}
+
 pub(super) fn open_reference(source: &str) -> Result<()> {
     let url = match source {
         "apple" => "https://support.apple.com/en-us/102650",
+        "apple-screenshots" => "https://support.apple.com/en-us/102646",
+        "mac-guide" => {
+            "https://support.apple.com/guide/mac-help/intro-to-mac-keyboard-shortcuts-mchld6b9e240/mac"
+        }
+        "apple-safari" => {
+            "https://support.apple.com/guide/mac-help/browse-the-web-mchlgtd_web01/mac"
+        }
+        "ms-edge" => {
+            "https://support.microsoft.com/en-us/edge/keyboard-shortcuts-in-microsoft-edge"
+        }
+        "ms-game" => {
+            "https://support.microsoft.com/en-us/accessibility/windows/use-a-screen-reader-to-record-your-screen-with-xbox-game-bar"
+        }
+        "gnome-settings" => "https://help.gnome.org/gnome-help/keyboard-shortcuts-set.html",
         "windows" => {
             "https://support.microsoft.com/en-us/accessibility/windows/keyboard-shortcuts-in-windows"
         }

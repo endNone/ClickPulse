@@ -70,18 +70,20 @@ function createClickPulseKeyboard(platform='macos') {
   // normalize arbitrary code values: some ranges are old native/hash encodings.
   const characterAliases = k=>k.chars.flatMap(code=>code>=33&&code<=126?[code,code+0xfee0]:[code]);
   const byId = new Map(all.map(k => [k.id, k]));
+  const shortCount = new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:0});
   let numberLocale,formats;
   function compact(value,locale='en',short=false){
+    if(short)return shortCount.format(value).replace('K','k');
     if(numberLocale!==locale){
       numberLocale=locale;
-      formats={plain:new Intl.NumberFormat(locale),short:new Intl.NumberFormat(locale,{notation:'compact',maximumFractionDigits:0}),
+      formats={plain:new Intl.NumberFormat(locale),
         thousands:new Intl.NumberFormat(locale,{minimumFractionDigits:1,maximumFractionDigits:1}),
         millions:new Intl.NumberFormat(locale,{minimumFractionDigits:2,maximumFractionDigits:2})};
     }
-    return short?formats.short.format(value):value>=1000000?formats.millions.format(value/1000000)+'M':value>=10000?formats.thousands.format(value/1000)+'k':formats.plain.format(value);
+    return value>=1000000?formats.millions.format(value/1000000)+'M':value>=10000?formats.thousands.format(value/1000)+'k':formats.plain.format(value);
   }
 
-  function distribution(stats = {}, scope = 'history', layout = 'auto') {
+  function distribution(stats = {}, scope = 'history', layout = 'compact') {
     const totals = new Map(all.map(k => [k.id, 0]));
     let total = 0, mapped = 0;
     const allocate = (records, passes) => {
@@ -113,12 +115,13 @@ function createClickPulseKeyboard(platform='macos') {
     }
     const ranked = all.map(k => ({ ...k, count: totals.get(k.id) })).filter(k => k.count > 0).sort((a,b) => b.count-a.count || a.id.localeCompare(b.id));
     const arrowIds=['up','left','down','right'];
-    const navigationIds=['insert','help','home','pageup','delete','end','pagedown',...arrowIds];
-    const fullSize=layout==='full_size'||layout==='auto'&&ranked.some(k=>navigationIds.includes(k.id)||k.id.startsWith('num'));
+    const fullSize=layout==='full_size';
     const visibleIds=new Set(compactIds);
     const estimated=historical && [...(stats.history_before_fix||[]),...(stats.history_since_fix||[])].some(row=>Number(row.count)>0&&Number(row.code)<2**40);
     const systemIds=platform==='macos'?['f13','f14','f15']:['print-screen','scroll-lock','pause-break'];
-    const displayRows=rows.map(row=>row.filter(k=>!fullSize||!arrowIds.includes(k.id)&&!systemIds.includes(k.id)).map(k=>({...k,count:totals.get(k.id)})));
+    const navigationKey=platform==='macos'?'fn':'insert';
+    const clusterKeys=new Set([...arrowIds,...systemIds,navigationKey]);
+    const displayRows=rows.map(row=>row.filter(k=>!fullSize||!clusterKeys.has(k.id)).map(k=>({...k,count:totals.get(k.id)})));
     if(fullSize){
       const place=(id,zone,column,row,colSpan=1,rowSpan=1)=>{
         const k=byId.get(id);if(!k)return null;
@@ -128,7 +131,8 @@ function createClickPulseKeyboard(platform='macos') {
       const system=systemIds.map((id,i)=>place(id,'system',i+1,1)).filter(Boolean);
       if(system.length)displayRows.push(system);
       if(platform==='macos')displayRows.push(['f16','f17','f18','f19'].map((id,i)=>place(id,'numpad-function',i+1,1)));
-      const nav=[platform==='macos'?'help':'insert','home','pageup','delete','end','pagedown'].map((id,i)=>place(id,'navigation',i%3+1,Math.floor(i/3)+1));
+      const nav=[navigationKey,'home','pageup','delete','end','pagedown'].map((id,i)=>place(id,'navigation',i%3+1,Math.floor(i/3)+1));
+      if(platform==='macos')nav[0].label='fn';
       nav.push(place('up','navigation',2,4),place('left','navigation',1,5),place('down','navigation',2,5),place('right','navigation',3,5));
       displayRows.push(nav.filter(Boolean));
       const pad=[

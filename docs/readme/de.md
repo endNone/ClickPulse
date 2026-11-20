@@ -1,4 +1,4 @@
-<p align="center"><img src="../../assets/clickpulse-blue-cursor-v3.png" width="72" alt="ClickPulse"></p>
+<p align="center"><img src="../../assets/clickpulse-readme.svg" width="72" alt="ClickPulse"></p>
 
 <h1 align="center">ClickPulse</h1>
 
@@ -9,7 +9,7 @@
 <p align="center">ClickPulse ist eine Desktop-App, die deine Tastatur- und Mausaktivität offline als Tagesstatistik, Verlauf und Heatmap darstellt.</p>
 
 <p align="center">
-  <a href="#installation"><img src="../../assets/badges/preview.svg" height="24" alt="Pakete herunterladen"></a>
+  <a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2"><img src="../../assets/badges/preview.svg" height="24" alt="Pakete herunterladen"></a>
   <a href="../development.md"><img src="../../assets/badges/rust.svg" height="24" alt="Rust"></a>
   <a href="../../LICENSE"><img src="../../assets/badges/license.svg" height="24" alt="GPL-3.0-or-later"></a>
   <br>
@@ -18,11 +18,99 @@
   <a href="../install-linux.md"><img src="../../assets/badges/linux.svg" height="24" alt="Linux · Ubuntu 22.04 / 24.04"></a>
 </p>
 
-<p align="center"><a href="https://github.com/endNone/ClickPulse/releases/latest">Pakete herunterladen</a> · <a href="../development.md">Aus dem Quellcode bauen</a></p>
+<p align="center"><a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">v0.3.2</a> · <a href="../development.md">Aus dem Quellcode bauen</a> · <a href="https://endnone.github.io/ClickPulse/">Tastenkürzel-Lexikon</a></p>
 
 <p align="center">Deine Tastatur- und Mausstatistiken bleiben auf deinem Gerät. Kein Konto, keine Telemetrie.</p>
 
-<p align="center">Für die Update-Suche und den Download von Updates verbindet sich die App mit GitHub. Die automatische Suche kannst du in den Einstellungen ausschalten.</p>
+<p align="center">Für die Suche nach neuen Versionen und den Download von Updates verbindet sich die App mit GitHub. Die automatische Suche kannst du in den Einstellungen ausschalten.</p>
+
+## Funktionen
+
+- Erkenne im Kalender und im Aktivitätsverlauf, wann du besonders aktiv bist.
+- Sieh in der Heatmap und der Treemap, welche Tasten du am häufigsten verwendest.
+- Rufe im Verlauf die Aktivitäten eines beliebigen Tages auf.
+- Verschiebe deine Daten oder führe sie mit dem Verlauf eines anderen Computers zusammen.
+- Wähle aus vier Farbthemen und acht Sprachen und lege die Zeitzone für deine Statistik fest.
+
+## Installation
+
+- **macOS 12+** (Apple Silicon / Intel) · [DMG herunterladen](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Windows 10 / 11** (x64) · [Portable ZIP-Datei herunterladen](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+- **Linux** (Ubuntu 22.04 / 24.04) · [Linux-Paket herunterladen](https://github.com/endNone/ClickPulse/releases/tag/v0.3.2)
+
+### Installation mit Homebrew oder Scoop
+
+**macOS · Homebrew**
+
+```sh
+brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
+brew install --cask endnone/clickpulse/clickpulse
+```
+
+**Windows · Scoop**
+
+```powershell
+scoop bucket add clickpulse https://github.com/endNone/ClickPulse
+scoop install clickpulse
+```
+
+Die macOS-App ist nicht von Apple notarisiert, die Windows-App ist unsigniert. Das Betriebssystem kann den ersten Start blockieren.
+
+Installationsanleitungen · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
+
+## Mini-Modus
+
+Ein kleines schwebendes Fenster zeigt dir die aktuellen Zählerstände, während du in anderen Apps arbeitest.
+
+[![Mini-Modus](../images/mini-desktop-en.webp)](../images/mini-desktop-en.webp)
+
+## Sport-Modus
+
+Über die Blitz-Schaltfläche im Mini-Fenster aktivierst du Animationen, die auf dein Tipp- und Klicktempo reagieren.
+
+[![Sport-Modus](../images/sport-desktop-en.gif)](../images/sport-desktop-en.gif)
+
+## Überblick
+
+[![Überblick](../images/overview-en.jpg)](../images/overview-en.jpg)
+
+## Screenshots
+
+### Tastatur-Heatmap
+
+[![Tastatur-Heatmap](../images/keyboard-en.jpg)](../images/keyboard-en.jpg)
+
+### Klicks nach Maustaste
+
+[![Klicks nach Maustaste](../images/mouse-en.jpg)](../images/mouse-en.jpg)
+
+### Tastennutzung als Treemap
+
+[![Tastennutzung als Treemap](../images/treemap-en.jpg)](../images/treemap-en.jpg)
+
+### Verlauf
+
+[![Verlauf](../images/history-en.jpg)](../images/history-en.jpg)
+
+### Tastenkürzel-Statistik
+
+[![Tastenkürzel-Statistik](../images/shortcuts-en.jpg)](../images/shortcuts-en.jpg)
+
+### Tages- und Wochenberichte
+
+<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="Links der Tagesbericht mit Eingaben pro Stunde, rechts der Wochenbericht mit Eingaben pro Tag"></a></p>
+
+### Beispiele für KI-generierte Poster
+
+<p align="center">
+  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="Wochenbericht im Stil einer Tuschemalerei"></a>
+  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="Tagesbericht im Pop-Art-Stil"></a>
+</p>
+
+<p align="center">
+  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="Tagesbericht in Pixelgrafik"></a>
+  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="Wochenbericht im Bauhausstil"></a>
+</p>
 
 ## Downloadgröße und Speicherbedarf
 
@@ -46,75 +134,9 @@ Alle Desktop-Pakete von v0.3.1 sind kleiner als 7,3 MB. Beim Start im Hintergrun
 
 Median aus fünf Messungen für die App und ihre Oberflächenprozesse bei ausgeschalteter Eingabeaufzeichnung. Das Hauptfenster wurde auf Englisch angezeigt. Messgrößen waren der Physical Footprint unter macOS, USS unter Windows und PSS unter Ubuntu mit Software-Rendering. [Downloads und Messergebnisse für v0.3.1](https://github.com/endNone/ClickPulse/releases/tag/v0.3.1).
 
-## Überblick
-
-[![Überblick](../images/overview-en.jpg)](../images/overview-en.jpg)
-
-## Funktionen
-
-- Erkenne im Kalender und im Aktivitätsverlauf, wann du besonders aktiv bist.
-- Sieh in der Heatmap und der Treemap, welche Tasten du am häufigsten verwendest.
-- Rufe im Verlauf die Aktivitäten eines beliebigen Tages auf.
-- Verschiebe deine Daten oder führe sie mit dem Verlauf eines anderen Computers zusammen.
-- Wähle aus vier Farbthemen und acht Sprachen und lege die Zeitzone für deine Statistik fest.
-
-## Installation
-
-- **macOS 12+** (Apple Silicon / Intel) · [DMG herunterladen](https://github.com/endNone/ClickPulse/releases/latest)
-- **Windows 10 / 11** (x64) · [Portable ZIP-Datei herunterladen](https://github.com/endNone/ClickPulse/releases/latest)
-- **Linux** (Ubuntu 22.04 / 24.04) · [Linux-Paket herunterladen](https://github.com/endNone/ClickPulse/releases/latest)
-
-### Installation mit Homebrew oder Scoop
-
-**macOS · Homebrew**
-
-```sh
-brew tap endnone/clickpulse https://github.com/endNone/ClickPulse
-brew install --cask endnone/clickpulse/clickpulse
-```
-
-**Windows · Scoop**
-
-```powershell
-scoop bucket add clickpulse https://github.com/endNone/ClickPulse
-scoop install clickpulse
-```
-
-Die macOS-App ist nicht von Apple notarisiert, die Windows-App ist unsigniert. Das Betriebssystem kann den ersten Start blockieren.
-
-Installationsanleitungen · [macOS](../install-macos.md) · [Windows](../install-windows.md) · [Ubuntu](../install-linux.md)
-
-## Screenshots
-
-Alle Screenshots zeigen Beispieldaten.
-
-### Mini-Modus
-
-Ein kleines schwebendes Fenster zeigt dir die aktuellen Zählerstände, während du in anderen Apps arbeitest.
-
-[![Mini-Modus](../images/mini-desktop-en.webp)](../images/mini-desktop-en.webp)
-
-### Sport-Modus
-
-Über die Blitz-Schaltfläche im Mini-Fenster aktivierst du Animationen, die auf dein Tipp- und Klicktempo reagieren.
-
-[![Sport-Modus](../images/sport-desktop-en.gif)](../images/sport-desktop-en.gif)
-
-### Tastatur-Heatmap
-
-[![Tastatur-Heatmap](../images/keyboard-en.jpg)](../images/keyboard-en.jpg)
-
-### Tastennutzung als Treemap
-
-[![Tastennutzung als Treemap](../images/treemap-en.jpg)](../images/treemap-en.jpg)
-
-### Verlauf
-
-[![Verlauf](../images/history-en.jpg)](../images/history-en.jpg)
-
 ## Lizenz
 
-Der Code steht unter der [GPL-3.0-or-later](../../LICENSE). Ab v0.3.2 sind der Name ClickPulse und die Symbole von dieser Lizenz ausgenommen. Für sie gelten [zusätzliche Bedingungen](../../TRADEMARKS.md) gemäß Abschnitt 7(c) und 7(e) der GPLv3. Für frühere Versionen gelten die bei ihrer Veröffentlichung gültigen Bedingungen.
+Der Code steht unter der [GPL-3.0-or-later](../../LICENSE). Der Name ClickPulse und die Symbole sind von dieser Lizenz ausgenommen. Für sie gelten [zusätzliche Bedingungen](../../TRADEMARKS.md) gemäß Abschnitt 7(c) und 7(e) der GPLv3. Für frühere Versionen gelten die bei ihrer Veröffentlichung gültigen Bedingungen.
 
 ## Weitere Informationen
 
@@ -123,7 +145,7 @@ Der Code steht unter der [GPL-3.0-or-later](../../LICENSE). Ab v0.3.2 sind der N
 
 ## GitHub-Sterne im Zeitverlauf
 
-Wenn dir ClickPulse hilft, freuen wir uns über einen [Stern auf GitHub](https://github.com/endNone/ClickPulse) 🌟
+Wenn dir ClickPulse hilft, freuen wir uns über einen Stern auf GitHub 🌟
 
 <p align="center"><a href="https://www.star-history.com/#endNone/ClickPulse&amp;Date"><img src="https://api.star-history.com/image?repos=endNone/ClickPulse&amp;type=Date" width="800" alt="GitHub-Sterne im Zeitverlauf"></a></p>
 

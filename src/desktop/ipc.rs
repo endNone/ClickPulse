@@ -19,6 +19,9 @@ pub(super) enum Request {
     KeyboardLayout {
         layout: clickpulse::presentation::KeyboardLayout,
     },
+    KeyboardView {
+        view: clickpulse::presentation::KeyboardView,
+    },
     UiScale {
         scale: clickpulse::presentation::UiScale,
     },
@@ -33,6 +36,12 @@ pub(super) enum Request {
     UpdateRelease {},
     ProjectHome {},
     SendFeedback {},
+    SuggestShortcut {
+        platform: String,
+        modifiers: u8,
+        key: u32,
+    },
+    ShortcutAtlas {},
     ShortcutReference {
         source: String,
     },
@@ -42,6 +51,9 @@ pub(super) enum Request {
         day: String,
     },
     SaveShareCard {
+        #[serde(default)]
+        period: clickpulse::report::Period,
+        start: Option<chrono::NaiveDate>,
         png: String,
         day: String,
     },
@@ -182,7 +194,7 @@ mod tests {
 
     #[test]
     fn display_preferences_accept_only_supported_choices() {
-        for scale in ["auto", "100", "115", "130", "150"] {
+        for scale in ["auto", "80", "90", "100", "115", "130", "150"] {
             let body = serde_json::json!({"action":"ui_scale","scale":scale}).to_string();
             assert!(matches!(
                 serde_json::from_str::<Request>(&body).unwrap(),

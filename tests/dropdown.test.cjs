@@ -39,10 +39,11 @@ function fixture(){
   const add=(id,rows,value)=>{const select=document.createElement('select');select.id=id;select.value=value;select.setAttribute('aria-label',id);for(const[v,label]of rows){const option=document.createElement('option');option.value=v;option.textContent=label;select.append(option);}document.body.append(select);return select;};
   const history=add('history-range-select',[['all','All history'],['2026','2026']],'all');
   const themes=add('theme-select',[['blue','Blue'],['teal','Teal'],['violet','Violet'],['graphite','Graphite']],'blue');
-  document.querySelectorAll=()=>[history,themes];
+  const zones=add('timezone-select',[['system','System time zone'],['America/New_York','America/New York'],['Asia/Shanghai','Asia/Shanghai'],['Asia/Tokyo','Asia/Tokyo']],'Asia/Shanghai');
+  document.querySelectorAll=()=>[history,themes,zones];
   const winListeners={},window={innerWidth:800,innerHeight:500,Event:class{constructor(type,options){this.type=type;Object.assign(this,options);}},addEventListener(name,fn){(winListeners[name]||=[]).push(fn);},fire(name){for(const fn of winListeners[name]||[])fn();}};
-  const dropdowns=D.create(document,window);
-  return {document,window,history,themes,dropdowns,h:dropdowns.controllers.get(history.id),t:dropdowns.controllers.get(themes.id)};
+  const dropdowns=D.create(document,window,key=>key);
+  return {document,window,history,themes,zones,dropdowns,h:dropdowns.controllers.get(history.id),t:dropdowns.controllers.get(themes.id),z:dropdowns.controllers.get(zones.id)};
 }
 test('menus render inside the App with combobox/listbox semantics and no visible native select',()=>{
   const {history,h,document}=fixture();
@@ -175,4 +176,61 @@ test('typing a city finds an IANA time zone without its region prefix',()=>{
   themes.value='system';dropdowns.sync(themes);
   for(const key of 'shang')t.trigger.fire('keydown',{key});
   t.trigger.fire('keydown',{key:'Enter'});assert.equal(themes.value,'Asia/Shanghai');
+});
+
+test('timezone search filters without changing the setting until a match is chosen',()=>{
+  const {document,zones,z}=fixture();let changes=0;
+  zones.addEventListener('change',()=>changes++);
+  z.open();
+  const [search,list,empty]=z.menu.children;
+  const input=text=>{search.value=text;search.fire('input');};
+  const values=()=>list.children.map(item=>item.dataset.value);
+  assert.equal(document.activeElement,search);
+  assert.equal(search.getAttribute('aria-controls'),list.id);
+  input('aSiA');assert.deepEqual(values(),['Asia/Shanghai','Asia/Tokyo']);
+  search.fire('keydown',{key:'ArrowDown'});
+  assert.equal(search.getAttribute('aria-activedescendant'),list.children[1].id);
+  z.sync();assert.equal(search.value,'aSiA');
+  input('nothing matches');assert.deepEqual(values(),[]);assert.equal(empty.hidden,false);
+  search.fire('keydown',{key:'Enter'});assert.equal(z.menu.hidden,false);
+  assert.equal(zones.value,'Asia/Shanghai');assert.equal(changes,0);
+  input('york AMERICA');assert.deepEqual(values(),['America/New_York']);
+  search.fire('keydown',{key:'Enter',isComposing:true});assert.equal(changes,0);
+  search.fire('keydown',{key:'Enter'});assert.equal(zones.value,'America/New_York');assert.equal(changes,1);
+  assert.equal(document.activeElement,z.trigger);
+  z.trigger.fire('keydown',{key:'t'});assert.equal(search.value,'t');
+  input('shang');search.fire('keydown',{key:'Escape'});assert.equal(changes,1);
+  z.open();assert.equal(search.value,'');assert.equal(list.children.length,4);
+  input('tok');list.children[0].fire('click');assert.equal(zones.value,'Asia/Tokyo');
+});
+
+
+test('timezone filtering keeps the search field anchored and releases placement on close',()=>{
+  const {z,window}=fixture();
+  z.trigger.rect={left:470,top:351,bottom:383,width:140,height:32};
+  let measurements=0;
+  z.menu.getBoundingClientRect=()=>{
+    measurements++;
+    const count=z.menu.children[1].children.length;
+    return {width:count>1?318:224,height:48+count*34};
+  };
+  z.open();
+  const [search,list]=z.menu.children;
+  const geometry=()=>[z.menu.dataset.placement,z.menu.style.left,z.menu.style.width,z.menu.style.bottom];
+  const initial=geometry();
+  assert.equal(initial[0],'above');
+  for(const value of ['tok','missing','']){
+    search.value=value;search.fire('input');assert.deepEqual(geometry(),initial);
+    assert.equal(search.document.activeElement,search);
+  }
+  assert.equal(measurements,1);
+  const second=list.children[1],before=second.scrolls;
+  let writes=0;
+  const setAttribute=second.setAttribute.bind(second);
+  second.setAttribute=(key,value)=>{writes++;setAttribute(key,value);};
+  second.fire('pointermove');const firstMove=writes;assert(firstMove>0);
+  second.fire('pointermove');assert.equal(writes,firstMove);assert.equal(second.scrolls,before);
+  z.close();window.innerHeight=900;z.open();
+  assert.equal(z.menu.dataset.placement,'below');assert.equal(z.menu.style.bottom,'auto');
+  assert.equal(measurements,2);
 });

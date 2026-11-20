@@ -180,7 +180,7 @@ impl Drop for SportDelivery {
 }
 
 pub(crate) struct SnapshotDelivery {
-    share_day: Option<chrono::NaiveDate>,
+    report_selection: Option<crate::report::Selection>,
     include_shortcuts: bool,
     timezone: crate::timezone::TimeZonePreference,
     today_period: TodayPeriod,
@@ -500,14 +500,14 @@ impl Runtime {
         ));
     }
 
-    /// Share cards request only the selected day's leading chord, never the full ranking.
+    /// Load hourly aggregates and the five leading chords only for the selected report.
     pub fn request_share_snapshot(
         &self,
         timezone: crate::timezone::TimeZonePreference,
-        day: chrono::NaiveDate,
+        day: impl Into<crate::report::Selection>,
         reply: impl FnOnce(Result<String>) + Send + 'static,
     ) -> Result<()> {
-        self.queue_snapshot(timezone, None, false, Some(day), reply)
+        self.queue_snapshot(timezone, None, false, Some(day.into()), reply)
     }
 
     pub fn request_mini_snapshot(
@@ -524,11 +524,11 @@ impl Runtime {
         timezone: crate::timezone::TimeZonePreference,
         mini: Option<TodayPeriod>,
         include_shortcuts: bool,
-        share_day: Option<chrono::NaiveDate>,
+        report_selection: Option<crate::report::Selection>,
         reply: impl FnOnce(Result<String>) + Send + 'static,
     ) -> Result<()> {
         let delivery = SnapshotDelivery {
-            share_day,
+            report_selection,
             include_shortcuts,
             timezone,
             today_period: mini.unwrap_or_default(),
@@ -828,9 +828,9 @@ fn source_loop_inner(
                 }
                 let result = result.and_then(|mut stats| {
                     if let Command::SnapshotAsync(delivery) = &command
-                        && let Some(day) = delivery.share_day
+                        && let Some(selection) = delivery.report_selection
                     {
-                        stats.share_shortcut = Some(reader()?.share_shortcut(day)?);
+                        stats.report = Some(reader()?.report(selection, delivery.timezone)?);
                     }
                     Ok(stats)
                 });
@@ -930,10 +930,14 @@ impl Storage {
             Self::App(db) => db.snapshot_for_view(now, zone, include_shortcuts),
         }
     }
-    fn share_shortcut(&self, day: chrono::NaiveDate) -> Result<crate::shortcuts::DailyTop> {
+    fn report(
+        &self,
+        selection: crate::report::Selection,
+        zone: crate::timezone::TimeZonePreference,
+    ) -> Result<crate::report::Report> {
         match self {
-            Self::Independent(db) => db.share_shortcut(day),
-            Self::App(db) => db.share_shortcut(day),
+            Self::Independent(db) => db.report(selection, zone),
+            Self::App(db) => db.report(selection, zone),
         }
     }
     fn prune_rolling_cache(&mut self, now: i64) -> Result<()> {
@@ -1123,8 +1127,8 @@ impl StorageWorker {
                 let result = db
                     .snapshot_for_view(Local::now(), delivery.timezone, delivery.include_shortcuts)
                     .and_then(|mut stats| {
-                        if let Some(day) = delivery.share_day {
-                            stats.share_shortcut = Some(db.share_shortcut(day)?);
+                        if let Some(selection) = delivery.report_selection {
+                            stats.report = Some(db.report(selection, delivery.timezone)?);
                         }
                         Ok(stats)
                     });
@@ -2524,7 +2528,7 @@ mod tests {
         ] {
             let (reply, result) = bounded(1);
             tx.send(Command::SnapshotAsync(SnapshotDelivery {
-                share_day,
+                report_selection: share_day.map(Into::into),
                 include_shortcuts,
                 timezone: Default::default(),
                 today_period: Default::default(),
@@ -2546,13 +2550,13 @@ mod tests {
                     .unwrap(),
             )
             .unwrap();
-            assert_eq!(value.get("share_shortcut").is_some(), share_day.is_some());
+            assert_eq!(value.get("report").is_some(), share_day.is_some());
             if let Some(day) = share_day {
-                assert_eq!(value["share_shortcut"]["day"], day.to_string());
+                assert_eq!(value["report"]["day"], day.to_string());
                 if day == today {
-                    assert_eq!(value["share_shortcut"]["top"]["count"], 1);
+                    assert_eq!(value["report"]["ranking"][0]["count"], 1);
                 } else {
-                    assert!(value["share_shortcut"]["top"].is_null());
+                    assert!(value["report"]["ranking"].as_array().unwrap().is_empty());
                 }
             }
             assert_eq!(value.get("shortcuts").is_some(), include_shortcuts);
@@ -2621,11 +2625,11 @@ mod tests {
                 )
                 .unwrap();
                 assert!(value.get("shortcuts").is_none());
-                assert_eq!(value["share_shortcut"]["day"], day.to_string());
+                assert_eq!(value["report"]["day"], day.to_string());
                 if day == today {
-                    assert_eq!(value["share_shortcut"]["top"]["count"], 1);
+                    assert_eq!(value["report"]["ranking"][0]["count"], 1);
                 } else {
-                    assert!(value["share_shortcut"]["top"].is_null());
+                    assert!(value["report"]["ranking"].as_array().unwrap().is_empty());
                 }
             }
             let (tx, rx) = bounded(1);
@@ -2637,7 +2641,7 @@ mod tests {
             let value: serde_json::Value =
                 serde_json::from_str(&rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap())
                     .unwrap();
-            assert!(value.get("share_shortcut").is_none());
+            assert!(value.get("report").is_none());
             runtime.shutdown().unwrap();
         }
     }
@@ -2731,7 +2735,7 @@ mod tests {
             .unwrap();
         let value: serde_json::Value =
             serde_json::from_str(&receive.recv().unwrap().unwrap()).unwrap();
-        assert_eq!(value["share_shortcut"]["top"]["count"], 1);
+        assert_eq!(value["report"]["ranking"][0]["count"], 1);
         runtime.set_paused(false);
         assert_eq!(runtime.snapshot().unwrap().stats.lifetime.total(), 3);
         runtime.shutdown().unwrap();

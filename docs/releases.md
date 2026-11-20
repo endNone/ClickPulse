@@ -26,7 +26,7 @@ Icons use the version tag, or an explicit immutable `artwork_revision` for a pre
 | **Packages** | Manual run, or Release candidate | Checks and all five platform builds run in parallel; packages are saved as Actions artifacts |
 | **Release candidate** | Push a `vX.Y.Z` tag, or manually select an existing tag | Validate versions, run Packages, verify all assets, assemble corresponding source and retain a candidate artifact |
 
-Checks is reused by the other workflows. Packaging starts alongside checks, but release assembly waits for both to succeed. Failed or cancelled checks prevent a verified release candidate even if package artifacts are available. Every release stage uses the exact tagged commit. All workflow jobs have read-only repository access. The built-in GitHub token is used only for read access, with no personal token stored in Actions. Signing certificates are not configured.
+Checks is reused by the other workflows. Packaging starts alongside checks, but release assembly waits for both to succeed. Failed or cancelled checks prevent a verified release candidate even if package artifacts are available. Every release stage uses the exact tagged commit. All workflow jobs have read-only repository access. The built-in GitHub token is used only for read access, with no personal token stored in Actions. Mac release packages require the pinned project signing certificate.
 
 Actions artifacts are retained for **14 days**; Release attachments are separate. Current targets are Apple Silicon, Intel Mac, Windows x64, Ubuntu x64 and Ubuntu ARM64. Linux packages are built on Ubuntu 22.04 for compatibility with 22.04 and 24.04. No Windows ARM package is generated.
 
@@ -107,7 +107,7 @@ Windows builds produce the portable ZIP. Release assembly uses an explicit asset
 
 Build and integrity results do not certify window appearance, DPI, physical input, login startup, upgrades or actual process exit. Those still need native checks. No workflow operates a personal Windows machine or reads local statistics.
 
-The Mac preview remains ad-hoc signed without notarization; Windows packages remain unsigned. Installation notes explain manual authorization. Daily and manual checks are included. From 0.3.1, ordinary installations download updates automatically and wait for confirmation in Settings before installation and restart.
+Public Mac packages from 0.3.2 use the project's fixed self-signed certificate without notarization; Windows packages remain unsigned. Installation notes explain manual authorization. Daily and manual checks are included. From 0.3.1, ordinary installations download updates automatically and wait for confirmation in Settings before installation and restart.
 
 
 For upcoming releases, the source archive also includes `TRADEMARKS.md`, `Casks/` and `bucket/` so its links and distribution tests remain usable. Do not add new top-level files to binary packages that older updaters would reject. Packaging retains separate matching debug symbols outside the downloadable payloads; required symbol tools are checked before building. `--skip-build` packages the supplied binary unchanged and does not claim separate symbol coverage.

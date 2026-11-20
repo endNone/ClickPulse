@@ -1,6 +1,6 @@
 [package]
 name = "clickpulse"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 description = "Local keyboard and mouse activity statistics"
 license = "GPL-3.0-or-later"
@@ -22,6 +22,7 @@ crossbeam-channel = "0.5"
 chrono-tz = "0.10"
 iana-time-zone = "0.1"
 ureq = "3.5.1"
+url = "2"
 sha2 = "0.10"
 semver = "1"
 tempfile = "3"
@@ -41,6 +42,7 @@ arboard = { version = "3.6", default-features = false, features = ["image-data"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
+core-foundation-sys = "0.8"
 core-graphics = "0.25"
 dispatch2 = "0.3.1"
 objc2 = "0.6"

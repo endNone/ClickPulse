@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,11 +26,16 @@ class ReleaseTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)/'source'
         (self.root/'assets/windows').mkdir(parents=True)
+        # Synthetic payloads exercise the shared release pipeline on every OS.
+        verifier = patch.object(release.macos_signing, 'verify_packages')
+        self.verify_mac = verifier.start()
+        self.addCleanup(verifier.stop)
         (self.root/'Cargo.toml').write_text('[package]\nname="clickpulse"\nversion="0.1.0"\nlicense="GPL-3.0-or-later"\n')
         (self.root/'Cargo.lock').write_text('version=4\n[[package]]\nname="clickpulse"\nversion="0.1.0"\n')
         (self.root/'assets/Info.plist').write_bytes(plistlib.dumps({'CFBundleShortVersionString':'0.1.0', 'CFBundleVersion':'45'}))
         (self.root/'assets/windows/app.rc').write_text('FILEVERSION 0,1,0,45\nPRODUCTVERSION 0,1,0,0\nVALUE "FileVersion", "0.1.0.45"\nVALUE "ProductVersion", "0.1.0"\n')
         (self.root/'assets/windows/ClickPulse.manifest').write_text('<assembly xmlns="urn:schemas-microsoft-com:asm.v1"><assemblyIdentity name="ClickPulse.Desktop" version="0.1.0.0"/></assembly>')
+        (self.root/'assets/macos-signing.json').write_bytes((ROOT/'assets/macos-signing.json').read_bytes())
         (self.root/'LICENSE').write_bytes(b'GPL license fixture\n')
         (self.root/'.gitattributes').write_bytes((ROOT/'.gitattributes').read_bytes())
         self.packages = Path(self.temporary.name)/'packages'
@@ -247,12 +253,25 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(corrected, notes.replace('/blob/v1.2.3/assets/', '/blob/'+('b'*40)+'/assets/'))
         with self.assertRaisesRegex(ValueError, 'Artwork revision'):
             release.release_notes('1.2.3', 'fixture/RenamedApp', REVISION, artwork_revision='main')
+        self.assertNotIn('fixed self-signed certificate', release.release_notes('0.3.1', 'fixture/RenamedApp', REVISION))
+        self.assertIn('fixed self-signed certificate', release.release_notes('0.3.2', 'fixture/RenamedApp', REVISION))
 
     def test_private_release_explains_repository_access(self):
         private = release.release_notes('0.1.0', 'fixture/ClickPulse', REVISION, private=True)
         public = release.release_notes('0.1.0', 'fixture/ClickPulse', REVISION)
         self.assertIn('requires a GitHub account with repository access', private)
         self.assertNotIn('requires a GitHub account with repository access', public)
+
+    def test_prepare_requires_native_signatures_from_both_mac_archives(self):
+        self.candidate()
+        self.verify_mac.side_effect = [None, ValueError('Unexpected Mac designated requirement.')]
+        with self.assertRaisesRegex(ValueError, 'designated requirement'):
+            self.prepare()
+        self.assertEqual([call.args[0].name for call in self.verify_mac.call_args_list],
+                         ['ClickPulse-0.1.0-macos-arm64.zip', 'ClickPulse-0.1.0-macos-x64.zip'])
+        for call in self.verify_mac.call_args_list:
+            self.assertEqual(call.args[0].with_suffix('.dmg'), call.args[1])
+        self.assertFalse(self.output.exists())
 
     def test_missing_or_wrong_architecture_intel_package_prevents_a_release(self):
         self.candidate()
