@@ -3,7 +3,15 @@ name: Checks
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/readme/*.md'
+      - 'docs/images/**'
   pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'docs/readme/*.md'
+      - 'docs/images/**'
   workflow_dispatch:
   workflow_call:
     inputs:
