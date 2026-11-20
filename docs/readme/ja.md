@@ -141,4 +141,4 @@ ClickPulse が役に立ったら、GitHub でスターを付けていただけ�
 
 ## 謝辞
 
-ClickPulse を試し、感想や改善案を寄せてくださった [Appinn（小众软件）コミュニティ](https://meta.appinn.net/t/topic/95871/16)の皆さんに感謝します。
+ClickPulse を試し、感想や改善案を寄せてくださった [Appinn（小众软件）](https://meta.appinn.net/t/topic/95871/16)と [LINUX DO](https://linux.do/) のコミュニティの皆さんに感謝します。

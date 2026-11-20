@@ -141,4 +141,4 @@ v0.3.1 各平台的桌面安装包均小于 7.3 MB。在三个测试系统上，
 
 ## 致谢
 
-感谢[小众软件社区](https://meta.appinn.net/t/topic/95871/16)的朋友们试用 ClickPulse，分享使用感受和改进建议。
+感谢[小众软件社区](https://meta.appinn.net/t/topic/95871/16)和 [LINUX DO](https://linux.do/) 社区的朋友们试用 ClickPulse，分享使用感受和改进建议。

@@ -141,4 +141,4 @@ v0.3.1 各平台的桌面版下載檔都小於 7.3 MB。在三個測試系統上
 
 ## 致謝
 
-感謝[小众软件社群](https://meta.appinn.net/t/topic/95871/16)的朋友們試用 ClickPulse，分享使用心得與改進建議。
+感謝[小众软件社群](https://meta.appinn.net/t/topic/95871/16)和 [LINUX DO](https://linux.do/) 社群的朋友們試用 ClickPulse，分享使用心得與改進建議。

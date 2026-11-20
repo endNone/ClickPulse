@@ -141,4 +141,4 @@ ClickPulse가 유용했다면 GitHub에서 별표를 남겨 주세요 🌟
 
 ## 감사의 말
 
-ClickPulse를 사용해 보고 소감과 개선 의견을 나눠 주신 [Appinn(小众软件) 커뮤니티](https://meta.appinn.net/t/topic/95871/16) 여러분께 감사드립니다.
+ClickPulse를 사용해 보고 소감과 개선 의견을 나눠 주신 [Appinn(小众软件)](https://meta.appinn.net/t/topic/95871/16)과 [LINUX DO](https://linux.do/) 커뮤니티 여러분께 감사드립니다.

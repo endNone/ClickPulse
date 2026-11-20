@@ -141,4 +141,4 @@ Si ClickPulse vous est utile, pensez à lui laisser une étoile sur GitHub 🌟
 
 ## Remerciements
 
-Merci à la [communauté Appinn (小众软件)](https://meta.appinn.net/t/topic/95871/16) d’avoir essayé ClickPulse et partagé ses impressions et ses suggestions.
+Merci aux communautés [Appinn (小众软件)](https://meta.appinn.net/t/topic/95871/16) et [LINUX DO](https://linux.do/) d’avoir essayé ClickPulse et partagé leurs impressions et leurs suggestions.
