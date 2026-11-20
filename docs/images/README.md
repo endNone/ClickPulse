@@ -32,6 +32,13 @@ Open `http://127.0.0.1:8768/?locale=en` in a browser. The preview defaults to En
 
 Wait for `data-preview-ready="true"` and `document.fonts.ready`. For the overview, use a 1280-pixel logical viewport at 2× device density. Extend the viewport to the content height and capture the full page so the sidebar reaches the bottom.
 
+The browser capture omits the three window buttons that macOS draws beside the sidebar toggle. For a new Overview capture with the same scale and blue sidebar, carry over the native controls from the current screenshot:
+
+```bash
+jpegtran -crop 160x64+0+0 docs/images/overview-en.jpg > dist/readme-preview/window-controls.jpg
+jpegtran -trim -drop +0+0 dist/readme-preview/window-controls.jpg dist/readme-preview/overview-en.jpg > docs/images/overview-en.jpg
+```
+
 For the full-size keyboard, use `?locale=en&page=keys&layout=full_size` and a 1440-pixel logical viewport so the entire number pad fits. Capture the keyboard, mouse and treemap cards individually. For history, include the daily chart and hourly scatter plot through its range selector. For shortcuts, capture the dashboard. For the reports, open `?locale=en&page=share&timezone=UTC` and use **Save PNG** for both periods. Use Blue for Daily and Ink for Weekly. Keep October 8, 2026 as the last day for both exports and use the default seven-day week. Place the complete Daily image on the left and Weekly on the right at their original sizes.
 
 The Settings screen appears only in the installation guide, not the README showcase.
