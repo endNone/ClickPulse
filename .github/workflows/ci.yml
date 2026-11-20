@@ -39,7 +39,8 @@ jobs:
       matrix:
         os: [macos-15, macos-15-intel, windows-2025, ubuntu-22.04, ubuntu-24.04, ubuntu-22.04-arm]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Leave time for tests and compilation when the Ubuntu 22.04 x64 mirror is slow.
+    timeout-minutes: ${{ matrix.os == 'ubuntu-22.04' && 60 || 30 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
