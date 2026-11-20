@@ -18,7 +18,7 @@
   <a href="../install-linux.md"><img src="../../assets/badges/linux.svg" height="24" alt="Linux · Ubuntu 22.04 / 24.04"></a>
 </p>
 
-<p align="center"><a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">v0.3.2</a> · <a href="../development.md">Compiler depuis les sources</a> · <a href="https://endnone.github.io/ClickPulse/">Encyclopédie des raccourcis</a></p>
+<p align="center"><strong><a href="#installation">Installation</a></strong> · <a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">Télécharger v0.3.2</a> · <a href="../development.md">Compiler depuis les sources</a> · <a href="https://endnone.github.io/ClickPulse/">Encyclopédie des raccourcis</a></p>
 
 <p align="center">Vos statistiques de frappe et de clic restent sur votre appareil. Aucun compte, aucune télémétrie.</p>
 

@@ -18,7 +18,7 @@
   <a href="../install-linux.md"><img src="../../assets/badges/linux.svg" height="24" alt="Linux · Ubuntu 22.04 / 24.04"></a>
 </p>
 
-<p align="center"><a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">v0.3.2</a> · <a href="../development.md">從原始碼建置</a> · <a href="https://endnone.github.io/ClickPulse/">快捷鍵百科</a></p>
+<p align="center"><strong><a href="#安裝">安裝</a></strong> · <a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">下載 v0.3.2</a> · <a href="../development.md">從原始碼建置</a> · <a href="https://endnone.github.io/ClickPulse/">快捷鍵百科</a></p>
 
 <p align="center">按鍵與點擊統計只儲存在你的裝置上，無須帳號，也不收集遙測資料。</p>
 

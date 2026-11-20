@@ -18,7 +18,7 @@
   <a href="../install-linux.md"><img src="../../assets/badges/linux.svg" height="24" alt="Linux · Ubuntu 22.04 / 24.04"></a>
 </p>
 
-<p align="center"><a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">v0.3.2</a> · <a href="../development.md">ソースからビルド</a> · <a href="https://endnone.github.io/ClickPulse/">ショートカット事典</a></p>
+<p align="center"><strong><a href="#インストール">インストール</a></strong> · <a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">v0.3.2 をダウンロード</a> · <a href="../development.md">ソースからビルド</a> · <a href="https://endnone.github.io/ClickPulse/">ショートカット事典</a></p>
 
 <p align="center">キー入力とクリックの統計は端末内に保存されます。アカウント登録は不要で、テレメトリも収集しません。</p>
 

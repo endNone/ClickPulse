@@ -18,7 +18,7 @@
   <a href="docs/install-linux.md"><img src="assets/badges/linux.svg" height="24" alt="Linux: Ubuntu 22.04 / 24.04"></a>
 </p>
 
-<p align="center"><a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">v0.3.2</a> · <a href="docs/development.md">Build from source</a> · <a href="https://endnone.github.io/ClickPulse/">Shortcut encyclopedia</a></p>
+<p align="center"><strong><a href="#install">Install</a></strong> · <a href="https://github.com/endNone/ClickPulse/releases/tag/v0.3.2">Download v0.3.2</a> · <a href="docs/development.md">Build from source</a> · <a href="https://endnone.github.io/ClickPulse/">Shortcut Atlas</a></p>
 
 
 <p align="center">Your key and click statistics stay on your device.<br>No account, no telemetry.</p>
