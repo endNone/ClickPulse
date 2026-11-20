@@ -38,6 +38,22 @@
 
 [![概览](../images/overview-en.jpg)](../images/overview-en.jpg)
 
+### 每日与每周活动报告
+
+<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="左侧日报按小时展示输入次数，右侧周报按天展示输入次数"></a></p>
+
+### AI 海报示例
+
+<p align="center">
+  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="水墨风周报"></a>
+  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="波普风日报"></a>
+</p>
+
+<p align="center">
+  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="像素风日报"></a>
+  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="包豪斯风周报"></a>
+</p>
+
 ## 截图
 
 ### 键盘热力图
@@ -59,22 +75,6 @@
 ### 快捷键统计
 
 [![快捷键统计](../images/shortcuts-en.jpg)](../images/shortcuts-en.jpg)
-
-### 每日与每周活动报告
-
-<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="左侧日报按小时展示输入次数，右侧周报按天展示输入次数"></a></p>
-
-### AI 海报示例
-
-<p align="center">
-  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="水墨风周报"></a>
-  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="波普风日报"></a>
-</p>
-
-<p align="center">
-  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="像素风日报"></a>
-  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="包豪斯风周报"></a>
-</p>
 
 ## 安装
 

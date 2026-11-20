@@ -38,6 +38,22 @@ Mini ウィンドウの稲妻ボタンを押すと、入力やクリックの速
 
 [![概要](../images/overview-en.jpg)](../images/overview-en.jpg)
 
+### 日次・週次アクティビティレポート
+
+<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="左は時間別の入力回数を示す日次レポート、右は日別の入力回数を示す週次レポート"></a></p>
+
+### AI 生成ポスターの例
+
+<p align="center">
+  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="水墨画風の週間レポート"></a>
+  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="ポップアート風の日次レポート"></a>
+</p>
+
+<p align="center">
+  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="ドット絵風の日次レポート"></a>
+  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="バウハウス風の週間レポート"></a>
+</p>
+
 ## スクリーンショット
 
 ### キーボードヒートマップ
@@ -59,22 +75,6 @@ Mini ウィンドウの稲妻ボタンを押すと、入力やクリックの速
 ### ショートカットの使用統計
 
 [![ショートカットの使用統計](../images/shortcuts-en.jpg)](../images/shortcuts-en.jpg)
-
-### 日次・週次アクティビティレポート
-
-<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="左は時間別の入力回数を示す日次レポート、右は日別の入力回数を示す週次レポート"></a></p>
-
-### AI 生成ポスターの例
-
-<p align="center">
-  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="水墨画風の週間レポート"></a>
-  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="ポップアート風の日次レポート"></a>
-</p>
-
-<p align="center">
-  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="ドット絵風の日次レポート"></a>
-  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="バウハウス風の週間レポート"></a>
-</p>
 
 ## インストール
 

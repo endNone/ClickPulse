@@ -38,6 +38,22 @@ Ein kleines schwebendes Fenster zeigt dir die aktuellen Zählerstände, während
 
 [![Überblick](../images/overview-en.jpg)](../images/overview-en.jpg)
 
+### Tages- und Wochenberichte
+
+<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="Links der Tagesbericht mit Eingaben pro Stunde, rechts der Wochenbericht mit Eingaben pro Tag"></a></p>
+
+### Beispiele für KI-generierte Poster
+
+<p align="center">
+  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="Wochenbericht im Stil einer Tuschemalerei"></a>
+  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="Tagesbericht im Pop-Art-Stil"></a>
+</p>
+
+<p align="center">
+  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="Tagesbericht in Pixelgrafik"></a>
+  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="Wochenbericht im Bauhausstil"></a>
+</p>
+
 ## Screenshots
 
 ### Tastatur-Heatmap
@@ -59,22 +75,6 @@ Ein kleines schwebendes Fenster zeigt dir die aktuellen Zählerstände, während
 ### Tastenkürzel-Statistik
 
 [![Tastenkürzel-Statistik](../images/shortcuts-en.jpg)](../images/shortcuts-en.jpg)
-
-### Tages- und Wochenberichte
-
-<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="Links der Tagesbericht mit Eingaben pro Stunde, rechts der Wochenbericht mit Eingaben pro Tag"></a></p>
-
-### Beispiele für KI-generierte Poster
-
-<p align="center">
-  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="Wochenbericht im Stil einer Tuschemalerei"></a>
-  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="Tagesbericht im Pop-Art-Stil"></a>
-</p>
-
-<p align="center">
-  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="Tagesbericht in Pixelgrafik"></a>
-  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="Wochenbericht im Bauhausstil"></a>
-</p>
 
 ## Installation
 

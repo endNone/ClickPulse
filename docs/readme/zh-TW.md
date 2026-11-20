@@ -38,6 +38,22 @@
 
 [![總覽](../images/overview-en.jpg)](../images/overview-en.jpg)
 
+### 每日與每週活動報告
+
+<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="左側日報依小時顯示輸入次數，右側週報依日期顯示輸入次數"></a></p>
+
+### AI 海報範例
+
+<p align="center">
+  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="水墨風週報"></a>
+  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="普普風日報"></a>
+</p>
+
+<p align="center">
+  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="像素風日報"></a>
+  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="包浩斯風週報"></a>
+</p>
+
 ## 畫面截圖
 
 ### 鍵盤熱度圖
@@ -59,22 +75,6 @@
 ### 快速鍵統計
 
 [![快速鍵統計](../images/shortcuts-en.jpg)](../images/shortcuts-en.jpg)
-
-### 每日與每週活動報告
-
-<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="左側日報依小時顯示輸入次數，右側週報依日期顯示輸入次數"></a></p>
-
-### AI 海報範例
-
-<p align="center">
-  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="水墨風週報"></a>
-  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="普普風日報"></a>
-</p>
-
-<p align="center">
-  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="像素風日報"></a>
-  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="包浩斯風週報"></a>
-</p>
 
 ## 安裝
 

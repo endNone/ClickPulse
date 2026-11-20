@@ -38,6 +38,22 @@ Mini 창의 번개 버튼을 누르면 타이핑이나 클릭 속도에 반응�
 
 [![개요](../images/overview-en.jpg)](../images/overview-en.jpg)
 
+### 일간 및 주간 활동 보고서
+
+<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="왼쪽은 시간대별 입력 횟수를 보여 주는 일간 보고서, 오른쪽은 날짜별 입력 횟수를 보여 주는 주간 보고서"></a></p>
+
+### AI 생성 포스터 예시
+
+<p align="center">
+  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="수묵화풍 주간 보고서"></a>
+  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="팝아트풍 일간 보고서"></a>
+</p>
+
+<p align="center">
+  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="픽셀 아트풍 일간 보고서"></a>
+  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="바우하우스풍 주간 보고서"></a>
+</p>
+
 ## 스크린샷
 
 ### 키보드 히트맵
@@ -59,22 +75,6 @@ Mini 창의 번개 버튼을 누르면 타이핑이나 클릭 속도에 반응�
 ### 단축키 사용 통계
 
 [![단축키 사용 통계](../images/shortcuts-en.jpg)](../images/shortcuts-en.jpg)
-
-### 일간 및 주간 활동 보고서
-
-<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="왼쪽은 시간대별 입력 횟수를 보여 주는 일간 보고서, 오른쪽은 날짜별 입력 횟수를 보여 주는 주간 보고서"></a></p>
-
-### AI 생성 포스터 예시
-
-<p align="center">
-  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="수묵화풍 주간 보고서"></a>
-  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="팝아트풍 일간 보고서"></a>
-</p>
-
-<p align="center">
-  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="픽셀 아트풍 일간 보고서"></a>
-  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="바우하우스풍 주간 보고서"></a>
-</p>
 
 ## 설치
 

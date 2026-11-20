@@ -38,6 +38,22 @@ Le bouton en forme d’éclair de la fenêtre Mini active des animations qui ré
 
 [![Vue d’ensemble](../images/overview-en.jpg)](../images/overview-en.jpg)
 
+### Rapports d’activité quotidiens et hebdomadaires
+
+<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="À gauche, les saisies par heure dans le rapport quotidien. À droite, les saisies par jour dans le rapport hebdomadaire."></a></p>
+
+### Exemples d’affiches générées par IA
+
+<p align="center">
+  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="Rapport hebdomadaire au lavis"></a>
+  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="Rapport quotidien pop art"></a>
+</p>
+
+<p align="center">
+  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="Rapport quotidien en pixel art"></a>
+  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="Rapport hebdomadaire de style Bauhaus"></a>
+</p>
+
 ## Captures d’écran
 
 ### Carte de chaleur du clavier
@@ -59,22 +75,6 @@ Le bouton en forme d’éclair de la fenêtre Mini active des animations qui ré
 ### Statistiques des raccourcis clavier
 
 [![Statistiques des raccourcis clavier](../images/shortcuts-en.jpg)](../images/shortcuts-en.jpg)
-
-### Rapports d’activité quotidiens et hebdomadaires
-
-<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="À gauche, les saisies par heure dans le rapport quotidien. À droite, les saisies par jour dans le rapport hebdomadaire."></a></p>
-
-### Exemples d’affiches générées par IA
-
-<p align="center">
-  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="Rapport hebdomadaire au lavis"></a>
-  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="Rapport quotidien pop art"></a>
-</p>
-
-<p align="center">
-  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="Rapport quotidien en pixel art"></a>
-  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="Rapport hebdomadaire de style Bauhaus"></a>
-</p>
 
 ## Installation
 

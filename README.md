@@ -39,6 +39,22 @@ Optional effects in Mini mode react to your typing and clicking speed. Enable th
 
 [![Overview](docs/images/overview-en.jpg)](docs/images/overview-en.jpg)
 
+### Daily & weekly activity reports
+
+<p align="center"><a href="docs/images/report-en.png"><img src="docs/images/report-en.png" width="960" alt="Daily report with hourly inputs on the left and weekly report with daily inputs on the right"></a></p>
+
+### AI poster examples
+
+<p align="center">
+  <a href="docs/images/poster-weekly-ink.webp"><img src="docs/images/poster-weekly-ink.webp" width="48%" alt="Ink-wash weekly report"></a>
+  <a href="docs/images/poster-daily-pop.webp"><img src="docs/images/poster-daily-pop.webp" width="48%" alt="Pop art daily report"></a>
+</p>
+
+<p align="center">
+  <a href="docs/images/poster-daily-arcade.webp"><img src="docs/images/poster-daily-arcade.webp" width="48%" alt="Pixel art daily report"></a>
+  <a href="docs/images/poster-weekly-bauhaus.webp"><img src="docs/images/poster-weekly-bauhaus.webp" width="48%" alt="Bauhaus-style weekly report"></a>
+</p>
+
 ## Screenshots
 
 ### Keyboard heatmap
@@ -60,22 +76,6 @@ Optional effects in Mini mode react to your typing and clicking speed. Enable th
 ### Shortcut statistics
 
 [![Shortcut statistics](docs/images/shortcuts-en.jpg)](docs/images/shortcuts-en.jpg)
-
-### Daily & weekly activity reports
-
-<p align="center"><a href="docs/images/report-en.png"><img src="docs/images/report-en.png" width="960" alt="Daily report with hourly inputs on the left and weekly report with daily inputs on the right"></a></p>
-
-### AI poster examples
-
-<p align="center">
-  <a href="docs/images/poster-weekly-ink.webp"><img src="docs/images/poster-weekly-ink.webp" width="48%" alt="Ink-wash weekly report"></a>
-  <a href="docs/images/poster-daily-pop.webp"><img src="docs/images/poster-daily-pop.webp" width="48%" alt="Pop art daily report"></a>
-</p>
-
-<p align="center">
-  <a href="docs/images/poster-daily-arcade.webp"><img src="docs/images/poster-daily-arcade.webp" width="48%" alt="Pixel art daily report"></a>
-  <a href="docs/images/poster-weekly-bauhaus.webp"><img src="docs/images/poster-weekly-bauhaus.webp" width="48%" alt="Bauhaus-style weekly report"></a>
-</p>
 
 ## Install
 

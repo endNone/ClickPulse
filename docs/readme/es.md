@@ -38,6 +38,22 @@ Pulsa el botón con el rayo en la ventana Mini para activar animaciones que resp
 
 [![Vista general](../images/overview-en.jpg)](../images/overview-en.jpg)
 
+### Informes de actividad diarios y semanales
+
+<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="A la izquierda, las entradas por hora en el informe diario. A la derecha, las entradas por día en el informe semanal."></a></p>
+
+### Ejemplos de carteles generados con IA
+
+<p align="center">
+  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="Informe semanal en tinta china"></a>
+  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="Informe diario de estilo pop art"></a>
+</p>
+
+<p align="center">
+  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="Informe diario de estilo pixel art"></a>
+  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="Informe semanal de estilo Bauhaus"></a>
+</p>
+
 ## Capturas de pantalla
 
 ### Mapa de calor del teclado
@@ -59,22 +75,6 @@ Pulsa el botón con el rayo en la ventana Mini para activar animaciones que resp
 ### Estadísticas de atajos de teclado
 
 [![Estadísticas de atajos de teclado](../images/shortcuts-en.jpg)](../images/shortcuts-en.jpg)
-
-### Informes de actividad diarios y semanales
-
-<p align="center"><a href="../images/report-en.png"><img src="../images/report-en.png" width="960" alt="A la izquierda, las entradas por hora en el informe diario. A la derecha, las entradas por día en el informe semanal."></a></p>
-
-### Ejemplos de carteles generados con IA
-
-<p align="center">
-  <a href="../images/poster-weekly-ink.webp"><img src="../images/poster-weekly-ink.webp" width="48%" alt="Informe semanal en tinta china"></a>
-  <a href="../images/poster-daily-pop.webp"><img src="../images/poster-daily-pop.webp" width="48%" alt="Informe diario de estilo pop art"></a>
-</p>
-
-<p align="center">
-  <a href="../images/poster-daily-arcade.webp"><img src="../images/poster-daily-arcade.webp" width="48%" alt="Informe diario de estilo pixel art"></a>
-  <a href="../images/poster-weekly-bauhaus.webp"><img src="../images/poster-weekly-bauhaus.webp" width="48%" alt="Informe semanal de estilo Bauhaus"></a>
-</p>
 
 ## Instalación
 
