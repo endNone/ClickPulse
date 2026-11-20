@@ -3,9 +3,9 @@
 cask "clickpulse" do
   arch arm: "arm64", intel: "x64"
 
-  version "0.3.1"
-  sha256 arm:   "20ef66960cbaa024079dd95649df1785fee6fe86e68f68ac00729eaa25464474",
-         intel: "818b87501a0282da9016db8d00e61f98a57ce67422a355c6b3c647a23ad2957e"
+  version "0.3.2"
+  sha256 arm:   "800a692ac7b595ae140c9f2fee6e273977d8ffa830ab07e6c774ea0181031724",
+         intel: "ac3325dd3fd186e1168fed3879e9b8ebf9961b6c7c1cbb75c8dc11aa0a60aa8e"
 
   url "https://github.com/endNone/ClickPulse/releases/download/v#{version}/ClickPulse-#{version}-macos-#{arch}.dmg"
   name "ClickPulse"
