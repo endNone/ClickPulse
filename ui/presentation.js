@@ -18,7 +18,7 @@
     $('close-action-row').hidden=false;
     $('close-action-select').addEventListener('change',event=>send('close_preference',{close_action:event.target.value}));
     const overlay=$('close-overlay'),remember=$('close-remember');
-    const surfaces=[document.querySelector('main'),document.querySelector('.sidebar'),$('mini-widget')];
+    const surfaces=[document.querySelector('header'),document.querySelector('main'),document.querySelector('.sidebar'),$('mini-widget')].filter(Boolean);
     let previousFocus=null;
     function dismiss(restoreFocus=true){
       overlay.hidden=true;

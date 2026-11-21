@@ -412,7 +412,7 @@ pub(super) fn update_windows_region(window: &tao::window::Window, layout: &mut W
     };
     let hwnd = window.hwnd() as windows_sys::Win32::Foundation::HWND;
     if !layout.compact {
-        set_dwm_corner_preference(hwnd, false);
+        set_dwm_corner_preference(hwnd, !window.is_maximized());
         if layout.region.is_some() && unsafe { SetWindowRgn(hwnd, std::ptr::null_mut(), 1) } != 0 {
             layout.region = None;
         }
@@ -669,7 +669,10 @@ mod native_windows_tests {
     };
     use windows_sys::Win32::{
         Foundation::{HWND, POINT, RECT},
-        Graphics::Gdi::{ClientToScreen, ERROR, GetWindowRgnBox},
+        Graphics::{
+            Dwm::{DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmGetWindowAttribute},
+            Gdi::{ClientToScreen, ERROR, GetWindowRgnBox},
+        },
         UI::WindowsAndMessaging::{GetClientRect, GetWindowRect},
     };
     use wry::{PageLoadEvent, WebContext, WebView, WebViewBuilder, WebViewExtWindows};
@@ -784,12 +787,33 @@ mod native_windows_tests {
                     assert_ne!(GetWindowRect(hwnd, &mut outer), 0);
                     assert_ne!(GetClientRect(hwnd, &mut client), 0);
                     assert_ne!(ClientToScreen(hwnd, &mut origin), 0);
-                    assert_ne!(GetWindowRgnBox(hwnd, &mut region), ERROR);
                 }
                 assert_eq!((origin.x, origin.y), (outer.left, outer.top));
                 assert_eq!(client.right, outer.right - outer.left);
                 assert_eq!(client.bottom, outer.bottom - outer.top);
-                assert_eq!((region.left, region.top), (0, 0));
+                if layout.region.is_some() {
+                    // Windows 10 GDI fallback clips the rounded client rectangle.
+                    unsafe {
+                        assert_ne!(GetWindowRgnBox(hwnd, &mut region), ERROR);
+                    }
+                    assert_eq!((region.left, region.top), (0, 0));
+                } else {
+                    // Windows 11 uses native DWM rounded corners without a GDI region.
+                    let mut pref = 0i32;
+                    unsafe {
+                        assert_eq!(
+                            DwmGetWindowAttribute(
+                                hwnd,
+                                DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+                                (&raw mut pref).cast(),
+                                std::mem::size_of_val(&pref) as u32,
+                            ),
+                            0
+                        );
+                        assert_eq!(GetWindowRgnBox(hwnd, &mut region), ERROR);
+                    }
+                    assert_eq!(pref, DWMWCP_ROUND);
+                }
             } else {
                 assert!(window.has_undecorated_shadow());
                 assert!(window.is_resizable());
