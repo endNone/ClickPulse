@@ -29,7 +29,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: dd401beee128af2ab6ee2b64a51a2f33eb76217f
+          ref: 185c42ae3a3cb20cd7490533e6de56c46f6e7cb2
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
@@ -40,8 +40,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$RELEASE_TAG" = v0.3.2
-          test "$(git rev-parse HEAD)" = dd401beee128af2ab6ee2b64a51a2f33eb76217f
-          test "$(git rev-parse refs/tags/builds/0.3.2-20261121^{commit})" = "$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = 185c42ae3a3cb20cd7490533e6de56c46f6e7cb2
+          test "$(git rev-parse refs/tags/builds/0.3.2-185c42a^{commit})" = "$(git rev-parse HEAD)"
           test "$(git rev-parse refs/tags/v0.3.2^{commit})" = 3fe064be2713bda10399af993aa68f816cc5ae08
           git merge-base --is-ancestor refs/tags/v0.3.2 HEAD
           python scripts/release.py plan --tag "$RELEASE_TAG" --github-output "$GITHUB_OUTPUT"
@@ -105,7 +105,7 @@ jobs:
           SOURCE_REVISION: ${{ needs.version.outputs.revision }}
         run: |
           test "$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)" = 3fe064be2713bda10399af993aa68f816cc5ae08
-          revision=$(gh api "repos/$GH_REPO/git/ref/tags/builds/0.3.2-20261121" --jq .object.sha)
+          revision=$(gh api "repos/$GH_REPO/git/ref/tags/builds/0.3.2-185c42a" --jq .object.sha)
           if [[ "$revision" != "$SOURCE_REVISION" ]]; then
             echo "The tag moved after validation. No candidate will be retained."
             exit 1
