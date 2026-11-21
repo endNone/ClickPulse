@@ -462,7 +462,9 @@
     "report_fact.action_select_all": "全选",
     "report_fact.action_save": "保存",
     "report_fact.action_find": "查找",
-    "report_fact.action_print": "打印"
+    "report_fact.action_print": "打印",
+    "chart.mouse_side_back": "后退侧键",
+    "chart.mouse_side_forward": "前进侧键"
   },
   "en": {
     "star.title": "Enjoying ClickPulse?",
@@ -927,7 +929,9 @@
     "report_fact.action_select_all": "Select all",
     "report_fact.action_save": "Save",
     "report_fact.action_find": "Find",
-    "report_fact.action_print": "Print"
+    "report_fact.action_print": "Print",
+    "chart.mouse_side_back": "Back side button",
+    "chart.mouse_side_forward": "Forward side button"
   },
   "zh-TW": {
     "star.title": "喜歡 ClickPulse 嗎？",
@@ -1392,7 +1396,9 @@
     "report_fact.action_select_all": "全選",
     "report_fact.action_save": "儲存",
     "report_fact.action_find": "尋找",
-    "report_fact.action_print": "列印"
+    "report_fact.action_print": "列印",
+    "chart.mouse_side_back": "返回側鍵",
+    "chart.mouse_side_forward": "前進側鍵"
   },
   "ja": {
     "star.title": "ClickPulse は役に立っていますか？",
@@ -1857,7 +1863,9 @@
     "report_fact.action_select_all": "すべてを選択",
     "report_fact.action_save": "保存",
     "report_fact.action_find": "検索",
-    "report_fact.action_print": "プリント"
+    "report_fact.action_print": "プリント",
+    "chart.mouse_side_back": "戻るサイドボタン",
+    "chart.mouse_side_forward": "進むサイドボタン"
   },
   "ko": {
     "star.title": "ClickPulse가 유용한가요?",
@@ -2322,7 +2330,9 @@
     "report_fact.action_select_all": "모두 선택",
     "report_fact.action_save": "저장",
     "report_fact.action_find": "찾기",
-    "report_fact.action_print": "인쇄"
+    "report_fact.action_print": "인쇄",
+    "chart.mouse_side_back": "뒤로 측면 버튼",
+    "chart.mouse_side_forward": "앞으로 측면 버튼"
   },
   "fr": {
     "star.title": "ClickPulse vous plaît ?",
@@ -2787,7 +2797,9 @@
     "report_fact.action_select_all": "Tout sélectionner",
     "report_fact.action_save": "Enregistrer",
     "report_fact.action_find": "Rechercher",
-    "report_fact.action_print": "Imprimer"
+    "report_fact.action_print": "Imprimer",
+    "chart.mouse_side_back": "Bouton latéral Précédent",
+    "chart.mouse_side_forward": "Bouton latéral Suivant"
   },
   "de": {
     "star.title": "Gefällt dir ClickPulse?",
@@ -3252,7 +3264,9 @@
     "report_fact.action_select_all": "Alles auswählen",
     "report_fact.action_save": "Speichern",
     "report_fact.action_find": "Suchen",
-    "report_fact.action_print": "Drucken"
+    "report_fact.action_print": "Drucken",
+    "chart.mouse_side_back": "Zurück-Seitentaste",
+    "chart.mouse_side_forward": "Vorwärts-Seitentaste"
   },
   "es": {
     "star.title": "¿Te gusta ClickPulse?",
@@ -3717,6 +3731,8 @@
     "report_fact.action_select_all": "Seleccionar todo",
     "report_fact.action_save": "Guardar",
     "report_fact.action_find": "Buscar",
-    "report_fact.action_print": "Imprimir"
+    "report_fact.action_print": "Imprimir",
+    "chart.mouse_side_back": "Botón lateral Atrás",
+    "chart.mouse_side_forward": "Botón lateral Adelante"
   }
 }

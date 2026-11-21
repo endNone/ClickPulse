@@ -18,7 +18,8 @@ pub struct MouseCounts {
     pub left: i64,
     pub right: i64,
     pub middle: i64,
-    pub side: i64,
+    pub side_back: i64,
+    pub side_forward: i64,
     pub other: i64,
 }
 
@@ -31,7 +32,8 @@ pub(crate) fn read_mouse_counts(conn: &Connection, sql: &str) -> Result<MouseCou
             1 => counts.left += count,
             2 => counts.right += count,
             3 => counts.middle += count,
-            4 | 5 => counts.side += count,
+            4 => counts.side_back += count,
+            5 => counts.side_forward += count,
             _ => counts.other += count,
         }
     }
@@ -626,7 +628,8 @@ mod tests {
                 left: 2,
                 right: 1,
                 middle: 1,
-                side: 1,
+                side_back: 0,
+                side_forward: 1,
                 other: 0
             }
         );

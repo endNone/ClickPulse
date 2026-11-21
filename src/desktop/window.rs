@@ -342,6 +342,7 @@ pub(super) fn set_compact(
             // Tao's undecorated shadow reserves native client insets. A fixed
             // rounded widget must fill its host without those frame margins.
             window.set_undecorated_shadow(false);
+            let _ = window.set_skip_taskbar(true);
         }
         fix_compact_size(window);
         if let Some(monitor) = window.current_monitor() {
@@ -364,6 +365,7 @@ pub(super) fn set_compact(
         {
             use tao::platform::windows::WindowExtWindows;
             window.set_undecorated_shadow(true);
+            let _ = window.set_skip_taskbar(false);
         }
         restore_full_window(window, layout.full_size, layout.full_position);
         #[cfg(target_os = "linux")]
@@ -385,6 +387,22 @@ pub(super) fn set_compact(
 }
 
 #[cfg(target_os = "windows")]
+fn set_dwm_corner_preference(hwnd: windows_sys::Win32::Foundation::HWND, round: bool) -> bool {
+    use windows_sys::Win32::Graphics::Dwm::{
+        DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DEFAULT, DWMWCP_ROUND, DwmSetWindowAttribute,
+    };
+    let preference = if round { DWMWCP_ROUND } else { DWMWCP_DEFAULT };
+    unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+            (&raw const preference).cast(),
+            std::mem::size_of_val(&preference) as u32,
+        ) == 0
+    }
+}
+
+#[cfg(target_os = "windows")]
 pub(super) fn update_windows_region(window: &tao::window::Window, layout: &mut WindowLayout) {
     use tao::platform::windows::WindowExtWindows;
     use windows_sys::Win32::{
@@ -394,6 +412,15 @@ pub(super) fn update_windows_region(window: &tao::window::Window, layout: &mut W
     };
     let hwnd = window.hwnd() as windows_sys::Win32::Foundation::HWND;
     if !layout.compact {
+        set_dwm_corner_preference(hwnd, false);
+        if layout.region.is_some() && unsafe { SetWindowRgn(hwnd, std::ptr::null_mut(), 1) } != 0 {
+            layout.region = None;
+        }
+        return;
+    }
+    // Prefer Windows 11 native DWM anti-aliased rounded corners. Clear any
+    // fallback GDI region so it cannot override DWM's smooth clipping.
+    if set_dwm_corner_preference(hwnd, true) {
         if layout.region.is_some() && unsafe { SetWindowRgn(hwnd, std::ptr::null_mut(), 1) } != 0 {
             layout.region = None;
         }

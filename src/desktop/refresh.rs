@@ -3,9 +3,9 @@ pub(super) fn interval(visible: bool, compact: bool) -> std::time::Duration {
     std::time::Duration::from_millis(if !visible {
         5000
     } else if compact {
-        500
+        150
     } else {
-        2000
+        500
     })
 }
 

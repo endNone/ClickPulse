@@ -1303,7 +1303,7 @@ fn storage_loop(
             // Completion/input channels wake us; database deadlines wait for the job.
             wait = crate::collector::HEARTBEAT_INTERVAL;
         } else if !worker.batch.is_empty() {
-            wait = wait.min(Duration::from_millis(200).saturating_sub(flush.elapsed()));
+            wait = wait.min(Duration::from_millis(100).saturating_sub(flush.elapsed()));
         }
         match select.select_timeout(wait) {
             Ok(operation) if operation.index() == command_index => match operation.recv(&rx) {
@@ -1351,7 +1351,7 @@ fn storage_loop(
         let attempt = (|| -> Result<()> {
             if retry.since.is_some()
                 || worker.batch.len() >= 128
-                || flush.elapsed() >= Duration::from_millis(200)
+                || flush.elapsed() >= Duration::from_millis(100)
             {
                 // insert is transactional; only a successful commit clears the batch.
                 worker.flush()?;

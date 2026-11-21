@@ -400,7 +400,8 @@ mod tests {
             left: 7,
             right: 3,
             middle: 2,
-            side: 1,
+            side_back: 0,
+            side_forward: 1,
             other: 0,
         };
         // Read-only legacy sources have no derived button table.
@@ -439,7 +440,8 @@ mod tests {
                 left: 10,
                 right: 5,
                 middle: 0,
-                side: 1,
+                side_back: 1,
+                side_forward: 0,
                 other: 0
             }
         );
@@ -451,7 +453,8 @@ mod tests {
                 left: 10,
                 right: 5,
                 middle: 0,
-                side: 1,
+                side_back: 1,
+                side_forward: 0,
                 other: 0
             }
         );

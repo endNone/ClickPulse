@@ -10,7 +10,7 @@ use std::{
 use tao::{event_loop::EventLoopProxy, window::Window};
 use wry::WebViewBuilder;
 
-const RELEASE_AFTER: Duration = Duration::from_secs(5 * 60);
+const RELEASE_AFTER: Duration = Duration::from_secs(30);
 
 struct RenderedView {
     inner: wry::WebView,
@@ -240,6 +240,12 @@ fn create(
         builder
             .with_browser_accelerator_keys(false)
             .with_default_context_menus(false)
+            .with_additional_browser_args(
+                "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,Translate,OptimizationHints,MediaRouter \
+                 --disable-extensions --disable-sync --disable-background-networking \
+                 --disable-component-update --disable-default-apps --disable-domain-reliability \
+                 --disable-speech-api --no-first-run --disk-cache-size=1048576 --media-cache-size=1048576",
+            )
     };
     #[cfg(not(target_os = "windows"))]
     let builder = WebViewBuilder::new();

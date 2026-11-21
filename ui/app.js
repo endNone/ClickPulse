@@ -231,6 +231,8 @@ const onWindows=window.clickpulsePlatform==='windows',onLinux=window.clickpulseP
 const keyboardCells=new Map();
 let keyboardLayoutSignature='';
 let keyboardDistribution=null;
+let manualKeyboardLayout=false;
+let autoNumpadApplied=false;
 const usesKeyboardTreemap=()=>window.presentationView?.keyboard_view==='treemap';
 const keyboardBlocks=new Map();
 function updateKeyboardView(){
@@ -246,8 +248,8 @@ function updateKeyboardView(){
   $('keyboard-compact').setAttribute('aria-pressed',String(!full));
   $('keyboard-full').setAttribute('aria-pressed',String(full));
 }
-$('keyboard-compact').addEventListener('click',()=>send('keyboard_layout',{layout:'compact'}));
-$('keyboard-full').addEventListener('click',()=>send('keyboard_layout',{layout:'full_size'}));
+$('keyboard-compact').addEventListener('click',()=>{manualKeyboardLayout=true;send('keyboard_layout',{layout:'compact'});});
+$('keyboard-full').addEventListener('click',()=>{manualKeyboardLayout=true;send('keyboard_layout',{layout:'full_size'});});
 $('keyboard-view-toggle').addEventListener('click',()=>{
   const view=usesKeyboardTreemap()?'layout':'treemap';
   window.receiveView({keyboard_view:view});
@@ -793,7 +795,15 @@ function renderHistory(){
 const arrowIds=['up','left','down','right'];
 function renderKeyboard(){
   const stats=data.keyboard_stats||{physical:data.top_keys};
-  const view=K.distribution(stats,'history',window.presentationView?.keyboard_layout);
+  let layoutPref=window.presentationView?.keyboard_layout||'compact';
+  if(layoutPref==='full_size')autoNumpadApplied=true;
+  if(!autoNumpadApplied&&!manualKeyboardLayout&&layoutPref==='compact'&&!data.demo&&K.hasNumpadActivity?.(stats)){
+    autoNumpadApplied=true;
+    layoutPref='full_size';
+    if(window.presentationView)window.presentationView.keyboard_layout='full_size';
+    send('keyboard_layout',{layout:'full_size'});
+  }
+  const view=K.distribution(stats,'history',layoutPref);
   keyboardDistribution=view;updateKeyboardView();
   if(usesKeyboardTreemap()){
     renderKeyboardTreemap(view);return;

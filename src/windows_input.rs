@@ -220,8 +220,15 @@ impl WindowsKeyboard {
             self.virtual_keys.remove(&(device, identity));
         }
         if flags & RI_KEY_BREAK != 0 {
-            self.held.remove(&(device, identity));
-            None
+            let was_held = self.held.remove(&(device, identity)).is_some();
+            // Screenshot tools and Windows capture hooks can swallow PrintScreen's
+            // make packet and deliver only the break packet. Count that orphan
+            // release once without double-counting normal make+break presses.
+            if identity == 0x137 && !was_held {
+                Some(canonical_code(identity))
+            } else {
+                None
+            }
         } else if self.held.insert((device, identity), now).is_none() {
             Some(canonical_code(identity))
         } else {
@@ -724,6 +731,16 @@ mod tests {
         }
         assert_eq!(counts, vec![58, 0x10137, 0x10137, 0x10137]);
         assert!(keyboard.held.is_empty());
+    }
+    #[test]
+    fn orphan_print_screen_break_counts_once_when_make_is_swallowed() {
+        let mut keyboard = WindowsKeyboard::default();
+        // When a screenshot tool swallows PrintScreen's make packet, Windows
+        // still delivers the break packet (0x37 with E0|BREAK = 3).
+        assert_eq!(keyboard.event(1, 0x37, 3, 0x2c), Some(0x10137));
+        // A normal make+break press still counts only once.
+        assert_eq!(keyboard.event(1, 0x37, 2, 0x2c), Some(0x10137));
+        assert_eq!(keyboard.event(1, 0x37, 3, 0x2c), None);
     }
     #[test]
     fn control_pause_counts_repeated_presses_and_releases_under_either_identity() {

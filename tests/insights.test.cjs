@@ -88,9 +88,10 @@ test('mouse diagram, donut and legend share a theme-aligned scale for every butt
  assert(skewed.left<skewed.right && skewed.right<skewed.middle);
  const swapped=check({mouse_buttons:{left:15022,right:169,middle:773640}});
  assert.equal(swapped.middle,skewed.left);assert.equal(swapped.left,skewed.right);
- const legacy=check({lifetime:{mouse:1000},mouse_buttons:{other:60,side:20,right:20}});
- assert(legacy.unknown<legacy.other && legacy.other<legacy.side && legacy.side<legacy.left);
- assert.equal(legacy.side,legacy.right);
+ const legacy=check({lifetime:{mouse:1000},mouse_buttons:{other:60,side_back:20,side_forward:20,right:20}});
+ assert(legacy.unknown<legacy.other && legacy.other<legacy.side_back && legacy.side_back<legacy.left);
+ assert.equal(legacy.side_back,legacy.right);
+ assert.equal(legacy.side_forward,legacy.right);
  const empty=Object.values(check({mouse_buttons:{}}));
  assert.equal(new Set(empty).size,1);assert(empty[0]>225);
 });
@@ -258,10 +259,12 @@ test('live shortcut charts update percentages when counts change outside the top
  a.view.render('shortcuts',{shortcuts:[...rows.slice(0,9),{...rows[9],count:19}]});
  assert.equal(a.get('shortcut-ranking').children[0].children[2].children[1].textContent,'17.9%');
 });
-test('mouse detail preserves unknown historic clicks without treating them as side buttons',()=>{
- const result=M.mouseBreakdown({lifetime:{mouse:120},mouse_buttons:{left:60,right:30,middle:4,side:6,other:5}});
+test('mouse detail preserves unknown historic clicks and splits back/forward side buttons',()=>{
+ const result=M.mouseBreakdown({lifetime:{mouse:120},mouse_buttons:{left:60,right:30,middle:4,side_back:4,side_forward:2,other:5}});
+ assert.equal(result.find(r=>r.key==='side_back').count,4);
+ assert.equal(result.find(r=>r.key==='side_forward').count,2);
  assert.equal(result.find(r=>r.key==='unknown').count,15);assert.equal(result.reduce((s,r)=>s+r.count,0),120);
- assert.deepEqual(M.mouseBreakdown({lifetime:{mouse:0}}).map(r=>r.count),[0,0,0,0,0]);
+ assert.deepEqual(M.mouseBreakdown({lifetime:{mouse:0}}).map(r=>r.count),[0,0,0,0,0,0]);
 });
 test('share cards follow chosen timezone and actual day rows, including missing dates and DST',()=>{
  const snapshot={now:'2026-11-02T01:30:00Z',today:{keyboard:99999,mouse:99999},history_days:[{day:'2026-11-01',counts:{keyboard:25,mouse:10}},{day:'2026-10-30',counts:{keyboard:3,mouse:1}}],demo:false};
@@ -507,12 +510,12 @@ test('catalog search supports screen capture, literal plus, platform and transla
 test('optional mouse buttons enter the distribution on the first click, even below 0.1 percent',()=>{
  const a=viewHarness();
  const labels=()=>a.get('mouse-distribution').children.map(row=>row.children[0].children[1].textContent);
- const data={mouse_buttons:{left:100000,right:0,middle:0,side:0}};
+ const data={mouse_buttons:{left:100000,right:0,middle:0,side_back:0,side_forward:0}};
  a.view.render('keys',data);
  assert.deepEqual(labels(),['chart.mouse_left','chart.mouse_right']);
- const next={mouse_buttons:{...data.mouse_buttons,middle:1,side:1}};
+ const next={mouse_buttons:{...data.mouse_buttons,middle:1,side_forward:1,side_back:1}};
  a.view.render('keys',next);
- assert.deepEqual(labels(),['chart.mouse_left','chart.mouse_right','chart.mouse_middle','chart.mouse_side']);
+ assert.deepEqual(labels(),['chart.mouse_left','chart.mouse_right','chart.mouse_middle','chart.mouse_side_forward','chart.mouse_side_back']);
  assert.equal(a.get('mouse-distribution').children[2].children[2].textContent,'<0.1%');
 });
 

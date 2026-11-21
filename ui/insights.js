@@ -2,7 +2,16 @@
 const ClickPulseInsights=(()=>{
 const positive=value=>Number.isFinite(value)&&value>0?Math.floor(value):0;
 function mouseBreakdown(snapshot){
- const b=snapshot.mouse_buttons||{},rows=['left','right','middle','side','other'].map(key=>({key,count:positive(b[key])}));
+ const b=snapshot.mouse_buttons||{};
+ const legacySide=b.side_back===undefined&&b.side_forward===undefined?positive(b.side):0;
+ const rows=[
+  {key:'left',count:positive(b.left)},
+  {key:'right',count:positive(b.right)},
+  {key:'middle',count:positive(b.middle)},
+  {key:'side_forward',count:positive(b.side_forward)},
+  {key:'side_back',count:positive(b.side_back)+legacySide},
+  {key:'other',count:positive(b.other)},
+ ];
  const unknown=Math.max(0,positive(snapshot.lifetime?.mouse)-rows.reduce((sum,row)=>sum+row.count,0));
  if(unknown)rows.push({key:'unknown',count:unknown});return rows;
 }
@@ -287,7 +296,10 @@ function create({document,window,I,send,toast,syncDropdown=()=>{},getSystemTimeZ
   const drawing=svg('svg',{viewBox:'0 0 200 270',class:'mouse-drawing',role:'img','aria-label':t('mouse.buttons')});
   const ink={shell:'#f9fbff',edge:palette.accent+'42',shadow:palette.accent+'18'};
   drawing.append(svg('ellipse',{cx:100,cy:253,rx:52,ry:9,fill:ink.shadow}));
-  const side=svg('rect',{x:31,y:110,width:10,height:38,rx:5,fill:colors.side,stroke:ink.edge,'stroke-width':1.2,'data-mouse-button':'side'}),sideTitle=svg('title');sideTitle.textContent=caption(rows.find(row=>row.key==='side'));side.append(sideTitle);drawing.append(side);shapeEls.set('side',side);
+  for(const [key,y]of [['side_forward',99],['side_back',130]]){
+   const side=svg('rect',{x:31,y,width:10,height:27,rx:4.5,fill:colors[key],stroke:ink.edge,'stroke-width':1.2,'data-mouse-button':key}),sideTitle=svg('title');
+   sideTitle.textContent=caption(rows.find(row=>row.key===key));side.append(sideTitle);drawing.append(side);shapeEls.set(key,side);
+  }
   drawing.append(svg('path',{d:'M100 17C65 17 43 43 41 82L35 166C32 211 55 246 100 246S168 211 165 166L159 82C157 43 135 17 100 17Z',fill:ink.shell,stroke:ink.edge,'stroke-width':1.6}));
   for(const [key,d]of [['left','M97 24C67 25 49 46 47 81L45 108C61 114 79 117 97 117Z'],['right','M103 24C133 25 151 46 153 81L155 108C139 114 121 117 103 117Z']]){
    const shape=svg('path',{d,fill:colors[key],'data-mouse-button':key}),title=svg('title');title.textContent=caption(rows.find(row=>row.key===key));shape.append(title);drawing.append(shape);shapeEls.set(key,shape);
@@ -505,7 +517,12 @@ function create({document,window,I,send,toast,syncDropdown=()=>{},getSystemTimeZ
   const version=++paintVersion;painting=true;painted=false;shareButtons();
   try {
    if(document.fonts&&!fontsLoaded){
-    fontLoad ||= document.fonts.load('750 146px "ClickPulse UI"').then(()=>document.fonts.ready).then(()=>{fontsLoaded=true;}).catch(error=>{fontLoad=null;throw error;});
+    fontLoad ||= new Promise((resolve,reject)=>{
+     const timer=setTimeout(()=>resolve(),1500);
+     document.fonts.load('750 146px "ClickPulse UI"').then(()=>document.fonts.ready)
+      .then(()=>{clearTimeout(timer);resolve();})
+      .catch(error=>{clearTimeout(timer);reject(error);});
+    }).then(()=>{fontsLoaded=true;}).catch(error=>{fontLoad=null;throw error;});
     await fontLoad;
    }
    if(version!==paintVersion||suspended||active!=='share'||!card)return false;

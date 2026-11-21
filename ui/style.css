@@ -56,8 +56,9 @@ body[data-sidebar-collapsed="true"] .sidebar-bottom {display:none}
 .sidebar-toggle {display:flex;align-items:center;justify-content:center;flex:none;width:32px;height:32px;margin-right:auto;padding:6px;border:0;border-radius:6px;background:transparent;color:var(--control-text)}
 .sidebar-toggle:hover {background:var(--bg)}
 .sidebar-toggle svg {width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-main {min-width:0;flex:1;overflow:auto}
-header {position:sticky;top:0;z-index:50;height:58px;display:flex;justify-content:flex-end;align-items:center;padding:0 30px;background:#fff;border-bottom:1px solid var(--line)}
+.workspace {min-width:0;flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+main {min-width:0;min-height:0;flex:1;overflow:auto}
+header {position:relative;z-index:50;flex:none;height:58px;display:flex;justify-content:flex-end;align-items:center;padding:0 30px;background:#fff;border-bottom:1px solid var(--line)}
 .header-actions {display:flex;align-items:center;gap:12px}
 /* Merge the controls into the page toolbar only while the sidebar is hidden. */
 .toolbar-title {display:none}
@@ -220,8 +221,8 @@ body[data-page="settings"] .page-heading {margin-bottom:30px}
 .keyboard-key {position:relative;flex:var(--key-width,1) 1 0;min-width:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:3px;height:var(--key-row-height);border:1px solid #397bdd26;border-bottom:3px solid #397bdd38;border-radius:5px;background:var(--key-bg,#edf4ff);color:var(--key-text,#254b80);padding:6px 3px;text-align:left}
 .keyboard-key:hover {box-shadow:0 0 0 2px #60a5fa;z-index:1}
 .keyboard-key:focus-visible {outline:2px solid #2563eb;outline-offset:2px;z-index:2}
-.keyboard-key .key-label {font:600 var(--key-font-size)/1.1 var(--sans);white-space:nowrap}
-.keyboard-key .key-count {align-self:flex-end;font:500 var(--key-font-size)/1.1 var(--sans);font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:0}
+.keyboard-key .key-label {font:700 13px/1.05 var(--sans);white-space:nowrap}
+.keyboard-key .key-count {align-self:flex-end;font:500 10px/1 var(--sans);opacity:.78;font-variant-numeric:tabular-nums;white-space:nowrap;letter-spacing:0}
 .keyboard-row.function-row .keyboard-key {height:var(--key-function-height);padding:4px 3px;gap:2px}
 .keyboard-row.supplemental-row .keyboard-key {height:40px;padding-top:4px;padding-bottom:4px}
 .keyboard-arrow-cluster .keyboard-key {height:100%;padding:1px 3px;gap:0;border-bottom-width:1px;border-radius:3px}
@@ -345,3 +346,14 @@ html[data-platform="macos"][data-mac-titlebar="system"] .sidebar-toggle {left:14
 html[data-platform="macos"][data-mac-titlebar="system"] body[data-sidebar-collapsed="true"] header {padding-left:56px}
 
 html[data-platform="macos"][data-mac-titlebar="system"] .sidebar {padding-top:58px}
+
+/* Consistent rounded theme-aware scrollbars (replaces clunky square WebView2 bars on Windows). */
+main,.keyboard-scroll,.dropdown-menu,.date-picker-panel,#share-prompt-text {scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--muted) 42%,transparent) transparent}
+main::-webkit-scrollbar,.keyboard-scroll::-webkit-scrollbar,.dropdown-menu::-webkit-scrollbar,.date-picker-panel::-webkit-scrollbar,#share-prompt-text::-webkit-scrollbar {width:10px;height:10px}
+main::-webkit-scrollbar-track,.keyboard-scroll::-webkit-scrollbar-track,.dropdown-menu::-webkit-scrollbar-track,.date-picker-panel::-webkit-scrollbar-track,#share-prompt-text::-webkit-scrollbar-track {background:transparent}
+main::-webkit-scrollbar-thumb,.keyboard-scroll::-webkit-scrollbar-thumb,.dropdown-menu::-webkit-scrollbar-thumb,.date-picker-panel::-webkit-scrollbar-thumb,#share-prompt-text::-webkit-scrollbar-thumb {background:color-mix(in srgb,var(--muted) 34%,transparent);border:2px solid transparent;background-clip:content-box;border-radius:999px}
+main::-webkit-scrollbar-thumb:hover,.keyboard-scroll::-webkit-scrollbar-thumb:hover,.dropdown-menu::-webkit-scrollbar-thumb:hover,.date-picker-panel::-webkit-scrollbar-thumb:hover,#share-prompt-text::-webkit-scrollbar-thumb:hover {background:color-mix(in srgb,var(--muted) 58%,transparent);border:2px solid transparent;background-clip:content-box}
+main::-webkit-scrollbar-corner,.keyboard-scroll::-webkit-scrollbar-corner {background:transparent}
+
+/* Keep button, badge, and segmented control text vertically centered across CJK/Latin font metrics. */
+.button,.segments button,.keyboard-mode button,.pill,#demo-badge {display:inline-flex;align-items:center;justify-content:center;line-height:1.15}

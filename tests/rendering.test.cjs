@@ -743,18 +743,18 @@ test('keyboard layouts show the same count precision on shared keys and the numb
     assert.equal(full.get('num4'),original.get('A'));
   }
 });
-test('recorded number-pad keys do not change the default Windows heatmap layout',()=>{
+test('recorded number-pad keys automatically switch the default heatmap layout to full-size while respecting manual override',()=>{
   const a=app('windows'),s=snapshot();a.navigate('keys');
   a.window.receive({...s,keyboard_stats:{physical:[]}});
   assert.equal(a.get('keyboard-layout').children.length,6);
   a.window.receive({...s,keyboard_stats:{physical:[{code:115,count:100},{code:86,count:40},{code:49,count:2},{code:999,count:3}]}});
-  assert.equal(a.get('keyboard-compact').attributes['aria-pressed'],'true');
-  assert.ok(!keyCells(a).some(cell=>cell.dataset.key==='num4'));
-  a.window.receiveView({keyboard_layout:'full_size'});
+  assert.equal(a.get('keyboard-full').attributes['aria-pressed'],'true');
   assert.equal(a.get('keyboard-layout').children[0].className,'keyboard-main');
   assert.ok(keyCells(a).some(cell=>cell.dataset.key==='home'));
   assert.ok(keyCells(a).some(cell=>cell.dataset.key==='num4'));
+  a.get('keyboard-compact').fire();
   a.window.receiveView({keyboard_layout:'compact'});
+  assert.equal(a.get('keyboard-compact').attributes['aria-pressed'],'true');
   assert.equal(a.get('keyboard-layout').children[0].className,'keyboard-row function-row');
   assert.equal(keyCells(a).filter(cell=>cell.dataset.key==='num4').length,0);
   assert.equal(a.get('keyboard-layout').children.length,6);

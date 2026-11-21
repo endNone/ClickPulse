@@ -31,7 +31,7 @@ th,.pill {background:var(--heat-0);color:var(--control-text)}
 .mini-widget {background:linear-gradient(128deg,var(--mini-start),var(--mini-end) 80%);border-color:var(--mini-edge)}
 .mini-grip,.mini-icon,.mini-eyebrow {color:var(--mini-muted)}
 .mini-icon:hover,#mini-pause:hover {background:var(--mini-hover);color:#f0f6ff}
-.mini-icon[aria-pressed="true"] {color:var(--mini-device-icon);background:var(--mini-selected)}
+.mini-icon[aria-pressed="true"] {color:var(--mini-end);background:var(--mini-device-icon);box-shadow:inset 0 0 0 1px #ffffff55}
 .mini-status {color:var(--mini-muted);background:var(--mini-status-bg)}
 .mini-status::before {background:var(--mini-dot);box-shadow:0 0 5px var(--mini-selected)}
 .mini-devices>div {background:var(--mini-device-bg);border-color:var(--mini-device-border)}

@@ -155,7 +155,12 @@ function createClickPulseKeyboard(platform='macos') {
     if(extra.length)displayRows.push(extra);
     return {estimated,fullSize,rows:displayRows,ranked,visibleRanked,total,mapped,unmapped:other,other,historical};
   }
-  return { distribution, compact, byId, treemap:keyTreemap };
+  const numpadIds=new Set(['numlock','numclear','numequals','numdivide','nummultiply','numminus','numplus','numenter','numdecimal','num0','num1','num2','num3','num4','num5','num6','num7','num8','num9']);
+  function hasNumpadActivity(stats){
+    const d=distribution(stats,'history','full_size');
+    return d.ranked.some(k=>numpadIds.has(k.id)&&k.count>0);
+  }
+  return { distribution, compact, byId, treemap:keyTreemap, hasNumpadActivity };
 }
 const ClickPulseKeyboard=createClickPulseKeyboard(typeof window==='undefined'?'macos':window.clickpulsePlatform);
 if (typeof module !== 'undefined') module.exports = {...ClickPulseKeyboard,create:createClickPulseKeyboard};

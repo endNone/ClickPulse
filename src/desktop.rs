@@ -1818,15 +1818,20 @@ fn demo_snapshot_in_timezone(
             today,
             week,
             lifetime,
-            mouse_buttons: clickpulse::db::MouseCounts {
-                left: lifetime.mouse * 85 / 100,
-                right: lifetime.mouse * 12 / 100,
-                middle: lifetime.mouse * 2 / 100,
-                side: lifetime.mouse
-                    - lifetime.mouse * 85 / 100
-                    - lifetime.mouse * 12 / 100
-                    - lifetime.mouse * 2 / 100,
-                other: 0,
+            mouse_buttons: {
+                let left = lifetime.mouse * 85 / 100;
+                let right = lifetime.mouse * 12 / 100;
+                let middle = lifetime.mouse * 2 / 100;
+                let side_total = lifetime.mouse - left - right - middle;
+                let side_back = side_total * 6 / 10;
+                clickpulse::db::MouseCounts {
+                    left,
+                    right,
+                    middle,
+                    side_back,
+                    side_forward: side_total - side_back,
+                    other: 0,
+                }
             },
             windows: [60, 600, 3600, 86400]
                 .into_iter()
