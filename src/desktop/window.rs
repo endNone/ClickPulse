@@ -669,7 +669,10 @@ mod native_windows_tests {
     };
     use windows_sys::Win32::{
         Foundation::{HWND, POINT, RECT},
-        Graphics::Gdi::{ClientToScreen, ERROR, GetWindowRgnBox},
+        Graphics::{
+            Dwm::{DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmGetWindowAttribute},
+            Gdi::{ClientToScreen, ERROR, GetWindowRgnBox},
+        },
         UI::WindowsAndMessaging::{GetClientRect, GetWindowRect},
     };
     use wry::{PageLoadEvent, WebContext, WebView, WebViewBuilder, WebViewExtWindows};
@@ -784,12 +787,27 @@ mod native_windows_tests {
                     assert_ne!(GetWindowRect(hwnd, &mut outer), 0);
                     assert_ne!(GetClientRect(hwnd, &mut client), 0);
                     assert_ne!(ClientToScreen(hwnd, &mut origin), 0);
-                    assert_ne!(GetWindowRgnBox(hwnd, &mut region), ERROR);
                 }
                 assert_eq!((origin.x, origin.y), (outer.left, outer.top));
                 assert_eq!(client.right, outer.right - outer.left);
                 assert_eq!(client.bottom, outer.bottom - outer.top);
-                assert_eq!((region.left, region.top), (0, 0));
+                let mut preference = 0i32;
+                let native_corners = unsafe {
+                    DwmGetWindowAttribute(
+                        hwnd,
+                        DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+                        (&raw mut preference).cast(),
+                        std::mem::size_of_val(&preference) as u32,
+                    )
+                } == 0;
+                let region_type = unsafe { GetWindowRgnBox(hwnd, &mut region) };
+                if native_corners {
+                    assert_eq!(preference, DWMWCP_ROUND);
+                    assert_eq!(region_type, ERROR);
+                } else {
+                    assert_ne!(region_type, ERROR);
+                    assert_eq!((region.left, region.top), (0, 0));
+                }
             } else {
                 assert!(window.has_undecorated_shadow());
                 assert!(window.is_resizable());
